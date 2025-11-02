@@ -1,0 +1,177 @@
+
+OPTIONS PRICING PIPELINE - COMPLETE USAGE GUIDE
+================================================
+
+## 1. BASIC USAGE
+
+### Load a configuration from JSON:
+```python
+import json
+from datetime import datetime
+
+# Define your option configuration
+config = {
+    "ticker": "AAPL",
+    "current_price": 175.0,
+    "strike_price": 180.0,
+    "expiration_date": "2025-11-21",
+    "option_type": "call",  # or "put"
+    "implied_volatility": 0.30,  # 30%
+    "risk_free_rate": 0.045  # 4.5%
+}
+
+# Initialize pipeline
+pipeline = OptionsPricingPipeline()
+
+# Calculate current price
+T = (datetime.strptime(config['expiration_date'], '%Y-%m-%d') - datetime.now()).days / 365.0
+price = pipeline.black_scholes_price(
+    S=config['current_price'],
+    K=config['strike_price'],
+    T=T,
+    r=config['risk_free_rate'],
+    sigma=config['implied_volatility'],
+    option_type=config['option_type']
+)
+```
+
+## 2. GREEK CALCULATIONS
+
+### Calculate all Greeks:
+```python
+greeks = pipeline.calculate_greeks(
+    S=175.0,  # Current price
+    K=180.0,  # Strike price
+    T=0.0833, # Time to expiration (30 days / 365)
+    r=0.045,  # Risk-free rate
+    sigma=0.30,  # Implied volatility
+    option_type='call'
+)
+
+# Returns:
+# {
+#     'Delta': 0.404571,    # Price sensitivity to underlying
+#     'Gamma': 0.025744,    # Delta sensitivity to underlying
+#     'Theta': -0.105416,   # Time decay per day
+#     'Vega': 0.194399,     # Sensitivity to IV (per 1%)
+#     'Rho': 0.054778       # Sensitivity to interest rate (per 1%)
+# }
+```
+
+## 3. TIME SIMULATION
+
+### Simulate price evolution over time:
+```python
+time_simulation = pipeline.simulate_price_over_time(
+    config=config,
+    time_points=20  # Number of time points
+)
+
+# Returns DataFrame with columns:
+# - Date, Days_to_Expiration, Option_Price, Intrinsic_Value, Time_Value
+# - Delta, Gamma, Theta, Vega, Rho
+```
+
+## 4. PRICE SCENARIO SIMULATION
+
+### Simulate across different underlying prices:
+```python
+price_scenarios = pipeline.simulate_price_scenarios(
+    config=config,
+    price_range=(150, 200),  # Price range to simulate
+    num_prices=25  # Number of price points
+)
+
+# Returns DataFrame with option prices and Greeks
+# for different underlying prices
+```
+
+## 5. GREEK INTERPRETATIONS
+
+**Delta (Δ):**
+- Range: 0 to 1 for calls, -1 to 0 for puts
+- Represents: Change in option price per $1 change in underlying
+- Example: Delta of 0.40 means option gains $0.40 when stock rises $1
+
+**Gamma (Γ):**
+- Represents: Change in Delta per $1 change in underlying
+- Highest for at-the-money options
+- Important for risk management
+
+**Theta (Θ):**
+- Represents: Time decay per day (always negative for long options)
+- Accelerates as expiration approaches
+- Example: Theta of -0.10 means option loses $0.10 per day
+
+**Vega (ν):**
+- Represents: Change in option price per 1% change in IV
+- Example: Vega of 0.20 means option gains $0.20 if IV increases 1%
+
+**Rho (ρ):**
+- Represents: Change in option price per 1% change in interest rate
+- Less important for short-term options
+
+## 6. JSON CONFIGURATION TEMPLATE
+
+```json
+{
+  "ticker": "AAPL",
+  "current_price": 175.0,
+  "strike_price": 180.0,
+  "expiration_date": "2025-11-21",
+  "option_type": "call",
+  "implied_volatility": 0.30,
+  "risk_free_rate": 0.045
+}
+```
+
+## 7. ADVANCED FEATURES
+
+### Compare multiple scenarios:
+```python
+scenarios = [
+    {"name": "Low IV", "implied_volatility": 0.20},
+    {"name": "High IV", "implied_volatility": 0.50}
+]
+
+for scenario in scenarios:
+    config['implied_volatility'] = scenario['implied_volatility']
+    price = pipeline.black_scholes_price(...)
+```
+
+### Custom time points:
+```python
+from datetime import datetime, timedelta
+
+specific_dates = [
+    datetime.now(),
+    datetime.now() + timedelta(days=7),
+    datetime.now() + timedelta(days=14),
+    datetime.now() + timedelta(days=21)
+]
+
+results = pipeline.simulate_price_over_time(
+    config=config,
+    time_points=specific_dates
+)
+```
+
+## 8. SAVING RESULTS
+
+```python
+# Save to CSV
+time_simulation.to_csv('time_simulation.csv', index=False)
+price_scenarios.to_csv('price_scenarios.csv', index=False)
+
+# Or use the built-in method
+pipeline.save_results_to_csv(time_simulation, 'results.csv')
+```
+
+## 9. PRACTICAL TIPS
+
+1. **Implied Volatility**: Higher IV = higher option prices
+2. **Time Decay**: Accelerates closer to expiration (non-linear)
+3. **Delta Neutral**: Use to create hedged positions
+4. **Gamma Risk**: Higher for ATM options near expiration
+5. **Vega**: Important for earnings plays and volatility trading
+

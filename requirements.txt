@@ -1,0 +1,30 @@
+# Options Pricing System Requirements
+# ===================================
+
+# Core numerical and data libraries
+numpy>=1.21.0
+pandas>=1.3.0
+scipy>=1.7.0
+
+# Visualization
+matplotlib>=3.4.0
+seaborn>=0.11.0
+
+# Configuration management
+PyYAML>=5.4.0
+
+# Data export (Excel support)
+openpyxl>=3.0.0
+xlsxwriter>=3.0.0
+
+# Optional: Advanced plotting
+plotly>=5.0.0
+
+# Optional: Jupyter notebook support
+notebook>=6.4.0
+jupyterlab>=3.0.0
+
+# Development and testing
+pytest>=6.0.0
+black>=21.0.0
+flake8>=3.9.0

@@ -1,0 +1,56 @@
+
+# Create a comprehensive example JSON configuration file
+comprehensive_config = {
+    "configurations": [
+        {
+            "name": "Apple Call - ATM",
+            "ticker": "AAPL",
+            "current_price": 175.0,
+            "strike_price": 175.0,
+            "expiration_date": "2025-11-21",
+            "option_type": "call",
+            "implied_volatility": 0.30,
+            "risk_free_rate": 0.045,
+            "notes": "At-the-money call option"
+        },
+        {
+            "name": "Apple Call - OTM",
+            "ticker": "AAPL",
+            "current_price": 175.0,
+            "strike_price": 185.0,
+            "expiration_date": "2025-11-21",
+            "option_type": "call",
+            "implied_volatility": 0.30,
+            "risk_free_rate": 0.045,
+            "notes": "Out-of-the-money call option"
+        },
+        {
+            "name": "Apple Put - OTM",
+            "ticker": "AAPL",
+            "current_price": 175.0,
+            "strike_price": 170.0,
+            "expiration_date": "2025-11-21",
+            "option_type": "put",
+            "implied_volatility": 0.28,
+            "risk_free_rate": 0.045,
+            "notes": "Out-of-the-money put option"
+        }
+    ],
+    "simulation_settings": {
+        "time_points": 20,
+        "price_scenarios": {
+            "min_percentage": 0.7,
+            "max_percentage": 1.3,
+            "num_points": 25
+        }
+    }
+}
+
+# Save to JSON file
+with open('option_configs.json', 'w') as f:
+    json.dump(comprehensive_config, f, indent=2)
+
+print("Comprehensive Configuration Template:")
+print("="*60)
+print(json.dumps(comprehensive_config, indent=2))
+print("\n✓ Configuration saved to 'option_configs.json'")
