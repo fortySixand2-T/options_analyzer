@@ -5,7 +5,7 @@ Utilities package for options pricing system.
 Provides configuration management and data export functions.
 """
 
-from utils.config import (
+from .config import (
     load_config_from_json,
     load_config_from_yaml,
     save_config_to_json,
@@ -16,7 +16,7 @@ from utils.config import (
     merge_configs
 )
 
-from utils.data_export import (
+from .data_export import (
     export_to_csv,
     export_to_excel,
     export_multiple_sheets,

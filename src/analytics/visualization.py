@@ -1,5 +1,3 @@
-from models.black_scholes import black_scholes_price, calculate_greeks, intrinsic_value
-from models.black_scholes import black_scholes_price, calculate_greeks, intrinsic_value
 #!/usr/bin/env python3
 """
 Option Analytics Visualization

@@ -61,6 +61,8 @@ def fetch_live_config(ticker, days_to_expiry):
     selected = strikes[max(0, idx-2):idx+2]
     results = []
 
+    daily_returns = returns.values  # np.ndarray of daily simple returns
+
     for strike in selected:
         config = {
             'ticker': ticker,
@@ -70,7 +72,8 @@ def fetch_live_config(ticker, days_to_expiry):
             'option_type': 'call',
             'implied_volatility': historical_vol,
             'risk_free_rate': 0.045,
-            'name': f'{ticker} Call ${strike:.2f}'
+            'name': f'{ticker} Call ${strike:.2f}',
+            '_historical_returns': daily_returns,  # runtime-only; used by GARCH
         }
         results.append(config)
     return results

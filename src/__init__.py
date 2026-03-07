@@ -19,6 +19,7 @@ __description__ = "Modular options pricing and analysis system"
 from models import black_scholes_price, calculate_greeks, calculate_d1_d2, intrinsic_value
 from analytics import simulate_price_over_time, simulate_price_scenarios, simulate_volatility_scenarios, compare_option_strategies, plot_price_evolution, plot_price_scenarios, plot_volatility_surface, plot_strategy_comparison, plot_greeks_heatmap
 from utils import load_config_from_json, validate_option_config, create_default_config, create_strategy_configs, export_to_csv, export_summary_report, bulk_export
+from monte_carlo import simulate_gbm_paths, run_monte_carlo, compute_var, compute_cvar
 
 # Expose main classes and functions
 __all__ = [
@@ -49,5 +50,11 @@ __all__ = [
     # Data export
     'export_to_csv',
     'export_summary_report',
-    'bulk_export'
+    'bulk_export',
+
+    # Monte Carlo simulation
+    'simulate_gbm_paths',
+    'run_monte_carlo',
+    'compute_var',
+    'compute_cvar',
 ]
