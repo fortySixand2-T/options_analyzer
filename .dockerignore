@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.env
+*.venv
+/Users/*/environments/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated output
+analysis_results/
+mc_results/
+exports/
+plots/
+scenarios/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Docker files themselves (no need to copy in)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Secrets
+*.key
+*.pem
+secrets.yaml

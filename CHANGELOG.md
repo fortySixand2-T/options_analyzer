@@ -1,0 +1,21 @@
+# Changelog
+
+- [2026-04-02] Created: Dockerfile — Multi-stage build (prod + dev targets) for the options pricing toolkit
+- [2026-04-02] Created: .dockerignore — Excludes venvs, caches, and generated output from Docker build context
+- [2026-04-02] Created: docker-compose.yml — Services for test, shell, bs, mc, and scenario workflows
+- [2026-04-02] Created: CLAUDE.md — Full project context for Claude (structure, signatures, CLI, config, Docker)
+- [2026-04-02] Created: USECASES.md — 15 documented use cases with CLI commands and Python API examples
+- [2026-04-02] Created: src/scanner/providers/base.py — ChainProvider ABC + OptionContract, ChainSnapshot, HistoryData dataclasses
+- [2026-04-02] Created: src/scanner/providers/yfinance_provider.py — YFinanceProvider (spot, chain, history, RFR)
+- [2026-04-02] Created: src/scanner/providers/cached_provider.py — TTL-based caching decorator for any ChainProvider
+- [2026-04-02] Created: src/scanner/providers/__init__.py — Provider factory with create_provider()
+- [2026-04-02] Created: src/scanner/iv_rank.py — IV rank, percentile, and regime classification engine
+- [2026-04-02] Created: src/scanner/contract_filter.py — Multi-criteria contract filter (DTE, delta, moneyness, liquidity)
+- [2026-04-02] Created: src/scanner/edge.py — Edge calculator (GARCH theo vs market mid)
+- [2026-04-02] Created: src/scanner/scorer.py — Weighted conviction scorer + rank_signals()
+- [2026-04-02] Created: src/scanner/scanner.py — OptionsScanner orchestrator (full pipeline)
+- [2026-04-02] Created: src/scanner/cli.py — Scanner CLI entry point
+- [2026-04-02] Created: src/scanner/__init__.py — OptionSignal dataclass + scan_watchlist() public API
+- [2026-04-02] Created: config/scanner_config.json — Default scanner parameters
+- [2026-04-02] Created: tests/test_scanner.py — 33 unit tests for all scanner components
+- [2026-04-02] Modified: CLAUDE.md — Added scanner section (Phase A)

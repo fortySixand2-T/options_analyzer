@@ -651,7 +651,7 @@ python -m pytest tests/ -v
 python -m pytest tests/ --cov=src/ --cov-report=term-missing
 ```
 
-Expected: **50 tests passing** (10 BS + 18 MC + 7 GARCH + 6 Jump + 5 MCGreeks + 4 American + 4 VolSurface).
+Expected: **60 tests passing** (10 BS + 40 MC/GARCH/Jump/Greeks/American + 4 VolSurface + 6 Scenario).
 
 ---
 

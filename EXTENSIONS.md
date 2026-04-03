@@ -321,5 +321,6 @@ quotes from the live chain.
 | `TestMCGreeks` | 5 | all 10 keys present, 0 < delta < 1, gamma > 0, vega > 0, \|mc_delta − bs_delta\| < 0.05 |
 | `TestAmericanMC` | 4 | am_put ≥ eu_put, am_call premium ≈ 0, keys in results, premium ≥ 0 |
 | `TestImpliedVol` | 4 | IV roundtrip to 1e-4, nan on zero price, IV in (0.01, 5.0), call/put parity |
+| `test_scenario` | 6 | zero shock → 0 pnl, +ΔS → +call pnl, −ΔS → −call pnl, theta decay, result keys, reprice (0,0,0)=0 |
 
-All 54 tests pass in ~2 s.
+All 60 tests pass in ~3 s.

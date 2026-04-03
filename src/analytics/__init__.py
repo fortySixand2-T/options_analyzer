@@ -19,6 +19,7 @@ from .visualization import (
 )
 
 from .vol_surface import compute_implied_vol, fetch_vol_surface, plot_vol_surface
+from .scenario import run_scenario_matrix, plot_scenario_matrix
 
 __all__ = [
     'simulate_price_over_time',
@@ -33,4 +34,6 @@ __all__ = [
     'compute_implied_vol',
     'fetch_vol_surface',
     'plot_vol_surface',
+    'run_scenario_matrix',
+    'plot_scenario_matrix',
 ]

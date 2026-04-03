@@ -1,0 +1,15 @@
+# Options Pricing System — Development Requirements
+# ==================================================
+# Install with: pip install -r requirements-dev.txt
+# (also install requirements.txt first)
+
+# Testing
+pytest>=6.0.0
+
+# Code formatting and linting
+black>=21.0.0
+flake8>=3.9.0
+
+# Notebook support (optional)
+notebook>=6.4.0
+jupyterlab>=3.0.0

@@ -1,0 +1,55 @@
+services:
+  # Run the full test suite
+  test:
+    build:
+      context: .
+      target: dev
+    command: python -m pytest tests/ -v
+
+  # Interactive shell with full dev environment
+  shell:
+    build:
+      context: .
+      target: dev
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./mc_results:/app/mc_results
+      - ./exports:/app/exports
+      - ./analysis_results:/app/analysis_results
+    command: bash
+
+  # Run Black-Scholes analysis from config
+  bs:
+    build:
+      context: .
+      target: prod
+    volumes:
+      - ./exports:/app/exports
+    command: python src/options_test_runner.py --json config/option_configs.json
+
+  # Run Monte Carlo simulation from config (add CLI args via `docker compose run mc --greeks --plot`)
+  mc:
+    build:
+      context: .
+      target: prod
+    volumes:
+      - ./mc_results:/app/mc_results
+    command: >
+      python src/mc_runner.py
+        --json config/mc_config.json
+        --num_paths 10000
+        --seed 42
+        --plot
+
+  # Run scenario matrix analysis
+  scenario:
+    build:
+      context: .
+      target: prod
+    volumes:
+      - ./mc_results:/app/mc_results
+    command: >
+      python src/scenario_runner.py
+        --json config/mc_config.json
+        --plot
