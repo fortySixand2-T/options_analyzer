@@ -59,3 +59,11 @@
 - [2026-04-19] Created: src/strategy_scanner.py — Regime-aware strategy scanner orchestrator
 - [2026-04-19] Modified: scripts/scan.py — Added --strategies flag with regime detection + checklist output
 - [2026-04-19] Created: tests/test_regime.py — 25 tests for regime detection + strategy evaluation
+- [2026-04-19] Created: src/backtest/__init__.py — Backtest module exports
+- [2026-04-19] Created: src/backtest/models.py — Pydantic v2 models (BacktestRequest, BacktestTrade, BacktestResult)
+- [2026-04-19] Created: src/backtest/analyzer.py — Backtest stats: win rate, Sharpe, drawdown, profit factor, regime breakdown
+- [2026-04-19] Created: src/backtest/cache.py — SQLite cache for backtest results
+- [2026-04-19] Created: src/backtest/tt_backtest.py — Tastytrade Backtester API wrapper
+- [2026-04-19] Created: src/backtest/local_backtest.py — Local offline backtester using historical OHLCV + BS pricer
+- [2026-04-19] Created: scripts/backtest.py — Backtest CLI with --compare, --local, regime breakdown
+- [2026-04-19] Created: tests/test_backtest.py — 16 tests for backtest analyzer, models, and cache
