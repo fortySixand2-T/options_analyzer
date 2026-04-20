@@ -93,3 +93,5 @@
 - [2026-04-20] Modified: src/ui/app.py — Added WS /ws/greeks, POST /api/order, GET /api/positions endpoints
 - [2026-04-20] Modified: requirements.txt — Added websockets>=10.0
 - [2026-04-20] Created: tests/test_streaming.py — 29 tests for streamer, score engine, order manager, API
+- [2026-04-20] Added: frontend/.gitignore — Frontend-specific gitignore (node_modules, dist, logs)
+- [2026-04-20] Added: frontend/public/ — Favicon and icons from Vite scaffold
