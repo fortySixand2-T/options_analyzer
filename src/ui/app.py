@@ -377,7 +377,152 @@ def add_journal(entry: JournalEntry):
     return {"status": "ok"}
 
 
-# ── Static Files (React build) ─────────���────────────────────────────────────
+# ── Streaming WebSocket ─────────────────────────────────────────────────────
+
+@app.websocket("/ws/greeks")
+async def ws_greeks(websocket):
+    """WebSocket endpoint for live streaming Greeks.
+
+    Client sends JSON: {"action": "subscribe", "symbols": ["SPY"], "max_dte": 14}
+    Server streams JSON: {symbol, bid, ask, mid, iv, delta, gamma, theta, vega, ...}
+    """
+    from starlette.websockets import WebSocketDisconnect
+
+    await websocket.accept()
+
+    try:
+        from streaming.dxfeed_streamer import DXFeedStreamer
+        from streaming.score_engine import LiveScoreEngine
+
+        streamer = DXFeedStreamer()
+        engine = LiveScoreEngine()
+
+        # Wait for subscription message from client
+        msg = await websocket.receive_json()
+        symbols = msg.get("symbols", ["SPY"])
+        max_dte = msg.get("max_dte", 14)
+
+        connected = await streamer.connect()
+        if not connected:
+            await websocket.send_json({"error": "Could not connect to streaming feed"})
+            await websocket.close()
+            return
+
+        count = await streamer.subscribe(symbols, max_dte=max_dte)
+        await websocket.send_json({"status": "subscribed", "contracts": count})
+
+        # Stream updates to client
+        async def on_update(update):
+            score = engine.on_quote_update(update)
+            if score:
+                try:
+                    await websocket.send_json({
+                        "symbol": score.symbol,
+                        "strike": score.strike,
+                        "option_type": score.option_type,
+                        "dte": score.dte,
+                        "spot": score.spot,
+                        "bid": score.bid,
+                        "ask": score.ask,
+                        "mid": score.mid,
+                        "iv": score.iv,
+                        "delta": score.delta,
+                        "gamma": score.gamma,
+                        "theta": score.theta,
+                        "vega": score.vega,
+                        "theo_price": score.theo_price,
+                        "edge_pct": score.edge_pct,
+                        "conviction": score.conviction,
+                    })
+                except Exception:
+                    pass
+
+        await streamer.listen(callback=on_update)
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected")
+    except Exception as e:
+        logger.warning("WebSocket error: %s", e)
+        try:
+            await websocket.send_json({"error": str(e)})
+        except Exception:
+            pass
+    finally:
+        if 'streamer' in dir():
+            await streamer.disconnect()
+
+
+# ── Order Execution ──────────────────────────────────────────────────────────
+
+class PlaceOrderRequest(BaseModel):
+    underlying: str
+    strategy: str
+    legs: List[Dict]  # [{action, option_type, strike, quantity}]
+    order_type: str = "limit"
+    price: Optional[float] = None
+    dry_run: bool = True  # default to dry run for safety
+
+
+@app.post("/api/order")
+def place_order(req: PlaceOrderRequest):
+    """Place an order via Tastytrade (paper by default)."""
+    from execution.order_manager import OrderManager, OrderRequest, OrderLeg
+
+    mgr = OrderManager()
+    if not mgr.connect():
+        raise HTTPException(status_code=503, detail="Cannot connect to Tastytrade")
+
+    legs = []
+    for leg in req.legs:
+        legs.append(OrderLeg(
+            action=leg.get("action", "buy_to_open"),
+            symbol=leg.get("symbol", ""),
+            quantity=int(leg.get("quantity", 1)),
+            option_type=leg.get("option_type", "call"),
+            strike=float(leg.get("strike", 0)),
+            expiry=leg.get("expiry", ""),
+        ))
+
+    order_req = OrderRequest(
+        underlying=req.underlying,
+        strategy=req.strategy,
+        legs=legs,
+        order_type=req.order_type,
+        price=req.price,
+        dry_run=req.dry_run,
+    )
+
+    result = mgr.submit(order_req)
+    return {
+        "status": result.status.value,
+        "order_id": result.order_id,
+        "message": result.message,
+        "is_paper": result.is_paper,
+    }
+
+
+@app.get("/api/positions")
+def get_positions():
+    """Get current account positions from Tastytrade."""
+    from execution.order_manager import OrderManager
+    mgr = OrderManager()
+    if not mgr.connect():
+        return {"positions": [], "error": "Not connected to Tastytrade"}
+    return {"positions": mgr.get_positions()}
+
+
+@app.get("/api/streamer/status")
+def streamer_status():
+    """Check if streaming is available."""
+    has_creds = bool(os.getenv("TT_USERNAME")) and bool(os.getenv("TT_PASSWORD"))
+    return {
+        "streaming_available": has_creds,
+        "credentials_set": has_creds,
+        "websocket_url": "/ws/greeks",
+    }
+
+
+# ── Static Files (React build) ──────────────────────────────────────────────
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
 if os.path.isdir(_STATIC_DIR):

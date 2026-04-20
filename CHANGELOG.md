@@ -85,3 +85,11 @@
 - [2026-04-20] Modified: .gitignore — Added frontend/node_modules, frontend/dist, data/
 - [2026-04-20] Modified: requirements.txt — Added fastapi, uvicorn, rich
 - [2026-04-20] Created: tests/test_ui.py — 9 tests for FastAPI endpoints (greeks, journal)
+- [2026-04-20] Created: src/streaming/__init__.py — Streaming module exports
+- [2026-04-20] Created: src/streaming/dxfeed_streamer.py — DXLink WebSocket streamer for live option quotes
+- [2026-04-20] Created: src/streaming/score_engine.py — Real-time score recalculation on quote updates
+- [2026-04-20] Created: src/execution/__init__.py — Execution module exports
+- [2026-04-20] Created: src/execution/order_manager.py — Tastytrade order placement (paper + live, with risk checks)
+- [2026-04-20] Modified: src/ui/app.py — Added WS /ws/greeks, POST /api/order, GET /api/positions endpoints
+- [2026-04-20] Modified: requirements.txt — Added websockets>=10.0
+- [2026-04-20] Created: tests/test_streaming.py — 29 tests for streamer, score engine, order manager, API

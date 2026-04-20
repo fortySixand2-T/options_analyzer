@@ -30,4 +30,5 @@ plotly>=5.0.0
 # Web UI (FastAPI backend)
 fastapi>=0.100.0
 uvicorn>=0.22.0
+websockets>=10.0
 rich>=12.0.0
