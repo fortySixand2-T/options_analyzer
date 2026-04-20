@@ -36,3 +36,7 @@
 - [2026-04-19] Deleted: src/scanner.py — Removed TC-coupled scanner (conflicts with scanner/ package)
 - [2026-04-19] Modified: src/config.py — Removed TC-only PRICING dict (AI token costs)
 - [2026-04-19] Deleted: src/pricing__init__.py.bak — Removed leftover backup file
+- [2026-04-19] Created: src/scanner/providers/tastytrade_provider.py — Tastytrade ChainProvider with yfinance fallback
+- [2026-04-19] Modified: src/scanner/providers/__init__.py — Added TT provider to factory, auto-detect via TT_USERNAME
+- [2026-04-19] Created: scripts/scan.py — CLI entry point for scanner with --strategies, --provider, --export flags
+- [2026-04-19] Modified: requirements.txt — Added tastytrade>=8.0 dependency
