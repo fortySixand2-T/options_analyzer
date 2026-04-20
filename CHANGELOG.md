@@ -74,3 +74,14 @@
 - [2026-04-20] Created: src/risk/mc_ev.py — MC-based expected value for multi-leg positions
 - [2026-04-20] Modified: requirements.txt — Pinned tastytrade<10, added requests>=2.28.0
 - [2026-04-20] Created: tests/test_risk.py — 32 tests for sizer, rules, MC EV, and FlashAlpha client
+- [2026-04-20] Created: src/ui/__init__.py — Web UI module
+- [2026-04-20] Created: src/ui/app.py — FastAPI backend (regime, scan, chain, greeks, backtest, journal endpoints)
+- [2026-04-20] Created: frontend/ — React frontend (Vite + recharts) with dark terminal theme
+- [2026-04-20] Created: scripts/run.sh — Docker build/run script
+- [2026-04-20] Created: .env.example — Environment variable template
+- [2026-04-20] Modified: Dockerfile — Added frontend build stage, production serves React + FastAPI
+- [2026-04-20] Modified: docker-compose.yml — Added app, scan, backtest, shell services
+- [2026-04-20] Modified: .dockerignore — Added frontend/node_modules, data/
+- [2026-04-20] Modified: .gitignore — Added frontend/node_modules, frontend/dist, data/
+- [2026-04-20] Modified: requirements.txt — Added fastapi, uvicorn, rich
+- [2026-04-20] Created: tests/test_ui.py — 9 tests for FastAPI endpoints (greeks, journal)

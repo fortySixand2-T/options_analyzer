@@ -1,10 +1,40 @@
 services:
+  # Full app: FastAPI backend serving React frontend
+  app:
+    build:
+      context: .
+      target: prod
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    command: python -m uvicorn ui.app:app --host 0.0.0.0 --port 8000
+
   # Run the full test suite
   test:
     build:
       context: .
       target: dev
     command: python -m pytest tests/ -v
+
+  # CLI scanner (one-off runs)
+  scan:
+    build:
+      context: .
+      target: prod
+    env_file: .env
+    command: python scripts/scan.py SPY,QQQ,IWM --strategies --top 10
+
+  # Backtester (one-off runs)
+  backtest:
+    build:
+      context: .
+      target: prod
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    command: python scripts/backtest.py --strategy iron_condor --symbol SPY
 
   # Interactive shell with full dev environment
   shell:
@@ -13,13 +43,13 @@ services:
       target: dev
     stdin_open: true
     tty: true
+    env_file: .env
     volumes:
-      - ./mc_results:/app/mc_results
-      - ./exports:/app/exports
-      - ./analysis_results:/app/analysis_results
+      - .:/app
+      - ./data:/app/data
     command: bash
 
-  # Run Black-Scholes analysis from config
+  # Existing services
   bs:
     build:
       context: .
@@ -28,7 +58,6 @@ services:
       - ./exports:/app/exports
     command: python src/options_test_runner.py --json config/option_configs.json
 
-  # Run Monte Carlo simulation from config (add CLI args via `docker compose run mc --greeks --plot`)
   mc:
     build:
       context: .
@@ -42,7 +71,6 @@ services:
         --seed 42
         --plot
 
-  # Run scenario matrix analysis
   scenario:
     build:
       context: .

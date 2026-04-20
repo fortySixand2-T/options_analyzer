@@ -1,0 +1,59 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.app-title {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.tab-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.tab-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-card);
+  font-weight: 500;
+}
+
+.app-main {
+  flex: 1;
+  padding: 16px 24px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}

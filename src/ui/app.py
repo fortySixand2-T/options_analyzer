@@ -1,0 +1,392 @@
+"""
+FastAPI backend for the Options Scanner web UI.
+
+Routes:
+    GET  /api/regime                  ��� current regime classification + VIX
+    GET  /api/scan                    — scanner results with checklists
+    GET  /api/chain/{symbol}          — options chain with Greeks
+    POST /api/greeks                  — compute Greeks for arbitrary inputs
+    GET  /api/backtest/{strategy}     — backtest results
+    GET  /api/journal                 — trade journal entries
+    POST /api/journal                 — log a trade
+
+Options Analytics Team — 2026-04
+"""
+
+import logging
+import os
+from datetime import date
+from typing import Dict, List, Optional
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="Options Scanner API",
+    description="Index Options Scanner — regime detection, strategy scoring, backtesting",
+    version="1.0.0",
+)
+
+# CORS for React dev server
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ── Request/Response Models ──────────────────────────────────────────────────
+
+class GreeksRequest(BaseModel):
+    spot: float
+    strike: float
+    dte: int
+    iv: float
+    r: Optional[float] = None
+    option_type: str = "call"
+
+
+class JournalEntry(BaseModel):
+    strategy: str
+    symbol: str
+    entry_date: str
+    entry_price: float
+    exit_date: Optional[str] = None
+    exit_price: Optional[float] = None
+    contracts: int = 1
+    pnl: Optional[float] = None
+    notes: str = ""
+
+
+# ── Regime ─────���─────────────────────────────────────────────────────────────
+
+@app.get("/api/regime")
+def get_regime():
+    """Current market regime classification + VIX data."""
+    try:
+        from regime.detector import detect_regime
+        result = detect_regime()
+        vix = result.vix
+        return {
+            "regime": result.regime.value,
+            "rationale": result.rationale,
+            "event_active": result.event_active,
+            "event_type": result.event_type,
+            "event_days": result.event_days,
+            "vix": {
+                "vix": vix.vix,
+                "vix9d": vix.vix9d,
+                "vix3m": vix.vix3m,
+                "vix6m": vix.vix6m,
+                "contango": vix.contango,
+                "backwardation": vix.backwardation,
+                "term_structure_slope": vix.term_structure_slope,
+                "vix_percentile_1y": vix.vix_percentile_1y,
+            },
+        }
+    except Exception as e:
+        logger.exception("Failed to detect regime")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Scanner ────────────────���─────────────────────────────────────────────────
+
+@app.get("/api/scan")
+def scan(
+    symbols: str = Query("SPY", description="Comma-separated symbols"),
+    max_dte: int = Query(14, description="Max DTE filter"),
+    min_dte: int = Query(0, description="Min DTE filter"),
+    strategies: bool = Query(False, description="Include strategy evaluation"),
+    top: int = Query(20, description="Max results"),
+):
+    """Scan for options signals, optionally with strategy evaluation."""
+    tickers = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not tickers:
+        raise HTTPException(status_code=400, detail="No symbols provided")
+
+    scanner_config = {
+        "filter": {"min_dte": min_dte, "max_dte": max_dte},
+    }
+
+    try:
+        if strategies:
+            from strategy_scanner import scan_strategies
+            result = scan_strategies(
+                tickers=tickers,
+                scanner_config=scanner_config,
+                top=top,
+            )
+            regime = result["regime"]
+            return {
+                "regime": {
+                    "regime": regime.regime.value,
+                    "rationale": regime.rationale,
+                },
+                "strategies": [_serialize_strategy(s) for s in result["strategies"]],
+                "signals_count": result["signals_count"],
+            }
+        else:
+            from scanner import scan_watchlist
+            signals = scan_watchlist(tickers, config=scanner_config)
+            signals = signals[:top]
+            return {
+                "signals": [_serialize_signal(s) for s in signals],
+                "count": len(signals),
+            }
+    except Exception as e:
+        logger.exception("Scan failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _serialize_signal(s) -> Dict:
+    return {
+        "ticker": s.ticker,
+        "strike": s.strike,
+        "expiry": s.expiry,
+        "option_type": s.option_type,
+        "dte": s.dte,
+        "spot": s.spot,
+        "bid": s.bid,
+        "ask": s.ask,
+        "mid": s.mid,
+        "iv_rank": s.iv_rank,
+        "iv_percentile": s.iv_percentile,
+        "iv_regime": s.iv_regime,
+        "garch_vol": s.garch_vol,
+        "edge_pct": s.edge_pct,
+        "direction": s.direction,
+        "delta": s.delta,
+        "gamma": s.gamma,
+        "theta": s.theta,
+        "vega": s.vega,
+        "conviction": s.conviction,
+    }
+
+
+def _serialize_strategy(s) -> Dict:
+    return {
+        "strategy_name": s.strategy_name,
+        "strategy_label": s.strategy_label,
+        "ticker": s.ticker,
+        "score": s.score,
+        "regime": s.regime.value,
+        "checks_passed": s.checks_passed,
+        "checks_total": s.checks_total,
+        "checklist": [
+            {"name": c.name, "passed": c.passed, "value": c.value}
+            for c in s.checklist
+        ],
+        "legs": s.legs,
+        "entry": s.entry,
+        "is_credit": s.is_credit,
+        "max_profit": s.max_profit,
+        "max_loss": s.max_loss,
+        "risk_reward": s.risk_reward,
+        "prob_profit": s.prob_profit,
+        "suggested_dte": s.suggested_dte,
+        "rationale": s.rationale,
+    }
+
+
+# ── Chain ─────────��──────────────────────────��───────────────────────────────
+
+@app.get("/api/chain/{symbol}")
+def get_chain(
+    symbol: str,
+    max_dte: int = Query(14, description="Max DTE"),
+    min_dte: int = Query(0, description="Min DTE"),
+):
+    """Full options chain with Greeks for a symbol."""
+    try:
+        from scanner.providers import create_provider
+        provider = create_provider()
+        chain = provider.get_chain(symbol.upper(), min_dte=min_dte, max_dte=max_dte)
+        return {
+            "symbol": chain.ticker,
+            "spot": chain.spot,
+            "expiries": chain.expiries,
+            "contracts": [
+                {
+                    "strike": c.strike,
+                    "expiry": c.expiry,
+                    "option_type": c.option_type,
+                    "bid": c.bid,
+                    "ask": c.ask,
+                    "mid": c.mid,
+                    "last": c.last,
+                    "volume": c.volume,
+                    "open_interest": c.open_interest,
+                    "implied_volatility": c.implied_volatility,
+                }
+                for c in chain.contracts
+            ],
+        }
+    except Exception as e:
+        logger.exception("Chain fetch failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Greeks Calculator ─────────────────────────────────────���──────────────────
+
+@app.post("/api/greeks")
+def compute_greeks(req: GreeksRequest):
+    """Compute BS price + Greeks for arbitrary inputs."""
+    from models.black_scholes import black_scholes_price, calculate_greeks
+    from config import RISK_FREE_RATE
+
+    r = req.r if req.r is not None else RISK_FREE_RATE
+    T = max(req.dte / 365.0, 1 / 365.0)
+
+    price = black_scholes_price(req.spot, req.strike, T, r, req.iv, req.option_type)
+    greeks = calculate_greeks(req.spot, req.strike, T, r, req.iv, req.option_type)
+
+    return {
+        "price": round(price, 4),
+        "greeks": {k: round(v, 6) for k, v in greeks.items()},
+        "inputs": {
+            "spot": req.spot,
+            "strike": req.strike,
+            "dte": req.dte,
+            "iv": req.iv,
+            "r": r,
+            "option_type": req.option_type,
+        },
+    }
+
+
+# ── Backtest ──────────────────��──────────────────────────────────────────────
+
+@app.get("/api/backtest/{strategy}")
+def get_backtest(
+    strategy: str,
+    symbol: str = Query("SPY"),
+    start: str = Query("2022-01-01"),
+    end: Optional[str] = Query(None),
+):
+    """Run or retrieve cached backtest results."""
+    from backtest.models import BacktestRequest
+    from backtest.local_backtest import run_local_backtest
+
+    end_date = date.fromisoformat(end) if end else date.today()
+    start_date = date.fromisoformat(start)
+
+    req = BacktestRequest(
+        strategy=strategy,
+        symbol=symbol.upper(),
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    try:
+        result = run_local_backtest(req)
+        stats = result.stats
+        return {
+            "strategy": strategy,
+            "symbol": symbol,
+            "period": {"start": str(start_date), "end": str(end_date)},
+            "source": result.source,
+            "cached": result.cached,
+            "stats": {
+                "total_trades": stats.total_trades,
+                "wins": stats.wins,
+                "losses": stats.losses,
+                "win_rate": stats.win_rate,
+                "avg_win": stats.avg_win,
+                "avg_loss": stats.avg_loss,
+                "avg_pnl": stats.avg_pnl,
+                "total_pnl": stats.total_pnl,
+                "profit_factor": stats.profit_factor,
+                "max_drawdown": stats.max_drawdown,
+                "max_drawdown_pct": stats.max_drawdown_pct,
+                "sharpe_ratio": stats.sharpe_ratio,
+                "avg_dte_at_entry": stats.avg_dte_at_entry,
+                "avg_days_in_trade": stats.avg_days_in_trade,
+            },
+            "equity_curve": result.equity_curve,
+            "regime_breakdown": result.regime_breakdown,
+            "trades_count": len(result.trades) if result.trades else 0,
+        }
+    except Exception as e:
+        logger.exception("Backtest failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Journal ───────────────────────────��──────────────────────────────────────
+
+# Simple SQLite-backed journal
+_JOURNAL_DB = os.getenv("JOURNAL_DB", "data/journal.db")
+
+
+def _get_journal_db():
+    import sqlite3
+    os.makedirs(os.path.dirname(_JOURNAL_DB) if os.path.dirname(_JOURNAL_DB) else ".", exist_ok=True)
+    conn = sqlite3.connect(_JOURNAL_DB)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS journal (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            strategy TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            entry_date TEXT NOT NULL,
+            entry_price REAL NOT NULL,
+            exit_date TEXT,
+            exit_price REAL,
+            contracts INTEGER DEFAULT 1,
+            pnl REAL,
+            notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    return conn
+
+
+@app.get("/api/journal")
+def list_journal(limit: int = Query(50)):
+    """List trade journal entries."""
+    conn = _get_journal_db()
+    rows = conn.execute(
+        "SELECT * FROM journal ORDER BY created_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    cols = ["id", "strategy", "symbol", "entry_date", "entry_price",
+            "exit_date", "exit_price", "contracts", "pnl", "notes", "created_at"]
+    entries = [dict(zip(cols, row)) for row in rows]
+    conn.close()
+    return {"entries": entries, "count": len(entries)}
+
+
+@app.post("/api/journal")
+def add_journal(entry: JournalEntry):
+    """Log a trade to the journal."""
+    conn = _get_journal_db()
+    conn.execute(
+        """INSERT INTO journal (strategy, symbol, entry_date, entry_price,
+           exit_date, exit_price, contracts, pnl, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (entry.strategy, entry.symbol, entry.entry_date, entry.entry_price,
+         entry.exit_date, entry.exit_price, entry.contracts, entry.pnl, entry.notes),
+    )
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
+
+
+# ── Static Files (React build) ─────────���────────────────────────────────────
+
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
+if os.path.isdir(_STATIC_DIR):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_STATIC_DIR, "assets")), name="assets")
+
+    @app.get("/{path:path}")
+    def serve_spa(path: str):
+        """Serve React SPA — all non-API routes serve index.html."""
+        file_path = os.path.join(_STATIC_DIR, path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(_STATIC_DIR, "index.html"))

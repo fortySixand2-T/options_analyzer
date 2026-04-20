@@ -40,7 +40,14 @@ Dockerfile
 docker-compose.yml
 .dockerignore
 
+# Frontend build artifacts (built in Docker)
+frontend/node_modules/
+frontend/dist/
+
 # Secrets
 *.key
 *.pem
 secrets.yaml
+
+# Data
+data/
