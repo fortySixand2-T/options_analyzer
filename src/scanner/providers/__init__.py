@@ -8,38 +8,47 @@ Tradier) can be added by implementing ChainProvider.
 Options Analytics Team — 2026-04-02
 """
 
+import os
+
 from .base import ChainProvider, ChainSnapshot, HistoryData, OptionContract
 from .cached_provider import CachedProvider
 from .yfinance_provider import YFinanceProvider
+from .tastytrade_provider import TastytradeProvider, TastytradeWithQuotesProvider
 
-# TODO: from .polygon_provider import PolygonProvider  # planned, not yet implemented
 
-
-def create_provider(name: str = 'yfinance',
+def create_provider(name: str = 'auto',
                     cache: bool = True,
                     chain_ttl: int = 900,
-                    history_ttl: int = 3600) -> ChainProvider:
+                    history_ttl: int = 3600,
+                    delay: float = 1.0) -> ChainProvider:
     """Factory: create a data provider by name, optionally wrapped in cache.
 
     Parameters
     ----------
     name : str
-        Provider name. Currently only 'yfinance' is supported.
+        Provider name: 'auto', 'tastytrade', or 'yfinance'.
+        'auto' selects tastytrade if TT_USERNAME is set, else yfinance.
     cache : bool
         Wrap in CachedProvider if True (default).
     chain_ttl : int
         Cache TTL in seconds for spot/chain data (default 900 = 15 min).
     history_ttl : int
         Cache TTL in seconds for history/risk-free rate (default 3600 = 1 hr).
+    delay : float
+        Seconds between yfinance API calls to avoid rate limits (default 1.0).
 
     Returns
     -------
     ChainProvider
     """
-    if name == 'yfinance':
-        provider = YFinanceProvider()
+    if name == 'tastytrade' or (name == 'auto' and os.getenv('TT_USERNAME')):
+        provider = TastytradeWithQuotesProvider(delay=delay)
+        if not provider.authenticated:
+            provider = YFinanceProvider(delay=delay)
+    elif name in ('yfinance', 'auto'):
+        provider = YFinanceProvider(delay=delay)
     else:
-        raise ValueError(f"Unknown provider: {name!r}. Supported: 'yfinance'")
+        raise ValueError(f"Unknown provider: {name!r}. Supported: 'auto', 'tastytrade', 'yfinance'")
 
     if cache:
         provider = CachedProvider(provider, chain_ttl=chain_ttl,
@@ -49,5 +58,7 @@ def create_provider(name: str = 'yfinance',
 
 __all__ = [
     'ChainProvider', 'ChainSnapshot', 'HistoryData', 'OptionContract',
-    'YFinanceProvider', 'CachedProvider', 'create_provider',
+    'YFinanceProvider', 'CachedProvider',
+    'TastytradeProvider', 'TastytradeWithQuotesProvider',
+    'create_provider',
 ]

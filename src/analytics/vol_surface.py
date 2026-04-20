@@ -66,9 +66,6 @@ def compute_implied_vol(
         Implied volatility, or np.nan if the price is outside the
         arbitrage-free range or root-finding fails.
     """
-    import sys
-    import os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
     from models.black_scholes import black_scholes_price
 
     if T <= 0 or market_price <= 0:

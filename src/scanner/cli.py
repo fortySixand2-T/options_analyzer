@@ -2,10 +2,10 @@
 CLI entry point for the options chain scanner.
 
 Usage:
-    python -m src.scanner.cli --tickers AAPL,MSFT,NVDA --top 10
-    python -m src.scanner.cli --tickers AAPL --min_dte 20 --max_dte 60
-    python -m src.scanner.cli --watchlist config/watchlist.json --top 20
-    python -m src.scanner.cli --tickers AAPL --export scanner_results.csv
+    python -m scanner.cli --tickers AAPL,MSFT,NVDA --top 10
+    python -m scanner.cli --tickers AAPL --min_dte 20 --max_dte 60
+    python -m scanner.cli --watchlist config/watchlist.json --top 20
+    python -m scanner.cli --tickers AAPL --export scanner_results.csv
 
 Options Analytics Team — 2026-04-02
 """
@@ -15,10 +15,6 @@ import csv
 import json
 import logging
 import sys
-import os
-
-# Ensure src/ is on the path for internal imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from scanner import OptionSignal, scan_watchlist
 from scanner.providers import create_provider

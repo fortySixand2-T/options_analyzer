@@ -8,10 +8,6 @@ along with BS Greeks.
 Options Analytics Team — 2026-04-02
 """
 
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from models.black_scholes import black_scholes_price, calculate_greeks
 
 from .providers.base import OptionContract

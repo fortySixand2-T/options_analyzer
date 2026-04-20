@@ -12,11 +12,9 @@ import json
 import logging
 import math
 import os
-import sys
 from datetime import datetime
 from typing import List, Optional
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from monte_carlo.garch_vol import fit_garch11
 
 from . import OptionSignal
@@ -92,7 +90,8 @@ class OptionsScanner:
 
         # 2. IV rank — use ATM call IV as the "current IV"
         atm_iv = self._get_atm_iv(snapshot)
-        iv_metrics = compute_iv_metrics(atm_iv, history)
+        iv_history_rows = self._fetch_iv_history(ticker)
+        iv_metrics = compute_iv_metrics(atm_iv, history, iv_history_rows=iv_history_rows)
 
         # 3. Fit GARCH
         garch_vol = atm_iv  # fallback
@@ -193,6 +192,31 @@ class OptionsScanner:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _fetch_iv_history(ticker: str, days: int = 365) -> list:
+        """Load IV history rows from the database (up to *days* back).
+
+        Returns an empty list if the database module is not available.
+        """
+        try:
+            import importlib
+            db_mod = importlib.import_module("app.database")
+            get_db = db_mod.get_db
+            conn = get_db()
+            rows = conn.execute(
+                """SELECT atm_iv_avg, scan_date, spot
+                   FROM iv_history
+                   WHERE ticker = %s
+                     AND scan_date >= CURRENT_DATE - %s
+                   ORDER BY scan_date DESC""",
+                (ticker, days),
+            ).fetchall()
+            conn.close()
+            return [dict(r) for r in rows]
+        except Exception as e:
+            logger.debug("Could not fetch iv_history for %s: %s", ticker, e)
+            return []
 
     @staticmethod
     def _get_atm_iv(snapshot) -> float:

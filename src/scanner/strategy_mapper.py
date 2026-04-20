@@ -9,7 +9,7 @@ Options Analytics Team — 2026-04
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional
 
 from . import OptionSignal
 
@@ -20,7 +20,7 @@ class StrategyRecommendation:
     strategy: str           # e.g. "short_put_spread", "long_straddle"
     strategy_label: str     # Human-readable: "Short Put Spread"
     rationale: str          # Why this structure fits the signal
-    legs: list[dict]        # [{"action": "buy"|"sell", "option_type": ..., "strike_method": ...}]
+    legs: list        # [{"action": "buy"|"sell", "option_type": ..., "strike_method": ...}]
     suggested_dte: int      # Recommended DTE for this structure
     risk_profile: str       # "defined" or "undefined"
     max_risk_method: str    # How to compute max risk: "spread_width", "premium_paid", "unlimited"

@@ -9,6 +9,7 @@ Options Analytics Team — 2026-04-02
 """
 
 import logging
+import time
 import warnings
 from datetime import datetime, timedelta
 
@@ -24,12 +25,24 @@ logger = logging.getLogger(__name__)
 class YFinanceProvider(ChainProvider):
     """Options data provider backed by yfinance."""
 
+    def __init__(self, delay: float = 1.0):
+        self._delay = delay
+        self._last_call = 0.0
+
+    def _throttle(self):
+        """Wait if needed to respect rate limits."""
+        elapsed = time.time() - self._last_call
+        if elapsed < self._delay:
+            time.sleep(self._delay - elapsed)
+        self._last_call = time.time()
+
     # ------------------------------------------------------------------
     # Spot
     # ------------------------------------------------------------------
 
     def get_spot(self, ticker: str) -> float:
         """Current spot price."""
+        self._throttle()
         try:
             t = yf.Ticker(ticker)
             price = t.fast_info.get('lastPrice')
@@ -51,10 +64,11 @@ class YFinanceProvider(ChainProvider):
                   min_dte: int = 7,
                   max_dte: int = 90) -> ChainSnapshot:
         """Full option chain filtered by DTE range."""
+        self._throttle()
         now = datetime.now()
         spot = self.get_spot(ticker)
-        contracts: list[OptionContract] = []
-        valid_expiries: list[str] = []
+        contracts = []
+        valid_expiries = []
 
         try:
             t = yf.Ticker(ticker)
@@ -116,6 +130,7 @@ class YFinanceProvider(ChainProvider):
 
     def get_history(self, ticker: str, days: int = 365) -> HistoryData:
         """Historical daily closes and derived vol metrics."""
+        self._throttle()
         try:
             t = yf.Ticker(ticker)
             hist = t.history(period=f'{days}d')
@@ -151,6 +166,7 @@ class YFinanceProvider(ChainProvider):
 
     def get_risk_free_rate(self) -> float:
         """13-week T-bill yield as risk-free rate proxy."""
+        self._throttle()
         try:
             t = yf.Ticker('^IRX')
             rate = t.fast_info.get('lastPrice')

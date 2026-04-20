@@ -8,15 +8,9 @@ Options Analytics Team — 2026-04
 """
 
 import logging
-from pathlib import Path
-import sys
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
-
-_SRC = str(Path(__file__).resolve().parent.parent)
-if _SRC not in sys.path:
-    sys.path.insert(0, _SRC)
 
 from models.black_scholes import black_scholes_price, calculate_greeks
 from monte_carlo.gbm_simulator import run_monte_carlo
@@ -56,7 +50,7 @@ def _classify_credit(strategy: str) -> bool:
     return strategy in _CREDIT_STRATEGIES
 
 
-def _resolve_strikes(signal: OptionSignal, recommendation: StrategyRecommendation) -> list[dict]:
+def _resolve_strikes(signal: OptionSignal, recommendation: StrategyRecommendation) -> List[dict]:
     """Convert abstract strike_method references to concrete leg dicts."""
     width = _strike_increment(signal.spot)
     atm = _round_strike(signal.spot)

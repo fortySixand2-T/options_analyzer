@@ -9,12 +9,9 @@ Options Analytics Team — 2026-04-02
 
 import logging
 import math
-import sys
-import os
 from datetime import datetime
 from typing import List
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from models.black_scholes import calculate_greeks
 
 from .providers.base import OptionContract

@@ -12,7 +12,6 @@ Date: March 2026
 """
 
 import copy
-import sys
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -20,8 +19,6 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 # ---------------------------------------------------------------------------

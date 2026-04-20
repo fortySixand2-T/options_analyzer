@@ -7,12 +7,15 @@ so no additional env configuration is needed.
 """
 import json
 import logging
+import os
 from typing import Any, Dict, List
 
 import anthropic
 import openai
 
-from app.config import ANTHROPIC_API_KEY, OPENAI_API_KEY, SYNTHESIS_PROVIDER
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+SYNTHESIS_PROVIDER = os.getenv("SYNTHESIS_PROVIDER", "anthropic")
 
 logger = logging.getLogger(__name__)
 

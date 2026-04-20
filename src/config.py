@@ -24,12 +24,6 @@ OUTLOOKS: dict = {
     "long":   {"min_dte": 61,  "max_dte": 120},
 }
 
-# ── AI token pricing (per 1M tokens, for cost display) ────────────────────────
-PRICING: dict = {
-    "anthropic": {"input": 3.00,  "output": 15.00},
-    "openai":    {"input": 2.50,  "output": 10.00},
-}
-
 # ── Chain scanner defaults ─────────────────────────────────────────────
 CHAIN_SCANNER_CONFIG = {
     "filter": {

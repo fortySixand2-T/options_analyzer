@@ -19,3 +19,20 @@
 - [2026-04-02] Created: config/scanner_config.json — Default scanner parameters
 - [2026-04-02] Created: tests/test_scanner.py — 33 unit tests for all scanner components
 - [2026-04-02] Modified: CLAUDE.md — Added scanner section (Phase A)
+- [2026-04-19] Deleted: src/scanner/ — Removed stale duplicate (subset of chain_scanner)
+- [2026-04-19] Modified: src/chain_scanner/ → src/scanner/ — Renamed chain_scanner to scanner (superset with strategy_mapper + strategy_pricer)
+- [2026-04-19] Modified: src/scanner/scanner.py — Removed sys.path hack, fixed _fetch_iv_history to use importlib
+- [2026-04-19] Modified: src/scanner/edge.py — Removed sys.path hack, direct import from models.black_scholes
+- [2026-04-19] Modified: src/scanner/contract_filter.py — Removed sys.path hack, direct import from models.black_scholes
+- [2026-04-19] Modified: src/scanner/strategy_pricer.py — Removed sys.path hack, fixed Python 3.9 type annotations
+- [2026-04-19] Modified: src/scanner/iv_rank.py — Fixed Python 3.9 type annotations (list[dict] | None → Optional[List[Dict]])
+- [2026-04-19] Modified: src/scanner/strategy_mapper.py — Fixed Python 3.9 type annotations, added List import
+- [2026-04-19] Modified: src/scanner/cli.py — Updated imports from chain_scanner to scanner
+- [2026-04-19] Modified: src/scanner/providers/yfinance_provider.py — Fixed Python 3.9 type annotations
+- [2026-04-19] Modified: src/pricer.py — Removed sys.path hack and _AVAILABLE guard, direct imports
+- [2026-04-19] Modified: src/analytics/vol_surface.py — Removed sys.path hack from compute_implied_vol
+- [2026-04-19] Modified: src/analytics/scenario.py — Removed sys.path hack
+- [2026-04-19] Modified: src/ai_narrative.py — Decoupled from app.config, reads API keys from env vars
+- [2026-04-19] Deleted: src/scanner.py — Removed TC-coupled scanner (conflicts with scanner/ package)
+- [2026-04-19] Modified: src/config.py — Removed TC-only PRICING dict (AI token costs)
+- [2026-04-19] Deleted: src/pricing__init__.py.bak — Removed leftover backup file
