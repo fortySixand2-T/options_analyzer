@@ -67,3 +67,10 @@
 - [2026-04-19] Created: src/backtest/local_backtest.py — Local offline backtester using historical OHLCV + BS pricer
 - [2026-04-19] Created: scripts/backtest.py — Backtest CLI with --compare, --local, regime breakdown
 - [2026-04-19] Created: tests/test_backtest.py — 16 tests for backtest analyzer, models, and cache
+- [2026-04-20] Created: src/scanner/providers/flashalpha_client.py — FlashAlpha GEX client (gamma walls, dealer regime)
+- [2026-04-20] Created: src/risk/__init__.py — Risk management module exports
+- [2026-04-20] Created: src/risk/sizer.py — Kelly criterion + fixed-fractional position sizing
+- [2026-04-20] Created: src/risk/rules.py — Pre-trade risk rules (position limits, correlation, event blackout)
+- [2026-04-20] Created: src/risk/mc_ev.py — MC-based expected value for multi-leg positions
+- [2026-04-20] Modified: requirements.txt — Pinned tastytrade<10, added requests>=2.28.0
+- [2026-04-20] Created: tests/test_risk.py — 32 tests for sizer, rules, MC EV, and FlashAlpha client
