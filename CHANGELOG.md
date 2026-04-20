@@ -40,3 +40,22 @@
 - [2026-04-19] Modified: src/scanner/providers/__init__.py — Added TT provider to factory, auto-detect via TT_USERNAME
 - [2026-04-19] Created: scripts/scan.py — CLI entry point for scanner with --strategies, --provider, --export flags
 - [2026-04-19] Modified: requirements.txt — Added tastytrade>=8.0 dependency
+- [2026-04-19] Created: src/regime/__init__.py — Regime module exports
+- [2026-04-19] Created: src/regime/detector.py — Market regime classifier (LOW_VOL_RANGING / HIGH_VOL_TRENDING / SPIKE_EVENT)
+- [2026-04-19] Created: src/regime/vix_analysis.py — VIX term structure (VIX/VIX9D/VIX3M/VIX6M) via yfinance
+- [2026-04-19] Created: src/regime/calendar.py — FOMC/CPI/OPEX dates for 2026 + event window detection
+- [2026-04-19] Created: src/strategies/__init__.py — Strategy module exports
+- [2026-04-19] Created: src/strategies/base.py — StrategyDefinition ABC, StrategyResult, SignalCheck dataclasses
+- [2026-04-19] Created: src/strategies/registry.py — Strategy catalog with for_regime() filter
+- [2026-04-19] Created: src/strategies/iron_condor.py — Iron Condor strategy definition
+- [2026-04-19] Created: src/strategies/credit_spread.py — Short Put Spread + Short Call Spread
+- [2026-04-19] Created: src/strategies/debit_spread.py — Long Call Spread + Long Put Spread
+- [2026-04-19] Created: src/strategies/long_straddle.py — Long Straddle for vol expansion
+- [2026-04-19] Created: src/strategies/butterfly.py — Butterfly Spread for pinning
+- [2026-04-19] Created: src/strategies/calendar_spread.py — Calendar Spread for term structure
+- [2026-04-19] Created: src/strategies/diagonal_spread.py — Diagonal Spread
+- [2026-04-19] Created: src/strategies/short_strangle.py — Short Strangle (undefined risk)
+- [2026-04-19] Created: src/strategies/naked_put_1dte.py — Naked Put 0-1 DTE
+- [2026-04-19] Created: src/strategy_scanner.py — Regime-aware strategy scanner orchestrator
+- [2026-04-19] Modified: scripts/scan.py — Added --strategies flag with regime detection + checklist output
+- [2026-04-19] Created: tests/test_regime.py — 25 tests for regime detection + strategy evaluation
