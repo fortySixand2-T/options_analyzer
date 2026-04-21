@@ -1,5 +1,5 @@
 # ── Base ───────────────────────────────────────────────────────────────────────
-FROM python:3.9-slim AS base
+FROM python:3.11-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -10,6 +10,7 @@ WORKDIR /app
 # System deps needed by numpy/scipy/matplotlib
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
+        g++ \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -23,7 +24,7 @@ FROM node:20-slim AS frontend
 
 WORKDIR /frontend
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm ci --no-audit --no-fund
 COPY frontend/ .
 RUN npm run build
 
@@ -38,7 +39,7 @@ COPY scripts/   ./scripts/
 COPY --from=frontend /frontend/dist ./frontend/dist
 
 # Output directories
-RUN mkdir -p analysis_results/mc_results exports data
+RUN mkdir -p analysis_results mc_results exports data
 
 EXPOSE 8000
 
@@ -55,6 +56,6 @@ COPY config/    ./config/
 COPY scripts/   ./scripts/
 COPY tests/     ./tests/
 
-RUN mkdir -p analysis_results/mc_demo mc_results exports data
+RUN mkdir -p analysis_results mc_results exports data
 
 CMD ["python", "-m", "pytest", "tests/", "-v"]
