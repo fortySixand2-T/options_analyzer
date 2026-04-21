@@ -108,7 +108,7 @@ class TestCalendar:
 
 class TestStrategyRegistry:
     def test_registry_count(self):
-        assert len(STRATEGY_REGISTRY) == 11
+        assert len(STRATEGY_REGISTRY) == 6
 
     def test_all_have_names(self):
         names = [s.name for s in STRATEGY_REGISTRY]
@@ -119,12 +119,10 @@ class TestStrategyRegistry:
         names = [s.name for s in strats]
         assert "iron_condor" in names
         assert "butterfly" in names
-        assert "naked_put_1dte" in names
 
     def test_for_regime_spike(self):
         strats = for_regime(MarketRegime.SPIKE_EVENT)
         names = [s.name for s in strats]
-        assert "long_straddle" in names
         assert "iron_condor" not in names
 
     def test_get_strategy(self):
@@ -186,20 +184,20 @@ class TestStrategyEvaluation:
         assert result is not None
         assert result.strategy_name == "short_put_spread"
 
-    def test_long_straddle_low_iv(self):
+    def test_long_call_spread_low_iv(self):
         vix = _make_vix(vix=13.0)
         regime = detect_regime(vix)
-        signal = _make_signal(iv_rank=20.0, delta=-0.10, dte=35,
+        signal = _make_signal(iv_rank=20.0, delta=-0.10, dte=10,
                               direction="BUY", conviction=55.0)
-        strategy = get_strategy("long_straddle")
+        strategy = get_strategy("long_call_spread")
         result = strategy.evaluate(signal, regime)
         assert result is not None
 
-    def test_naked_put_dte_filter(self):
+    def test_butterfly_dte_filter(self):
         vix = _make_vix(vix=14.0)
         regime = detect_regime(vix)
-        signal = _make_signal(dte=30)  # too many DTE for naked_put_1dte
-        strategy = get_strategy("naked_put_1dte")
+        signal = _make_signal(dte=60)  # too many DTE for butterfly
+        strategy = get_strategy("butterfly")
         result = strategy.evaluate(signal, regime)
         assert result is None
 

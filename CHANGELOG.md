@@ -95,3 +95,21 @@
 - [2026-04-20] Created: tests/test_streaming.py — 29 tests for streamer, score engine, order manager, API
 - [2026-04-20] Added: frontend/.gitignore — Frontend-specific gitignore (node_modules, dist, logs)
 - [2026-04-20] Added: frontend/public/ — Favicon and icons from Vite scaffold
+- [2026-04-19] Modified: CLAUDE.md — Replaced with new plan: 5 defined-risk strategies, 0-14 DTE, 3-layer signal architecture
+- [2026-04-19] Created: SIGNALS.md — Signal architecture & decision matrix (vol regime, directional bias, dealer positioning)
+- [2026-04-19] Deleted: src/opportunity_builder.py — Removed TC-coupled dead code
+- [2026-04-19] Deleted: src/strategy_selector.py — Removed wrong-timeframe strategy selector (7-120 DTE)
+- [2026-04-19] Deleted: src/formatter.py — Removed old scenario_runner formatter
+- [2026-04-19] Deleted: src/ai_narrative.py — Removed non-core AI narrative (re-add later)
+- [2026-04-19] Deleted: src/utils/ — Removed old TC utility modules (config.py, data_export.py)
+- [2026-04-19] Deleted: EXTENSIONS.md, USECASES.md — Removed old documentation
+- [2026-04-19] Deleted: activate_env.sh, build.sh — Docker replaces shell scripts
+- [2026-04-19] Deleted: frontend/src/assets/hero.png, react.svg, vite.svg — Removed scaffold placeholders
+- [2026-04-19] Moved: 5 strategies to src/strategies/_deferred/ — calendar, diagonal, strangle, straddle, naked_put for future swing-trade tab
+- [2026-04-19] Moved: 7 runner files to examples/ — options_analyzer, mc_runner, scenario_runner, vol_surface_runner, etc.
+- [2026-04-19] Created: src/strategies/_deferred/__init__.py — Deferred strategies stub
+- [2026-04-19] Modified: src/strategies/registry.py — Reduced to 6 defined-risk strategies (removed deferred imports)
+- [2026-04-19] Modified: docker-compose.yml — Removed obsolete bs/mc/scenario services (files moved to examples/)
+- [2026-04-19] Modified: tests/test_regime.py — Updated tests for 6-strategy registry (removed deferred strategy tests)
+- [2026-04-19] Modified: Dockerfile — Upgraded to Python 3.11, added g++, npm ci
+- [2026-04-19] Modified: requirements.txt — Added pydantic>=2.5.0, uvicorn[standard], python-dotenv

@@ -11,26 +11,18 @@ from .base import StrategyDefinition
 from .iron_condor import IronCondor
 from .credit_spread import ShortPutSpread, ShortCallSpread
 from .debit_spread import LongCallSpread, LongPutSpread
-from .long_straddle import LongStraddle
 from .butterfly import Butterfly
-from .calendar_spread import CalendarSpread
-from .diagonal_spread import DiagonalSpread
-from .short_strangle import ShortStrangle
-from .naked_put_1dte import NakedPut1DTE
 
-# All registered strategies
+# Five defined-risk strategies for 0-14 DTE
+# Deferred strategies (calendar, diagonal, strangle, straddle, naked put)
+# are in _deferred/ for a future swing-trade tab.
 STRATEGY_REGISTRY: List[StrategyDefinition] = [
     IronCondor(),
     ShortPutSpread(),
     ShortCallSpread(),
     LongCallSpread(),
     LongPutSpread(),
-    LongStraddle(),
     Butterfly(),
-    CalendarSpread(),
-    DiagonalSpread(),
-    ShortStrangle(),
-    NakedPut1DTE(),
 ]
 
 
