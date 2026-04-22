@@ -95,6 +95,10 @@
 - [2026-04-20] Created: tests/test_streaming.py — 29 tests for streamer, score engine, order manager, API
 - [2026-04-20] Added: frontend/.gitignore — Frontend-specific gitignore (node_modules, dist, logs)
 - [2026-04-20] Added: frontend/public/ — Favicon and icons from Vite scaffold
+- [2026-04-22] Modified: src/scanner/strategy_mapper.py — Rewritten: 3-input decision matrix (regime, bias, dealer_regime)
+- [2026-04-22] Modified: src/strategy_scanner.py — Added bias detection + dealer data to pipeline
+- [2026-04-22] Modified: src/strategies/base.py — Updated conviction weight comments
+- [2026-04-22] Created: tests/test_decision_matrix.py — 16 tests for decision matrix
 - [2026-04-22] Modified: src/scanner/providers/flashalpha_client.py — F1-F7 signals, DealerData, max_pain, P/C ratio, chain fallback
 - [2026-04-22] Modified: tests/test_risk.py — Updated for DealerData, LONG/SHORT_GAMMA, chain fallback tests
 - [2026-04-22] Modified: src/bias_detector.py — Rewritten: EMA 9/21, RSI(14), MACD histogram, candle, 2-day momentum, ATR pctl

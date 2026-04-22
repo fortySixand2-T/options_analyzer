@@ -1,246 +1,167 @@
 """
-Strategy template mapper for chain scanner signals.
+Strategy decision matrix — 3-input lookup from SIGNALS.md.
 
-Maps (iv_regime, direction, option_type, delta) → StrategyRecommendation.
-Does NOT price legs — just recommends the structure, strikes, and DTE.
-Pricing happens downstream if the user clicks through.
+Maps (regime, bias, dealer_regime) → StrategyRecommendation.
+
+Inputs:
+    regime       — HIGH_IV, MODERATE_IV, LOW_IV, SPIKE
+    bias         — STRONG_BULLISH, LEAN_BULLISH, NEUTRAL, LEAN_BEARISH, STRONG_BEARISH
+    dealer_regime — LONG_GAMMA, SHORT_GAMMA, or None
 
 Options Analytics Team — 2026-04
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
-
-from . import OptionSignal
+from typing import Optional
 
 
 @dataclass
 class StrategyRecommendation:
-    """Recommended trade structure for a scanned signal."""
-    strategy: str           # e.g. "short_put_spread", "long_straddle"
-    strategy_label: str     # Human-readable: "Short Put Spread"
-    rationale: str          # Why this structure fits the signal
-    legs: list        # [{"action": "buy"|"sell", "option_type": ..., "strike_method": ...}]
-    suggested_dte: int      # Recommended DTE for this structure
-    risk_profile: str       # "defined" or "undefined"
-    max_risk_method: str    # How to compute max risk: "spread_width", "premium_paid", "unlimited"
-    edge_source: str        # "iv_overpriced", "iv_underpriced", "directional"
+    """Recommended trade structure from the decision matrix."""
+    strategy: str           # e.g. "iron_condor", "short_put_spread"
+    strategy_label: str
+    rationale: str
+    suggested_dte: tuple    # (min_dte, max_dte)
+    risk_profile: str = "defined"
+    edge_source: str = ""
 
 
-def map_signal(signal: OptionSignal) -> Optional[StrategyRecommendation]:
-    """Map a chain scanner signal to a strategy recommendation.
+# ── Decision matrix from SIGNALS.md ──────────────────────────────────────────
 
-    Returns None if no high-conviction mapping exists (e.g. NORMAL regime
-    + SELL direction has no edge).
+_MATRIX = {
+    # (regime, bias, dealer_regime) → (strategy, label, dte_range, edge_source)
+    # HIGH_IV regime — sell premium
+    ("HIGH_IV", "NEUTRAL", "LONG_GAMMA"):
+        ("iron_condor", "Iron Condor", (7, 14), "iv_overpriced"),
+    ("HIGH_IV", "LEAN_BULLISH", None):
+        ("short_put_spread", "Short Put Spread", (5, 10), "iv_overpriced"),
+    ("HIGH_IV", "LEAN_BEARISH", None):
+        ("short_call_spread", "Short Call Spread", (5, 10), "iv_overpriced"),
+    ("HIGH_IV", "STRONG_BULLISH", None):
+        ("short_put_spread", "Short Put Spread (tight)", (3, 7), "iv_overpriced"),
+    ("HIGH_IV", "STRONG_BEARISH", None):
+        ("short_call_spread", "Short Call Spread (tight)", (3, 7), "iv_overpriced"),
+
+    # MODERATE_IV regime — either side
+    ("MODERATE_IV", "NEUTRAL", "LONG_GAMMA"):
+        ("butterfly", "Butterfly (max pain)", (3, 7), "pinning"),
+    ("MODERATE_IV", "LEAN_BULLISH", None):
+        ("long_call_spread", "Long Call Spread", (5, 14), "directional"),
+    ("MODERATE_IV", "LEAN_BEARISH", None):
+        ("long_put_spread", "Long Put Spread", (5, 14), "directional"),
+
+    # LOW_IV regime — buy premium
+    ("LOW_IV", "NEUTRAL", None):
+        ("butterfly", "Butterfly (max pain)", (3, 7), "pinning"),
+    ("LOW_IV", "LEAN_BULLISH", None):
+        ("long_call_spread", "Long Call Spread", (5, 10), "iv_underpriced"),
+    ("LOW_IV", "LEAN_BEARISH", None):
+        ("long_put_spread", "Long Put Spread", (5, 10), "iv_underpriced"),
+    ("LOW_IV", "STRONG_BULLISH", None):
+        ("long_call_spread", "Long Call Spread (tight)", (3, 5), "iv_underpriced"),
+    ("LOW_IV", "STRONG_BEARISH", None):
+        ("long_put_spread", "Long Put Spread (tight)", (3, 5), "iv_underpriced"),
+
+    # SPIKE — small debit only
+    ("SPIKE", None, None):
+        ("long_call_spread", "Small Debit Spread", (3, 5), "spike_debit"),
+}
+
+
+def map_strategy(
+    regime: str,
+    bias: str,
+    dealer_regime: Optional[str] = None,
+) -> Optional[StrategyRecommendation]:
+    """Look up strategy from the 3-input decision matrix.
+
+    Parameters
+    ----------
+    regime : str
+        One of HIGH_IV, MODERATE_IV, LOW_IV, SPIKE.
+    bias : str
+        One of STRONG_BULLISH, LEAN_BULLISH, NEUTRAL, LEAN_BEARISH, STRONG_BEARISH.
+    dealer_regime : str, optional
+        LONG_GAMMA or SHORT_GAMMA (None if unavailable).
+
+    Returns
+    -------
+    StrategyRecommendation or None if no match.
+    """
+    # Override rules from SIGNALS.md
+    if dealer_regime == "SHORT_GAMMA" and regime == "HIGH_IV" and bias == "NEUTRAL":
+        # SHORT_GAMMA → never sell iron condor. Switch to directional or stand aside.
+        return None
+
+    # SPIKE: small debit or stand aside regardless of bias
+    if regime == "SPIKE":
+        entry = _MATRIX.get(("SPIKE", None, None))
+        if entry:
+            strategy, label, dte, edge = entry
+            return StrategyRecommendation(
+                strategy=strategy,
+                strategy_label=label,
+                rationale=f"SPIKE regime — small debit only or stand aside",
+                suggested_dte=dte,
+                edge_source=edge,
+            )
+        return None
+
+    # Try exact match with dealer regime
+    key = (regime, bias, dealer_regime)
+    entry = _MATRIX.get(key)
+
+    # Fall back to None dealer (matches any)
+    if entry is None:
+        key = (regime, bias, None)
+        entry = _MATRIX.get(key)
+
+    # Collapse STRONG → LEAN for lookup
+    if entry is None and "STRONG" in bias:
+        lean_bias = bias.replace("STRONG", "LEAN")
+        key = (regime, lean_bias, dealer_regime)
+        entry = _MATRIX.get(key)
+        if entry is None:
+            key = (regime, lean_bias, None)
+            entry = _MATRIX.get(key)
+
+    if entry is None:
+        return None
+
+    strategy, label, dte, edge = entry
+    return StrategyRecommendation(
+        strategy=strategy,
+        strategy_label=label,
+        rationale=_build_rationale(regime, bias, dealer_regime, label),
+        suggested_dte=dte,
+        edge_source=edge,
+    )
+
+
+def _build_rationale(regime: str, bias: str, dealer: Optional[str], label: str) -> str:
+    parts = [f"Regime: {regime}", f"Bias: {bias}"]
+    if dealer:
+        parts.append(f"Dealer: {dealer}")
+    parts.append(f"→ {label}")
+    return " | ".join(parts)
+
+
+# Backward compat: old map_signal interface
+def map_signal(signal) -> Optional[StrategyRecommendation]:
+    """Legacy mapper — maps from OptionSignal using iv_regime as regime.
+
+    For full 3-input lookup, use map_strategy() directly.
     """
     if signal.conviction < 30:
         return None
 
     regime = signal.iv_regime
-    direction = signal.direction
-    opt_type = signal.option_type
-    delta = signal.delta
+    # Infer bias from direction
+    if signal.direction == "SELL":
+        bias = "NEUTRAL"
+    elif signal.option_type == "call":
+        bias = "LEAN_BULLISH"
+    else:
+        bias = "LEAN_BEARISH"
 
-    if regime == "HIGH":
-        return _map_high(signal, direction, opt_type, delta)
-    if regime == "ELEVATED":
-        return _map_elevated(signal, direction, opt_type, delta)
-    if regime == "NORMAL":
-        return _map_normal(signal, direction, opt_type, delta)
-    if regime == "LOW":
-        return _map_low(signal, direction, opt_type, delta)
-
-    return None
-
-
-def _map_high(signal, direction, opt_type, delta):
-    if direction == "BUY":
-        return None  # don't buy expensive vol
-
-    # SELL in HIGH regime
-    if abs(delta) < 0.20:
-        return StrategyRecommendation(
-            strategy="iron_condor",
-            strategy_label="Iron Condor",
-            rationale=f"IV rank {signal.iv_rank:.0f}% — vol is elevated across the chain. "
-                      f"Near-neutral delta ({delta:+.2f}) suggests range-bound. "
-                      f"Sell premium on both sides with defined risk.",
-            legs=[
-                {"action": "sell", "option_type": "call", "strike_method": "otm_1"},
-                {"action": "buy", "option_type": "call", "strike_method": "otm_2"},
-                {"action": "sell", "option_type": "put", "strike_method": "otm_1"},
-                {"action": "buy", "option_type": "put", "strike_method": "otm_2"},
-            ],
-            suggested_dte=35,
-            risk_profile="defined",
-            max_risk_method="spread_width",
-            edge_source="iv_overpriced",
-        )
-
-    if opt_type == "put":
-        return StrategyRecommendation(
-            strategy="short_put_spread",
-            strategy_label="Short Put Spread",
-            rationale=f"IV rank {signal.iv_rank:.0f}% — premium is rich. "
-                      f"Sell the flagged put, buy protection one strike below.",
-            legs=[
-                {"action": "sell", "option_type": "put", "strike_method": "signal_strike"},
-                {"action": "buy", "option_type": "put", "strike_method": "signal_strike - width"},
-            ],
-            suggested_dte=35,
-            risk_profile="defined",
-            max_risk_method="spread_width",
-            edge_source="iv_overpriced",
-        )
-
-    # call
-    return StrategyRecommendation(
-        strategy="short_call_spread",
-        strategy_label="Short Call Spread",
-        rationale=f"IV rank {signal.iv_rank:.0f}% — premium is rich. "
-                  f"Sell the flagged call, buy protection one strike above.",
-        legs=[
-            {"action": "sell", "option_type": "call", "strike_method": "signal_strike"},
-            {"action": "buy", "option_type": "call", "strike_method": "signal_strike + width"},
-        ],
-        suggested_dte=35,
-        risk_profile="defined",
-        max_risk_method="spread_width",
-        edge_source="iv_overpriced",
-    )
-
-
-def _map_elevated(signal, direction, opt_type, delta):
-    if direction == "BUY":
-        return StrategyRecommendation(
-            strategy="calendar_spread",
-            strategy_label="Calendar Spread",
-            rationale=f"IV rank {signal.iv_rank:.0f}% — front-month vol is elevated relative to back. "
-                      f"Buy the back-month {opt_type}, sell the front-month to capture term structure.",
-            legs=[
-                {"action": "sell", "option_type": opt_type, "strike_method": "atm"},
-                {"action": "buy", "option_type": opt_type, "strike_method": "atm"},
-            ],
-            suggested_dte=45,
-            risk_profile="defined",
-            max_risk_method="premium_paid",
-            edge_source="iv_overpriced",
-        )
-
-    # SELL in ELEVATED regime — narrower spreads than HIGH
-    if opt_type == "put":
-        return StrategyRecommendation(
-            strategy="short_put_spread",
-            strategy_label="Short Put Spread",
-            rationale=f"IV rank {signal.iv_rank:.0f}% — moderately elevated premium. "
-                      f"Sell the flagged put with a tighter spread for defined risk.",
-            legs=[
-                {"action": "sell", "option_type": "put", "strike_method": "signal_strike"},
-                {"action": "buy", "option_type": "put", "strike_method": "signal_strike - width"},
-            ],
-            suggested_dte=35,
-            risk_profile="defined",
-            max_risk_method="spread_width",
-            edge_source="iv_overpriced",
-        )
-
-    return StrategyRecommendation(
-        strategy="short_call_spread",
-        strategy_label="Short Call Spread",
-        rationale=f"IV rank {signal.iv_rank:.0f}% — moderately elevated premium. "
-                  f"Sell the flagged call with a tighter spread for defined risk.",
-        legs=[
-            {"action": "sell", "option_type": "call", "strike_method": "signal_strike"},
-            {"action": "buy", "option_type": "call", "strike_method": "signal_strike + width"},
-        ],
-        suggested_dte=35,
-        risk_profile="defined",
-        max_risk_method="spread_width",
-        edge_source="iv_overpriced",
-    )
-
-
-def _map_normal(signal, direction, opt_type, delta):
-    if direction == "SELL":
-        return None  # not enough premium to sell
-
-    # BUY in NORMAL regime — directional play
-    if opt_type == "call":
-        return StrategyRecommendation(
-            strategy="long_call",
-            strategy_label="Long Call",
-            rationale=f"IV is fairly priced (rank {signal.iv_rank:.0f}%). "
-                      f"Edge is {signal.edge_pct:+.1f}% — ride the directional move with a long call.",
-            legs=[
-                {"action": "buy", "option_type": "call", "strike_method": "signal_strike"},
-            ],
-            suggested_dte=signal.dte,
-            risk_profile="defined",
-            max_risk_method="premium_paid",
-            edge_source="directional",
-        )
-
-    return StrategyRecommendation(
-        strategy="long_put",
-        strategy_label="Long Put",
-        rationale=f"IV is fairly priced (rank {signal.iv_rank:.0f}%). "
-                  f"Edge is {signal.edge_pct:+.1f}% — ride the directional move with a long put.",
-        legs=[
-            {"action": "buy", "option_type": "put", "strike_method": "signal_strike"},
-        ],
-        suggested_dte=signal.dte,
-        risk_profile="defined",
-        max_risk_method="premium_paid",
-        edge_source="directional",
-    )
-
-
-def _map_low(signal, direction, opt_type, delta):
-    if direction == "SELL":
-        return None  # selling cheap vol has no edge
-
-    # BUY in LOW regime
-    if abs(delta) < 0.25:
-        return StrategyRecommendation(
-            strategy="long_straddle",
-            strategy_label="Long Straddle",
-            rationale=f"IV rank {signal.iv_rank:.0f}% — vol is cheap. "
-                      f"Near-neutral delta ({delta:+.2f}) suggests buy both sides for vol expansion.",
-            legs=[
-                {"action": "buy", "option_type": "call", "strike_method": "atm"},
-                {"action": "buy", "option_type": "put", "strike_method": "atm"},
-            ],
-            suggested_dte=50,
-            risk_profile="defined",
-            max_risk_method="premium_paid",
-            edge_source="iv_underpriced",
-        )
-
-    if opt_type == "call":
-        return StrategyRecommendation(
-            strategy="long_call",
-            strategy_label="Long Call",
-            rationale=f"IV rank {signal.iv_rank:.0f}% — options are cheap. "
-                      f"Directional long call with capped risk.",
-            legs=[
-                {"action": "buy", "option_type": "call", "strike_method": "signal_strike"},
-            ],
-            suggested_dte=signal.dte,
-            risk_profile="defined",
-            max_risk_method="premium_paid",
-            edge_source="iv_underpriced",
-        )
-
-    return StrategyRecommendation(
-        strategy="long_put",
-        strategy_label="Long Put",
-        rationale=f"IV rank {signal.iv_rank:.0f}% — options are cheap. "
-                  f"Directional long put with capped risk.",
-        legs=[
-            {"action": "buy", "option_type": "put", "strike_method": "signal_strike"},
-        ],
-        suggested_dte=signal.dte,
-        risk_profile="defined",
-        max_risk_method="premium_paid",
-        edge_source="iv_underpriced",
-    )
+    return map_strategy(regime, bias)

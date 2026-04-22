@@ -129,7 +129,11 @@ class StrategyDefinition(ABC):
         weight_total = sum(c.weight for c in checklist)
         checklist_score = (weighted_sum / weight_total * 100) if weight_total > 0 else 0
 
-        # Blend with conviction from scanner
+        # Conviction weights from SIGNALS.md:
+        # vol_regime=20%, directional=20%, dealer=20%, garch_edge=15%,
+        # iv_rank=10%, liquidity=10%, greeks=5%
+        # Simplified: checklist covers vol/directional/dealer alignment (60%),
+        # scanner conviction covers garch_edge + iv_rank + liquidity + greeks (40%)
         score = 0.6 * checklist_score + 0.4 * signal.conviction
 
         if score < 30:
