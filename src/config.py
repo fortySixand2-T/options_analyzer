@@ -1,7 +1,7 @@
 """
 Options scanner configuration.
-All settings are read from environment variables with sensible defaults
-so they integrate cleanly with Trading Copilot's existing .env pattern.
+All settings are read from environment variables with sensible defaults.
+Calibrated for 0-14 DTE index options.
 """
 import os
 
@@ -17,18 +17,18 @@ MC_SEED      = int(os.getenv("OPTIONS_MC_SEED",  "42"))
 OPTION_STOP_PCT  = float(os.getenv("OPTIONS_STOP_PCT",       "0.50"))
 BIAS_THRESHOLD   = int(os.getenv("OPTIONS_BIAS_THRESHOLD",   "3"))
 
-# DTE windows per outlook
+# DTE windows for 0-14 DTE index options
 OUTLOOKS: dict = {
-    "short":  {"min_dte": 7,   "max_dte": 21},
-    "medium": {"min_dte": 30,  "max_dte": 60},
-    "long":   {"min_dte": 61,  "max_dte": 120},
+    "short":  {"min_dte": 0,  "max_dte": 5},
+    "medium": {"min_dte": 5,  "max_dte": 10},
+    "long":   {"min_dte": 10, "max_dte": 14},
 }
 
 # ── Chain scanner defaults ─────────────────────────────────────────────
 CHAIN_SCANNER_CONFIG = {
     "filter": {
-        "min_dte": int(os.getenv("SCANNER_MIN_DTE", "20")),
-        "max_dte": int(os.getenv("SCANNER_MAX_DTE", "60")),
+        "min_dte": int(os.getenv("SCANNER_MIN_DTE", "0")),
+        "max_dte": int(os.getenv("SCANNER_MAX_DTE", "14")),
         "min_delta": 0.15,
         "max_delta": 0.50,
         "min_open_interest": 100,
@@ -40,9 +40,12 @@ CHAIN_SCANNER_CONFIG = {
         "min_returns": 30,
     },
     "scoring_weights": {
-        "edge": 0.40,
-        "iv_rank": 0.25,
-        "liquidity": 0.20,
-        "greeks": 0.15,
+        "vol_regime": 0.20,
+        "directional": 0.20,
+        "dealer_regime": 0.20,
+        "garch_edge": 0.15,
+        "iv_rank": 0.10,
+        "liquidity": 0.10,
+        "greeks": 0.05,
     },
 }

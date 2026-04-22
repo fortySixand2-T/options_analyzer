@@ -1,7 +1,7 @@
 """
 Macro event calendar — FOMC, CPI, and options expiration dates.
 
-Used by the regime detector to flag SPIKE_EVENT when a major
+Used by the regime detector to flag SPIKE when a major
 macro event is within N trading days.
 
 Options Analytics Team — 2026-04

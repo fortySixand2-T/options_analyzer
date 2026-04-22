@@ -24,7 +24,7 @@ from backtest.cache import _cache_key, get_cached, store_cached
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
-def _make_trade(pnl=50.0, win=True, regime="LOW_VOL_RANGING", days=15):
+def _make_trade(pnl=50.0, win=True, regime="HIGH_IV", days=15):
     return BacktestTrade(
         entry_date=date(2024, 1, 1),
         exit_date=date(2024, 1, 1 + days) if days < 28 else date(2024, 2, 1),
@@ -108,15 +108,15 @@ class TestAnalyzer:
 
     def test_regime_breakdown(self):
         trades = [
-            _make_trade(pnl=50, win=True, regime="LOW_VOL_RANGING"),
-            _make_trade(pnl=-30, win=False, regime="LOW_VOL_RANGING"),
-            _make_trade(pnl=80, win=True, regime="HIGH_VOL_TRENDING"),
+            _make_trade(pnl=50, win=True, regime="HIGH_IV"),
+            _make_trade(pnl=-30, win=False, regime="HIGH_IV"),
+            _make_trade(pnl=80, win=True, regime="MODERATE_IV"),
         ]
         breakdown = compute_regime_breakdown(trades)
-        assert "LOW_VOL_RANGING" in breakdown
-        assert "HIGH_VOL_TRENDING" in breakdown
-        assert breakdown["LOW_VOL_RANGING"]["count"] == 2
-        assert breakdown["HIGH_VOL_TRENDING"]["count"] == 1
+        assert "HIGH_IV" in breakdown
+        assert "MODERATE_IV" in breakdown
+        assert breakdown["HIGH_IV"]["count"] == 2
+        assert breakdown["MODERATE_IV"]["count"] == 1
 
 
 # ── Models ────────────────────────────────────────────────────────────────────

@@ -1,4 +1,7 @@
-"""Debit spread strategies — long call spread and long put spread."""
+"""Debit spread strategies — long call spread and long put spread.
+
+Decision matrix: MODERATE_IV/LOW_IV + directional bias, DTE 3-14.
+"""
 
 from typing import Dict, List, Tuple
 
@@ -25,19 +28,19 @@ class LongCallSpread(StrategyDefinition):
 
     @property
     def ideal_regimes(self) -> List[MarketRegime]:
-        return [MarketRegime.LOW_VOL_RANGING, MarketRegime.HIGH_VOL_TRENDING]
+        return [MarketRegime.MODERATE_IV, MarketRegime.LOW_IV]
 
     @property
     def dte_range(self) -> Tuple[int, int]:
-        return (7, 45)
+        return (3, 14)
 
     @property
     def iv_range(self) -> Tuple[float, float]:
-        return (0.0, 60.0)
+        return (0.0, 50.0)
 
     def build_checklist(self, signal, regime_result) -> List[SignalCheck]:
         return [
-            SignalCheck("IV rank < 60%", signal.iv_rank < 60,
+            SignalCheck("IV rank < 50%", signal.iv_rank < 50,
                         f"{signal.iv_rank:.0f}%", weight=2.0),
             SignalCheck("Call option", signal.option_type == "call",
                         signal.option_type, weight=2.0),
@@ -68,19 +71,19 @@ class LongPutSpread(StrategyDefinition):
 
     @property
     def ideal_regimes(self) -> List[MarketRegime]:
-        return [MarketRegime.LOW_VOL_RANGING, MarketRegime.HIGH_VOL_TRENDING]
+        return [MarketRegime.MODERATE_IV, MarketRegime.LOW_IV]
 
     @property
     def dte_range(self) -> Tuple[int, int]:
-        return (7, 45)
+        return (3, 14)
 
     @property
     def iv_range(self) -> Tuple[float, float]:
-        return (0.0, 60.0)
+        return (0.0, 50.0)
 
     def build_checklist(self, signal, regime_result) -> List[SignalCheck]:
         return [
-            SignalCheck("IV rank < 60%", signal.iv_rank < 60,
+            SignalCheck("IV rank < 50%", signal.iv_rank < 50,
                         f"{signal.iv_rank:.0f}%", weight=2.0),
             SignalCheck("Put option", signal.option_type == "put",
                         signal.option_type, weight=2.0),

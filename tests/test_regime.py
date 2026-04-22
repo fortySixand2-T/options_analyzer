@@ -36,7 +36,7 @@ def _make_signal(**overrides):
         ticker="SPY", strike=450.0, expiry="2026-06-15", option_type="put",
         dte=30, spot=455.0, bid=3.0, ask=3.40, mid=3.20,
         open_interest=5000, bid_ask_spread_pct=12.5,
-        chain_iv=0.22, iv_rank=65.0, iv_percentile=70.0, iv_regime="ELEVATED",
+        chain_iv=0.22, iv_rank=65.0, iv_percentile=70.0, iv_regime="HIGH_IV",
         garch_vol=0.20, theo_price=2.80, edge_pct=-12.5, direction="SELL",
         delta=-0.25, gamma=0.005, theta=-0.08, vega=0.15, conviction=72.0,
     )
@@ -47,20 +47,30 @@ def _make_signal(**overrides):
 # ── Regime detection ──────────────────────────────────────────────────────────
 
 class TestRegimeDetection:
-    def test_low_vol_ranging(self):
+    def test_low_iv(self):
         vix = _make_vix(vix=14.0, vix3m=15.5, contango=True)
         result = detect_regime(vix)
-        assert result.regime == MarketRegime.LOW_VOL_RANGING
+        assert result.regime == MarketRegime.LOW_IV
 
-    def test_high_vol_trending(self):
-        vix = _make_vix(vix=24.0, vix3m=22.0, contango=False)
+    def test_moderate_iv(self):
+        vix = _make_vix(vix=17.0, vix3m=18.0, contango=True)
         result = detect_regime(vix)
-        assert result.regime == MarketRegime.HIGH_VOL_TRENDING
+        assert result.regime == MarketRegime.MODERATE_IV
 
-    def test_spike_event_high_vix(self):
+    def test_high_iv(self):
+        vix = _make_vix(vix=22.0, vix3m=23.0, contango=True)
+        result = detect_regime(vix)
+        assert result.regime == MarketRegime.HIGH_IV
+
+    def test_spike_high_vix(self):
         vix = _make_vix(vix=35.0, vix3m=28.0, contango=False)
         result = detect_regime(vix)
-        assert result.regime == MarketRegime.SPIKE_EVENT
+        assert result.regime == MarketRegime.SPIKE
+
+    def test_spike_backwardation(self):
+        vix = _make_vix(vix=22.0, vix3m=20.0, contango=False)
+        result = detect_regime(vix)
+        assert result.regime == MarketRegime.SPIKE
 
     def test_rationale_present(self):
         vix = _make_vix(vix=14.0)
@@ -114,14 +124,22 @@ class TestStrategyRegistry:
         names = [s.name for s in STRATEGY_REGISTRY]
         assert len(names) == len(set(names))  # unique
 
-    def test_for_regime_low_vol(self):
-        strats = for_regime(MarketRegime.LOW_VOL_RANGING)
+    def test_for_regime_high_iv(self):
+        strats = for_regime(MarketRegime.HIGH_IV)
         names = [s.name for s in strats]
         assert "iron_condor" in names
+        assert "short_put_spread" in names
+        assert "short_call_spread" in names
+
+    def test_for_regime_low_iv(self):
+        strats = for_regime(MarketRegime.LOW_IV)
+        names = [s.name for s in strats]
         assert "butterfly" in names
+        assert "long_call_spread" in names
+        assert "iron_condor" not in names
 
     def test_for_regime_spike(self):
-        strats = for_regime(MarketRegime.SPIKE_EVENT)
+        strats = for_regime(MarketRegime.SPIKE)
         names = [s.name for s in strats]
         assert "iron_condor" not in names
 
@@ -137,10 +155,10 @@ class TestStrategyRegistry:
 # ── Strategy evaluation ──────────────────────────────────────────────────────
 
 class TestStrategyEvaluation:
-    def test_iron_condor_low_vol(self):
-        vix = _make_vix(vix=14.0, contango=True)
+    def test_iron_condor_high_iv(self):
+        vix = _make_vix(vix=22.0, contango=True)
         regime = detect_regime(vix)
-        signal = _make_signal(iv_rank=70.0, delta=-0.18, dte=30,
+        signal = _make_signal(iv_rank=70.0, delta=-0.18, dte=10,
                               direction="SELL", conviction=65.0)
         strategy = get_strategy("iron_condor")
         result = strategy.evaluate(signal, regime)
@@ -152,33 +170,33 @@ class TestStrategyEvaluation:
     def test_iron_condor_wrong_regime(self):
         vix = _make_vix(vix=35.0, contango=False)
         regime = detect_regime(vix)
-        signal = _make_signal(iv_rank=70.0)
+        signal = _make_signal(iv_rank=70.0, dte=10)
         strategy = get_strategy("iron_condor")
         result = strategy.evaluate(signal, regime)
-        assert result is None  # SPIKE_EVENT not in ideal regimes
+        assert result is None  # SPIKE not in ideal regimes
 
     def test_iron_condor_iv_too_low(self):
-        vix = _make_vix(vix=14.0)
+        vix = _make_vix(vix=22.0, contango=True)
         regime = detect_regime(vix)
-        signal = _make_signal(iv_rank=20.0)  # below 50% threshold
+        signal = _make_signal(iv_rank=20.0, dte=10)  # below 50% threshold
         strategy = get_strategy("iron_condor")
         result = strategy.evaluate(signal, regime)
         assert result is None
 
     def test_checklist_items(self):
-        vix = _make_vix(vix=14.0, contango=True)
+        vix = _make_vix(vix=22.0, contango=True)
         regime = detect_regime(vix)
-        signal = _make_signal(iv_rank=70.0, delta=-0.18, dte=30)
+        signal = _make_signal(iv_rank=70.0, delta=-0.18, dte=10)
         strategy = get_strategy("iron_condor")
         checklist = strategy.build_checklist(signal, regime)
         assert len(checklist) > 0
         assert all(isinstance(c, SignalCheck) for c in checklist)
 
     def test_short_put_spread_evaluation(self):
-        vix = _make_vix(vix=14.0)
+        vix = _make_vix(vix=22.0, contango=True)
         regime = detect_regime(vix)
         signal = _make_signal(iv_rank=55.0, option_type="put",
-                              direction="SELL", dte=25, conviction=60.0)
+                              direction="SELL", dte=7, conviction=60.0)
         strategy = get_strategy("short_put_spread")
         result = strategy.evaluate(signal, regime)
         assert result is not None
@@ -187,8 +205,9 @@ class TestStrategyEvaluation:
     def test_long_call_spread_low_iv(self):
         vix = _make_vix(vix=13.0)
         regime = detect_regime(vix)
-        signal = _make_signal(iv_rank=20.0, delta=-0.10, dte=10,
-                              direction="BUY", conviction=55.0)
+        signal = _make_signal(iv_rank=20.0, delta=-0.35, dte=10,
+                              option_type="call", direction="BUY",
+                              conviction=55.0, edge_pct=8.0)
         strategy = get_strategy("long_call_spread")
         result = strategy.evaluate(signal, regime)
         assert result is not None
@@ -196,7 +215,7 @@ class TestStrategyEvaluation:
     def test_butterfly_dte_filter(self):
         vix = _make_vix(vix=14.0)
         regime = detect_regime(vix)
-        signal = _make_signal(dte=60)  # too many DTE for butterfly
+        signal = _make_signal(dte=60, iv_rank=20.0)  # too many DTE for butterfly
         strategy = get_strategy("butterfly")
         result = strategy.evaluate(signal, regime)
         assert result is None

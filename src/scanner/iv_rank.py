@@ -17,12 +17,11 @@ from .providers.base import HistoryData
 
 logger = logging.getLogger(__name__)
 
-# Regime thresholds (applied to iv_rank)
+# Regime thresholds (applied to iv_rank) — aligned with SIGNALS.md
 _REGIME_THRESHOLDS = [
-    (80, 'HIGH'),
-    (60, 'ELEVATED'),
-    (25, 'NORMAL'),
-    (0,  'LOW'),
+    (50, 'HIGH_IV'),
+    (30, 'MODERATE_IV'),
+    (0,  'LOW_IV'),
 ]
 
 
@@ -96,7 +95,7 @@ def compute_iv_metrics(
         return {
             'iv_rank': 50.0,
             'iv_percentile': 50.0,
-            'iv_regime': 'NORMAL',
+            'iv_regime': 'MODERATE_IV',
             'rv_high': float('nan'),
             'rv_low': float('nan'),
             'rv_mean': float('nan'),

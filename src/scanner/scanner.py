@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SCANNER_CONFIG = {
     'filter': {
-        'min_dte': 20,
-        'max_dte': 60,
+        'min_dte': 0,
+        'max_dte': 14,
         'min_delta': 0.15,
         'max_delta': 0.50,
         'min_open_interest': 100,
@@ -73,9 +73,9 @@ class OptionsScanner:
                                   DEFAULT_SCANNER_CONFIG['scoring_weights'])
 
         # 1. Fetch chain + history
-        min_dte = fc.get('min_dte', 20)
-        max_dte = fc.get('max_dte', 60)
-        snapshot = self.provider.get_chain(ticker, min_dte=7, max_dte=max_dte + 10)
+        min_dte = fc.get('min_dte', 0)
+        max_dte = fc.get('max_dte', 14)
+        snapshot = self.provider.get_chain(ticker, min_dte=0, max_dte=max_dte + 5)
         history = self.provider.get_history(ticker, days=gc.get('history_days', 120))
         rfr = self.provider.get_risk_free_rate()
         spot = snapshot.spot

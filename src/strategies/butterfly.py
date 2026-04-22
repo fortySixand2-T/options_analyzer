@@ -1,4 +1,8 @@
-"""Butterfly spread — buy/sell/buy at three strikes for pinning plays."""
+"""Butterfly spread — buy/sell/buy at three strikes for pinning plays.
+
+Decision matrix: MODERATE_IV/LOW_IV + NEUTRAL + LONG_GAMMA, DTE 3-7.
+Center at max pain when available.
+"""
 
 from typing import Dict, List, Tuple
 
@@ -25,28 +29,29 @@ class Butterfly(StrategyDefinition):
 
     @property
     def ideal_regimes(self) -> List[MarketRegime]:
-        return [MarketRegime.LOW_VOL_RANGING]
+        return [MarketRegime.MODERATE_IV, MarketRegime.LOW_IV]
 
     @property
     def dte_range(self) -> Tuple[int, int]:
-        return (7, 30)
+        return (3, 7)
 
     @property
     def iv_range(self) -> Tuple[float, float]:
-        return (30.0, 80.0)
+        return (0.0, 80.0)
 
     def build_checklist(self, signal, regime_result) -> List[SignalCheck]:
         vix = regime_result.vix
         return [
-            SignalCheck("Low vol regime", regime_result.regime == MarketRegime.LOW_VOL_RANGING,
+            SignalCheck("Low/moderate vol regime",
+                        regime_result.regime in (MarketRegime.LOW_IV, MarketRegime.MODERATE_IV),
                         regime_result.regime.value, weight=2.0),
             SignalCheck("VIX contango", vix.contango,
                         f"slope {vix.term_structure_slope:+.1f}%", weight=1.5),
-            SignalCheck("IV rank 30-80%", 30 <= signal.iv_rank <= 80,
+            SignalCheck("IV rank < 80%", signal.iv_rank < 80,
                         f"{signal.iv_rank:.0f}%", weight=1.5),
             SignalCheck("|Delta| < 0.30", abs(signal.delta) < 0.30,
                         f"{signal.delta:+.3f}", weight=1.0),
-            SignalCheck("DTE 7-21", 7 <= signal.dte <= 21,
+            SignalCheck("DTE 3-7", 3 <= signal.dte <= 7,
                         f"{signal.dte}d", weight=1.0),
         ]
 

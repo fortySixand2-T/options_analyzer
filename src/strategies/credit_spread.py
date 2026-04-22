@@ -1,4 +1,7 @@
-"""Credit spread strategies — short put spread and short call spread."""
+"""Credit spread strategies — short put spread and short call spread.
+
+Decision matrix: HIGH_IV + directional bias, DTE 3-10.
+"""
 
 from typing import Dict, List, Tuple
 
@@ -25,25 +28,25 @@ class ShortPutSpread(StrategyDefinition):
 
     @property
     def ideal_regimes(self) -> List[MarketRegime]:
-        return [MarketRegime.LOW_VOL_RANGING, MarketRegime.HIGH_VOL_TRENDING]
+        return [MarketRegime.HIGH_IV]
 
     @property
     def dte_range(self) -> Tuple[int, int]:
-        return (14, 60)
+        return (3, 10)
 
     @property
     def iv_range(self) -> Tuple[float, float]:
-        return (40.0, 100.0)
+        return (30.0, 100.0)
 
     def build_checklist(self, signal, regime_result) -> List[SignalCheck]:
         return [
-            SignalCheck("IV rank > 40%", signal.iv_rank > 40,
+            SignalCheck("IV rank > 30%", signal.iv_rank > 30,
                         f"{signal.iv_rank:.0f}%", weight=2.0),
             SignalCheck("Put option", signal.option_type == "put",
                         signal.option_type, weight=2.0),
             SignalCheck("Direction SELL", signal.direction == "SELL",
                         signal.direction, weight=1.5),
-            SignalCheck("DTE 14-45", 14 <= signal.dte <= 45,
+            SignalCheck("DTE 3-10", 3 <= signal.dte <= 10,
                         f"{signal.dte}d", weight=1.0),
             SignalCheck("OI > 200", signal.open_interest > 200,
                         f"{signal.open_interest}", weight=1.0),
@@ -68,25 +71,25 @@ class ShortCallSpread(StrategyDefinition):
 
     @property
     def ideal_regimes(self) -> List[MarketRegime]:
-        return [MarketRegime.LOW_VOL_RANGING, MarketRegime.HIGH_VOL_TRENDING]
+        return [MarketRegime.HIGH_IV]
 
     @property
     def dte_range(self) -> Tuple[int, int]:
-        return (14, 60)
+        return (3, 10)
 
     @property
     def iv_range(self) -> Tuple[float, float]:
-        return (40.0, 100.0)
+        return (30.0, 100.0)
 
     def build_checklist(self, signal, regime_result) -> List[SignalCheck]:
         return [
-            SignalCheck("IV rank > 40%", signal.iv_rank > 40,
+            SignalCheck("IV rank > 30%", signal.iv_rank > 30,
                         f"{signal.iv_rank:.0f}%", weight=2.0),
             SignalCheck("Call option", signal.option_type == "call",
                         signal.option_type, weight=2.0),
             SignalCheck("Direction SELL", signal.direction == "SELL",
                         signal.direction, weight=1.5),
-            SignalCheck("DTE 14-45", 14 <= signal.dte <= 45,
+            SignalCheck("DTE 3-10", 3 <= signal.dte <= 10,
                         f"{signal.dte}d", weight=1.0),
             SignalCheck("OI > 200", signal.open_interest > 200,
                         f"{signal.open_interest}", weight=1.0),

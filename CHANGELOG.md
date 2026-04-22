@@ -95,6 +95,21 @@
 - [2026-04-20] Created: tests/test_streaming.py — 29 tests for streamer, score engine, order manager, API
 - [2026-04-20] Added: frontend/.gitignore — Frontend-specific gitignore (node_modules, dist, logs)
 - [2026-04-20] Added: frontend/public/ — Favicon and icons from Vite scaffold
+- [2026-04-22] Modified: src/regime/detector.py — New 4-regime system (HIGH_IV/MODERATE_IV/LOW_IV/SPIKE), IV rank input
+- [2026-04-22] Modified: src/config.py — DTE 0-14 outlooks, conviction weights 20/20/20/15/10/10/5
+- [2026-04-22] Modified: src/scanner/iv_rank.py — Thresholds: HIGH_IV(>50), MODERATE_IV(30-50), LOW_IV(<30)
+- [2026-04-22] Modified: src/scanner/contract_filter.py — Default DTE 0-14
+- [2026-04-22] Modified: src/strategies/iron_condor.py — DTE 7-14, IV 50-100, HIGH_IV only
+- [2026-04-22] Modified: src/strategies/credit_spread.py — DTE 3-10, IV 30-100, HIGH_IV only
+- [2026-04-22] Modified: src/strategies/debit_spread.py — DTE 3-14, IV 0-50, MODERATE_IV/LOW_IV
+- [2026-04-22] Modified: src/strategies/butterfly.py — DTE 3-7, IV 0-80, MODERATE_IV/LOW_IV
+- [2026-04-22] Modified: src/backtest/local_backtest.py — Updated regime strings to new 4-regime system
+- [2026-04-22] Modified: src/scanner/__init__.py — Updated iv_regime comment
+- [2026-04-22] Modified: src/regime/calendar.py — Updated comment
+- [2026-04-22] Modified: tests/test_regime.py — Updated for new regimes, DTE ranges, strategy mappings
+- [2026-04-22] Modified: tests/test_backtest.py — Updated regime strings
+- [2026-04-22] Modified: src/scanner/scanner.py — Default DTE 0-14
+- [2026-04-22] Modified: tests/test_scanner.py — Updated regime labels, DTE defaults
 - [2026-04-19] Modified: CLAUDE.md — Replaced with new plan: 5 defined-risk strategies, 0-14 DTE, 3-layer signal architecture
 - [2026-04-19] Created: SIGNALS.md — Signal architecture & decision matrix (vol regime, directional bias, dealer positioning)
 - [2026-04-19] Deleted: src/opportunity_builder.py — Removed TC-coupled dead code

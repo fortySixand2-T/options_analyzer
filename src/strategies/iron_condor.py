@@ -1,4 +1,7 @@
-"""Iron Condor strategy — sell OTM call spread + OTM put spread."""
+"""Iron Condor strategy — sell OTM call spread + OTM put spread.
+
+Decision matrix: HIGH_IV + NEUTRAL + LONG_GAMMA, DTE 7-14.
+"""
 
 from typing import Dict, List, Optional, Tuple
 
@@ -25,11 +28,11 @@ class IronCondor(StrategyDefinition):
 
     @property
     def ideal_regimes(self) -> List[MarketRegime]:
-        return [MarketRegime.LOW_VOL_RANGING, MarketRegime.HIGH_VOL_TRENDING]
+        return [MarketRegime.HIGH_IV]
 
     @property
     def dte_range(self) -> Tuple[int, int]:
-        return (21, 60)
+        return (7, 14)
 
     @property
     def iv_range(self) -> Tuple[float, float]:
@@ -42,7 +45,7 @@ class IronCondor(StrategyDefinition):
                         f"{signal.iv_rank:.0f}%", weight=2.0),
             SignalCheck("VIX contango", vix.contango,
                         f"slope {vix.term_structure_slope:+.1f}%", weight=1.5),
-            SignalCheck("DTE 21-45", 21 <= signal.dte <= 45,
+            SignalCheck("DTE 7-14", 7 <= signal.dte <= 14,
                         f"{signal.dte}d", weight=1.0),
             SignalCheck("|Delta| < 0.30", abs(signal.delta) < 0.30,
                         f"{signal.delta:+.3f}", weight=1.5),

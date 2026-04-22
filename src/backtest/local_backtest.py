@@ -179,11 +179,13 @@ def _simulate_trades(closes, dates, rolling_vol, request, params) -> List[Backte
                 # Classify regime at entry based on IV
                 entry_iv = rolling_vol[entry_idx] if entry_idx < len(rolling_vol) else 0.20
                 if entry_iv > 0.30:
-                    regime = "HIGH_VOL_TRENDING"
-                elif entry_iv < 0.15:
-                    regime = "LOW_VOL_RANGING"
+                    regime = "SPIKE"
+                elif entry_iv > 0.20:
+                    regime = "HIGH_IV"
+                elif entry_iv > 0.15:
+                    regime = "MODERATE_IV"
                 else:
-                    regime = "LOW_VOL_RANGING"
+                    regime = "LOW_IV"
 
                 trade = BacktestTrade(
                     entry_date=dates[entry_idx],

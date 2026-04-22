@@ -39,7 +39,7 @@ from scanner.scanner import OptionsScanner
 
 def _make_contract(**overrides) -> OptionContract:
     """Build an OptionContract with sensible defaults."""
-    exp = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
+    exp = (datetime.now() + timedelta(days=10)).strftime('%Y-%m-%d')
     defaults = dict(
         ticker='AAPL', strike=175.0, expiry=exp, option_type='call',
         bid=5.0, ask=5.50, mid=5.25, last=5.20,
@@ -66,7 +66,7 @@ def _make_history(n_days=252, ticker='AAPL', base_price=175.0,
 
 def _make_snapshot(spot=175.0, n_contracts=5) -> ChainSnapshot:
     """Build a ChainSnapshot with a range of strikes."""
-    exp = (datetime.now() + timedelta(days=35)).strftime('%Y-%m-%d')
+    exp = (datetime.now() + timedelta(days=10)).strftime('%Y-%m-%d')
     contracts = []
     for i in range(n_contracts):
         strike = spot - 10 + i * 5
@@ -192,12 +192,12 @@ class TestIVRank:
     def test_regime_low(self):
         h = _make_history()
         result = compute_iv_metrics(0.01, h)
-        assert result['iv_regime'] == 'LOW'
+        assert result['iv_regime'] == 'LOW_IV'
 
     def test_regime_high(self):
         h = _make_history()
         result = compute_iv_metrics(5.0, h)
-        assert result['iv_regime'] == 'HIGH'
+        assert result['iv_regime'] == 'HIGH_IV'
 
     def test_insufficient_history(self):
         """With <30 days of data, should return defaults."""
@@ -208,7 +208,7 @@ class TestIVRank:
         result = compute_iv_metrics(0.30, h)
         assert result['iv_rank'] == 50.0
         assert result['iv_percentile'] == 50.0
-        assert result['iv_regime'] == 'NORMAL'
+        assert result['iv_regime'] == 'MODERATE_IV'
 
 
 # ======================================================================
@@ -317,7 +317,7 @@ class TestScorer:
             ticker='A', strike=100, expiry='2026-05-01', option_type='call',
             dte=30, spot=100, bid=5, ask=5.5, mid=5.25, open_interest=1000,
             bid_ask_spread_pct=9.5, chain_iv=0.25, iv_rank=50, iv_percentile=50,
-            iv_regime='NORMAL', garch_vol=0.25, theo_price=5.3, edge_pct=1.0,
+            iv_regime='MODERATE_IV', garch_vol=0.25, theo_price=5.3, edge_pct=1.0,
             direction='BUY', delta=0.5, gamma=0.02, theta=-0.05, vega=0.3,
             conviction=40.0,
         )
@@ -325,7 +325,7 @@ class TestScorer:
             ticker='B', strike=100, expiry='2026-05-01', option_type='call',
             dte=30, spot=100, bid=5, ask=5.5, mid=5.25, open_interest=1000,
             bid_ask_spread_pct=9.5, chain_iv=0.25, iv_rank=50, iv_percentile=50,
-            iv_regime='NORMAL', garch_vol=0.25, theo_price=5.3, edge_pct=5.0,
+            iv_regime='MODERATE_IV', garch_vol=0.25, theo_price=5.3, edge_pct=5.0,
             direction='BUY', delta=0.5, gamma=0.02, theta=-0.05, vega=0.3,
             conviction=80.0,
         )
@@ -381,7 +381,7 @@ class TestScanner:
             assert s.ticker == 'AAPL'
             assert s.spot == 175.0
             assert s.dte > 0
-            assert s.iv_regime in ('LOW', 'NORMAL', 'ELEVATED', 'HIGH')
+            assert s.iv_regime in ('LOW_IV', 'MODERATE_IV', 'HIGH_IV')
             assert s.direction in ('BUY', 'SELL')
             assert 0 <= s.conviction <= 100
 

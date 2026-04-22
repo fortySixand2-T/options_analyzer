@@ -33,7 +33,7 @@ class OptionSignal:
     chain_iv: float                # IV from the chain
     iv_rank: float                 # 0–100
     iv_percentile: float           # 0–100
-    iv_regime: str                 # LOW / NORMAL / ELEVATED / HIGH
+    iv_regime: str                 # LOW_IV / MODERATE_IV / HIGH_IV
 
     # Edge
     garch_vol: float               # GARCH-calibrated forward vol
