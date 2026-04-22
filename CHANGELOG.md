@@ -95,6 +95,10 @@
 - [2026-04-20] Created: tests/test_streaming.py — 29 tests for streamer, score engine, order manager, API
 - [2026-04-20] Added: frontend/.gitignore — Frontend-specific gitignore (node_modules, dist, logs)
 - [2026-04-20] Added: frontend/public/ — Favicon and icons from Vite scaffold
+- [2026-04-22] Modified: src/ui/app.py — Added dealer + bias data to /api/regime and /api/scan responses
+- [2026-04-22] Modified: frontend/src/components/RegimeDashboard.jsx — Added GEX display, dealer regime badge, max pain, P/C ratio
+- [2026-04-22] Modified: frontend/src/components/Scanner.jsx — Added bias + dealer context to strategy results
+- [2026-04-22] Modified: frontend/src/components/Dashboard.css — Added dealer/bias badge styles
 - [2026-04-22] Modified: src/scanner/strategy_mapper.py — Rewritten: 3-input decision matrix (regime, bias, dealer_regime)
 - [2026-04-22] Modified: src/strategy_scanner.py — Added bias detection + dealer data to pipeline
 - [2026-04-22] Modified: src/strategies/base.py — Updated conviction weight comments

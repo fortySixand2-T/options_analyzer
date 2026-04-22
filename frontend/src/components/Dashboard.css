@@ -122,6 +122,24 @@
 .strategy-meta { display: flex; gap: 16px; font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
 .rationale { font-size: 13px; }
 
+/* Section headers */
+.section-header {
+  color: var(--text-muted); font-size: 12px; text-transform: uppercase;
+  letter-spacing: 1px; margin: 16px 0 8px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Dealer & Bias badges */
+.dealer-badge, .bias-badge {
+  display: inline-block; padding: 4px 12px; border-radius: 12px;
+  font-size: 12px; font-weight: 600; border: 1px solid;
+}
+.signal-context {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 12px; padding: 10px 16px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+}
+
 /* Charts */
 .chart-container { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
 .chart-container h3 { color: var(--text-secondary); font-size: 14px; margin-bottom: 12px; }

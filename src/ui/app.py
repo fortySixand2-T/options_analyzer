@@ -68,13 +68,15 @@ class JournalEntry(BaseModel):
 # ── Regime ─────���─────────────────────────────────────────────────────────────
 
 @app.get("/api/regime")
-def get_regime():
-    """Current market regime classification + VIX data."""
+def get_regime(symbol: str = Query("SPY", description="Symbol for dealer data")):
+    """Current market regime classification + VIX + dealer positioning."""
     try:
         from regime.detector import detect_regime
+        from scanner.providers.flashalpha_client import fetch_gex, classify_dealer_regime
         result = detect_regime()
         vix = result.vix
-        return {
+
+        response = {
             "regime": result.regime.value,
             "rationale": result.rationale,
             "event_active": result.event_active,
@@ -91,6 +93,27 @@ def get_regime():
                 "vix_percentile_1y": vix.vix_percentile_1y,
             },
         }
+
+        # Add dealer data if available
+        dealer = fetch_gex(symbol.upper())
+        if dealer:
+            classification = classify_dealer_regime(dealer)
+            response["dealer"] = {
+                "regime": dealer.dealer_regime,
+                "net_gex": dealer.net_gex,
+                "gamma_flip": dealer.gamma_flip,
+                "call_wall": dealer.call_wall,
+                "put_wall": dealer.put_wall,
+                "max_pain": dealer.max_pain,
+                "put_call_ratio": dealer.put_call_ratio,
+                "implication": classification.get("implication"),
+                "bias": classification.get("bias"),
+                "pc_signal": classification.get("pc_signal"),
+            }
+        else:
+            response["dealer"] = None
+
+        return response
     except Exception as e:
         logger.exception("Failed to detect regime")
         raise HTTPException(status_code=500, detail=str(e))
@@ -124,14 +147,32 @@ def scan(
                 top=top,
             )
             regime = result["regime"]
-            return {
+            bias = result.get("bias")
+            dealer = result.get("dealer")
+            response = {
                 "regime": {
                     "regime": regime.regime.value,
                     "rationale": regime.rationale,
                 },
+                "bias": {
+                    "label": bias.label,
+                    "score": bias.score,
+                    "atr_percentile": bias.atr_percentile,
+                } if bias else None,
+                "dealer": {
+                    "regime": dealer.dealer_regime,
+                    "net_gex": dealer.net_gex,
+                    "gamma_flip": dealer.gamma_flip,
+                    "call_wall": dealer.call_wall,
+                    "put_wall": dealer.put_wall,
+                    "max_pain": dealer.max_pain,
+                    "put_call_ratio": dealer.put_call_ratio,
+                    "source": dealer.source,
+                } if dealer else None,
                 "strategies": [_serialize_strategy(s) for s in result["strategies"]],
                 "signals_count": result["signals_count"],
             }
+            return response
         else:
             from scanner import scan_watchlist
             signals = scan_watchlist(tickers, config=scanner_config)

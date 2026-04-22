@@ -15,6 +15,17 @@ function VixGauge({ value, label }) {
   );
 }
 
+function DealerRegimeBadge({ dealer }) {
+  if (!dealer) return <span className="muted">N/A</span>;
+  const isLong = dealer.regime === 'LONG_GAMMA';
+  const color = isLong ? 'var(--green)' : 'var(--red)';
+  return (
+    <span className="dealer-badge" style={{ borderColor: color, color }}>
+      {dealer.regime?.replace(/_/g, ' ')}
+    </span>
+  );
+}
+
 export default function RegimeDashboard() {
   const { data, loading, error, refetch } = useApi('/api/regime');
 
@@ -23,10 +34,12 @@ export default function RegimeDashboard() {
   if (!data) return null;
 
   const v = data.vix || {};
+  const d = data.dealer;
   const regimeColor = {
-    LOW_VOL_RANGING: 'var(--green)',
-    HIGH_VOL_TRENDING: 'var(--amber)',
-    SPIKE_EVENT: 'var(--red)',
+    HIGH_IV: 'var(--amber)',
+    MODERATE_IV: 'var(--text)',
+    LOW_IV: 'var(--green)',
+    SPIKE: 'var(--red)',
   }[data.regime] || 'var(--text-muted)';
 
   return (
@@ -83,6 +96,51 @@ export default function RegimeDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Dealer Positioning (GEX) */}
+      <div className="section-header">Dealer Positioning</div>
+      {d ? (
+        <div className="metrics-grid">
+          <div className="metric-card">
+            <div className="metric-label">Dealer Regime</div>
+            <div className="metric-value"><DealerRegimeBadge dealer={d} /></div>
+            <div className="metric-sub">{d.implication?.slice(0, 60)}...</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">Net GEX</div>
+            <div className="metric-value mono">{d.net_gex?.toLocaleString() ?? '—'}</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">Gamma Flip</div>
+            <div className="metric-value mono">{d.gamma_flip?.toFixed(1) ?? '—'}</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">Walls</div>
+            <div className="metric-value mono">
+              <span className="red">C: {d.call_wall?.toFixed(0) ?? '—'}</span>
+              {' / '}
+              <span className="green">P: {d.put_wall?.toFixed(0) ?? '—'}</span>
+            </div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">Max Pain</div>
+            <div className="metric-value mono">{d.max_pain?.toFixed(1) ?? '—'}</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">P/C Ratio</div>
+            <div className="metric-value mono">
+              {d.put_call_ratio?.toFixed(2) ?? '—'}
+              {d.pc_signal && (
+                <span className={d.pc_signal === 'contrarian_bullish' ? 'green' : d.pc_signal === 'contrarian_bearish' ? 'red' : 'muted'}>
+                  {' '}({d.pc_signal?.replace(/_/g, ' ')})
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="panel muted">Dealer data unavailable (set FLASHALPHA_API_KEY)</div>
+      )}
     </div>
   );
 }

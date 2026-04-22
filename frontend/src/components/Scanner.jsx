@@ -83,6 +83,26 @@ export default function Scanner() {
               Regime: <strong>{data.regime.regime}</strong> — {data.regime.rationale}
             </div>
           )}
+          {(data.bias || data.dealer) && (
+            <div className="signal-context">
+              {data.bias && (
+                <span className={`bias-badge ${data.bias.label?.includes('BULLISH') ? 'green' : data.bias.label?.includes('BEARISH') ? 'red' : 'muted'}`}>
+                  Bias: {data.bias.label?.replace(/_/g, ' ')} ({data.bias.score > 0 ? '+' : ''}{data.bias.score})
+                </span>
+              )}
+              {data.dealer && (
+                <span className={`dealer-badge ${data.dealer.regime === 'LONG_GAMMA' ? 'green' : 'red'}`}>
+                  Dealer: {data.dealer.regime?.replace(/_/g, ' ')}
+                </span>
+              )}
+              {data.dealer?.max_pain && (
+                <span className="mono muted">Max Pain: {data.dealer.max_pain?.toFixed(0)}</span>
+              )}
+              {data.dealer?.put_call_ratio && (
+                <span className="mono muted">P/C: {data.dealer.put_call_ratio?.toFixed(2)}</span>
+              )}
+            </div>
+          )}
           <div className="strategies-list">
             {data.strategies.map((s, i) => (
               <StrategyCard key={i} strategy={s} />
