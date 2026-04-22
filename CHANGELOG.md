@@ -95,6 +95,8 @@
 - [2026-04-20] Created: tests/test_streaming.py — 29 tests for streamer, score engine, order manager, API
 - [2026-04-20] Added: frontend/.gitignore — Frontend-specific gitignore (node_modules, dist, logs)
 - [2026-04-20] Added: frontend/public/ — Favicon and icons from Vite scaffold
+- [2026-04-22] Modified: src/scanner/providers/flashalpha_client.py — F1-F7 signals, DealerData, max_pain, P/C ratio, chain fallback
+- [2026-04-22] Modified: tests/test_risk.py — Updated for DealerData, LONG/SHORT_GAMMA, chain fallback tests
 - [2026-04-22] Modified: src/bias_detector.py — Rewritten: EMA 9/21, RSI(14), MACD histogram, candle, 2-day momentum, ATR pctl
 - [2026-04-22] Created: tests/test_bias_detector.py — 14 tests for new bias detector
 - [2026-04-22] Modified: src/regime/detector.py — New 4-regime system (HIGH_IV/MODERATE_IV/LOW_IV/SPIKE), IV rank input

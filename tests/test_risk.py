@@ -278,6 +278,8 @@ class TestFlashAlphaClient:
                 "spot": 590.0,
                 "gamma_flip": 585.0,
                 "net_gex": 1500.0,
+                "max_pain": 588.0,
+                "put_call_ratio": 1.2,
                 "timestamp": "2026-04-20T10:00:00Z",
                 "levels": [
                     {"strike": 600, "gex": 500, "call_gex": 500, "put_gex": 0},
@@ -290,33 +292,77 @@ class TestFlashAlphaClient:
         assert snapshot.symbol == "SPY"
         assert snapshot.spot == 590.0
         assert snapshot.gamma_flip == 585.0
-        assert snapshot.dealer_regime == "POSITIVE_GAMMA"  # spot > gamma_flip
-        assert snapshot.top_call_wall == 600.0
-        assert snapshot.top_put_wall == 580.0
+        assert snapshot.dealer_regime == "LONG_GAMMA"  # net_gex > 0, spot > gamma_flip
+        assert snapshot.call_wall == 600.0
+        assert snapshot.put_wall == 580.0
+        assert snapshot.max_pain == 588.0
+        assert snapshot.put_call_ratio == 1.2
         assert len(snapshot.levels) == 3
 
-    def test_classify_positive_gamma(self):
-        from scanner.providers.flashalpha_client import classify_dealer_regime, GexSnapshot, GexLevel
-        gex = GexSnapshot(
+    def test_classify_long_gamma(self):
+        from scanner.providers.flashalpha_client import classify_dealer_regime, DealerData
+        dealer = DealerData(
             symbol="SPY", spot=590, gamma_flip=585,
-            dealer_regime="POSITIVE_GAMMA", net_gex=1000,
-            top_call_wall=600, top_put_wall=580, levels=[], timestamp="",
+            dealer_regime="LONG_GAMMA", net_gex=1000,
+            call_wall=600, put_wall=580, max_pain=588,
+            put_call_ratio=1.2,
         )
-        result = classify_dealer_regime(gex)
-        assert result["regime"] == "POSITIVE_GAMMA"
+        result = classify_dealer_regime(dealer)
+        assert result["regime"] == "LONG_GAMMA"
         assert result["bias"] == "neutral"
         assert "mean-reversion" in result["implication"]
+        assert result["max_pain"] == 588
+        assert result["put_call_ratio"] == 1.2
 
-    def test_classify_negative_gamma(self):
-        from scanner.providers.flashalpha_client import classify_dealer_regime, GexSnapshot
-        gex = GexSnapshot(
+    def test_classify_short_gamma(self):
+        from scanner.providers.flashalpha_client import classify_dealer_regime, DealerData
+        dealer = DealerData(
             symbol="SPY", spot=580, gamma_flip=585,
-            dealer_regime="NEGATIVE_GAMMA", net_gex=-500,
-            top_call_wall=600, top_put_wall=570, levels=[], timestamp="",
+            dealer_regime="SHORT_GAMMA", net_gex=-500,
+            call_wall=600, put_wall=570, max_pain=585,
+            put_call_ratio=0.8,
         )
-        result = classify_dealer_regime(gex)
-        assert result["regime"] == "NEGATIVE_GAMMA"
+        result = classify_dealer_regime(dealer)
+        assert result["regime"] == "SHORT_GAMMA"
         assert result["bias"] == "bearish"  # spot < gamma_flip
+
+    def test_compute_from_chain(self):
+        from scanner.providers.flashalpha_client import compute_dealer_data_from_chain
+        from scanner.providers.base import OptionContract
+        contracts = [
+            OptionContract(ticker="SPY", strike=585, expiry="2026-05-01",
+                           option_type="call", bid=5, ask=6, mid=5.5, last=5.5,
+                           volume=1000, open_interest=5000, implied_volatility=0.2),
+            OptionContract(ticker="SPY", strike=590, expiry="2026-05-01",
+                           option_type="call", bid=3, ask=4, mid=3.5, last=3.5,
+                           volume=500, open_interest=8000, implied_volatility=0.2),
+            OptionContract(ticker="SPY", strike=580, expiry="2026-05-01",
+                           option_type="put", bid=4, ask=5, mid=4.5, last=4.5,
+                           volume=800, open_interest=6000, implied_volatility=0.22),
+            OptionContract(ticker="SPY", strike=575, expiry="2026-05-01",
+                           option_type="put", bid=2, ask=3, mid=2.5, last=2.5,
+                           volume=300, open_interest=3000, implied_volatility=0.25),
+        ]
+        result = compute_dealer_data_from_chain("SPY", 587.0, contracts)
+        assert result.symbol == "SPY"
+        assert result.source == "chain"
+        assert result.max_pain is not None
+        assert result.put_call_ratio is not None
+        assert result.call_wall is not None
+        assert result.put_wall is not None
+        assert result.dealer_regime in ("LONG_GAMMA", "SHORT_GAMMA")
+
+    def test_put_call_ratio_signal(self):
+        from scanner.providers.flashalpha_client import classify_dealer_regime, DealerData
+        # High P/C ratio → contrarian bullish
+        dealer = DealerData(
+            symbol="SPY", spot=580, gamma_flip=585,
+            dealer_regime="SHORT_GAMMA", net_gex=-500,
+            call_wall=600, put_wall=570, max_pain=585,
+            put_call_ratio=1.8,
+        )
+        result = classify_dealer_regime(dealer)
+        assert result["pc_signal"] == "contrarian_bullish"
 
     def test_no_api_key_returns_none(self):
         from scanner.providers.flashalpha_client import fetch_gex
