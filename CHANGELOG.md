@@ -95,6 +95,8 @@
 - [2026-04-20] Created: tests/test_streaming.py — 29 tests for streamer, score engine, order manager, API
 - [2026-04-20] Added: frontend/.gitignore — Frontend-specific gitignore (node_modules, dist, logs)
 - [2026-04-20] Added: frontend/public/ — Favicon and icons from Vite scaffold
+- [2026-04-22] Modified: src/bias_detector.py — Rewritten: EMA 9/21, RSI(14), MACD histogram, candle, 2-day momentum, ATR pctl
+- [2026-04-22] Created: tests/test_bias_detector.py — 14 tests for new bias detector
 - [2026-04-22] Modified: src/regime/detector.py — New 4-regime system (HIGH_IV/MODERATE_IV/LOW_IV/SPIKE), IV rank input
 - [2026-04-22] Modified: src/config.py — DTE 0-14 outlooks, conviction weights 20/20/20/15/10/10/5
 - [2026-04-22] Modified: src/scanner/iv_rank.py — Thresholds: HIGH_IV(>50), MODERATE_IV(30-50), LOW_IV(<30)
