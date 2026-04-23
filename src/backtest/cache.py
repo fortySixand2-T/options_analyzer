@@ -45,6 +45,11 @@ def _cache_key(request: BacktestRequest) -> str:
         "exit_profit": request.exit_profit_pct,
         "exit_loss": request.exit_loss_pct,
         "exit_dte": request.exit_dte,
+        "exit_rule": request.exit_rule,
+        "regime_filter": request.regime_filter,
+        "bias_filter": request.bias_filter,
+        "dealer_filter": request.dealer_filter,
+        "edge_threshold": request.edge_threshold,
     }
     raw = json.dumps(key_data, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()[:32]

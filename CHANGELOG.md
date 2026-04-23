@@ -149,3 +149,6 @@
 - [2026-04-22] Modified: src/scanner/providers/yfinance_provider.py — Default DTE range to 0-14
 - [2026-04-22] Modified: src/regime/vix_analysis.py — Added VIX9D/VIX ratio to VixSnapshot
 - [2026-04-22] Modified: src/scanner/strategy_pricer.py — Use GEX walls and max pain for strike placement
+- [2026-04-22] Modified: src/backtest/local_backtest.py — Implement regime filter, exit rule toggle, varied DTE entry
+- [2026-04-22] Modified: src/backtest/cache.py — Include filter flags and exit_rule in cache key
+- [2026-04-22] Modified: scripts/backtest.py → scripts/run_backtest.py — Updated CLI with filter flags, --validate mode for SIGNALS.md backtests
