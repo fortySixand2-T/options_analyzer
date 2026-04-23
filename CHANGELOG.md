@@ -140,3 +140,9 @@
 - [2026-04-19] Modified: tests/test_regime.py — Updated tests for 6-strategy registry (removed deferred strategy tests)
 - [2026-04-19] Modified: Dockerfile — Upgraded to Python 3.11, added g++, npm ci
 - [2026-04-19] Modified: requirements.txt — Added pydantic>=2.5.0, uvicorn[standard], python-dotenv
+- [2026-04-22] Modified: src/backtest/models.py — Added signal filter fields, exit_rule, dte_breakdown, pnl_distribution to backtest models
+- [2026-04-22] Modified: src/backtest/analyzer.py — Added compute_dte_breakdown, compute_pnl_distribution analysis functions
+- [2026-04-22] Modified: src/backtest/local_backtest.py — Produces regime/DTE/P&L distribution breakdowns
+- [2026-04-22] Modified: src/ui/app.py — Added filter params to backtest endpoint, new /api/backtest/compare endpoint, full trade serialization
+- [2026-04-22] Modified: frontend/src/components/Backtest.jsx — Complete overhaul: compare mode, signal filter toggles, P&L histogram, DTE breakdown, trade table
+- [2026-04-22] Modified: Dockerfile — Changed npm ci to npm install for lock file compatibility

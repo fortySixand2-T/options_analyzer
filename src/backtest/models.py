@@ -17,13 +17,19 @@ class BacktestRequest(BaseModel):
     start_date: date
     end_date: date
     entry_delta: float = 0.20               # target |delta| for short strikes
-    entry_dte_min: int = 21
-    entry_dte_max: int = 45
+    entry_dte_min: int = 3
+    entry_dte_max: int = 14
     exit_profit_pct: float = 50.0           # close at 50% max profit
     exit_loss_pct: float = 200.0            # close at 200% max profit (2x loss)
     exit_dte: int = 1                       # close at 1 DTE remaining
+    exit_rule: str = "50pct"                # "50pct" or "hold"
     quantity: int = 1
     min_score: float = 0.0                  # minimum strategy score to enter
+    # Signal layer filters
+    regime_filter: bool = False             # only enter when regime matches strategy
+    bias_filter: bool = False               # only enter when directional bias aligns
+    dealer_filter: bool = False             # only enter when dealer regime matches
+    edge_threshold: float = 0.0             # min GARCH edge % to enter
 
 
 class BacktestTrade(BaseModel):
@@ -67,5 +73,7 @@ class BacktestResult(BaseModel):
     trades: List[BacktestTrade] = Field(default_factory=list)
     equity_curve: List[float] = Field(default_factory=list)
     regime_breakdown: Dict[str, Dict] = Field(default_factory=dict)
+    dte_breakdown: Dict[str, Dict] = Field(default_factory=dict)
+    pnl_distribution: List[Dict] = Field(default_factory=list)
     cached: bool = False
     source: str = "local"                   # "local" or "tastytrade"

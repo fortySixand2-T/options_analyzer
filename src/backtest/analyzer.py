@@ -107,6 +107,66 @@ def compute_regime_breakdown(trades: List[BacktestTrade]) -> Dict[str, Dict]:
     return result
 
 
+def compute_dte_breakdown(trades: List[BacktestTrade]) -> Dict[str, Dict]:
+    """Break down trade stats by DTE bucket at entry.
+
+    Buckets: 0-3, 3-5, 5-7, 7-10, 10-14.
+    """
+    buckets = [
+        ("0-3", 0, 3),
+        ("3-5", 3, 5),
+        ("5-7", 5, 7),
+        ("7-10", 7, 10),
+        ("10-14", 10, 14),
+    ]
+
+    result = {}
+    for label, lo, hi in buckets:
+        bucket_trades = [t for t in trades if lo <= t.dte_at_entry < hi]
+        if not bucket_trades:
+            continue
+        pnls = [t.pnl for t in bucket_trades]
+        wins = sum(1 for t in bucket_trades if t.win)
+        result[label] = {
+            "count": len(bucket_trades),
+            "win_rate": round(wins / len(bucket_trades) * 100, 1),
+            "avg_pnl": round(float(np.mean(pnls)), 2),
+            "total_pnl": round(sum(pnls), 2),
+        }
+    return result
+
+
+def compute_pnl_distribution(trades: List[BacktestTrade], n_bins: int = 20) -> List[Dict]:
+    """Compute P&L histogram buckets for distribution chart.
+
+    Returns list of {bin_start, bin_end, count, pct}.
+    """
+    if not trades:
+        return []
+
+    pnls = np.array([t.pnl for t in trades])
+    min_pnl = float(np.min(pnls))
+    max_pnl = float(np.max(pnls))
+
+    if max_pnl - min_pnl < 1e-6:
+        return [{"bin_start": min_pnl, "bin_end": max_pnl, "count": len(trades), "pct": 100.0}]
+
+    edges = np.linspace(min_pnl, max_pnl, n_bins + 1)
+    counts, _ = np.histogram(pnls, bins=edges)
+    total = len(trades)
+
+    result = []
+    for i in range(len(counts)):
+        if counts[i] > 0:
+            result.append({
+                "bin_start": round(float(edges[i]), 0),
+                "bin_end": round(float(edges[i + 1]), 0),
+                "count": int(counts[i]),
+                "pct": round(int(counts[i]) / total * 100, 1),
+            })
+    return result
+
+
 def _compute_equity_curve(pnls: List[float]) -> List[float]:
     """Cumulative equity curve from trade P&Ls."""
     curve = [0.0]

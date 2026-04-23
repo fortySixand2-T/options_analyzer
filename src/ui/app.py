@@ -304,14 +304,67 @@ def compute_greeks(req: GreeksRequest):
 
 # ── Backtest ──────────────────��──────────────────────────────────────────────
 
+def _serialize_backtest(result, strategy, symbol, start_date, end_date):
+    """Serialize a BacktestResult to a JSON-safe dict."""
+    stats = result.stats
+    return {
+        "strategy": strategy,
+        "symbol": symbol,
+        "period": {"start": str(start_date), "end": str(end_date)},
+        "source": result.source,
+        "cached": result.cached,
+        "stats": {
+            "total_trades": stats.total_trades,
+            "wins": stats.wins,
+            "losses": stats.losses,
+            "win_rate": stats.win_rate,
+            "avg_win": stats.avg_win,
+            "avg_loss": stats.avg_loss,
+            "avg_pnl": stats.avg_pnl,
+            "total_pnl": stats.total_pnl,
+            "profit_factor": stats.profit_factor,
+            "max_drawdown": stats.max_drawdown,
+            "max_drawdown_pct": stats.max_drawdown_pct,
+            "sharpe_ratio": stats.sharpe_ratio,
+            "avg_dte_at_entry": stats.avg_dte_at_entry,
+            "avg_days_in_trade": stats.avg_days_in_trade,
+        },
+        "equity_curve": result.equity_curve,
+        "regime_breakdown": result.regime_breakdown,
+        "dte_breakdown": result.dte_breakdown,
+        "pnl_distribution": result.pnl_distribution,
+        "trades": [
+            {
+                "entry_date": str(t.entry_date),
+                "exit_date": str(t.exit_date),
+                "entry_price": t.entry_price,
+                "exit_price": t.exit_price,
+                "pnl": t.pnl,
+                "pnl_pct": t.pnl_pct,
+                "dte_at_entry": t.dte_at_entry,
+                "regime": t.regime,
+                "win": t.win,
+                "exit_reason": t.exit_reason,
+            }
+            for t in (result.trades or [])
+        ],
+        "trades_count": len(result.trades) if result.trades else 0,
+    }
+
+
 @app.get("/api/backtest/{strategy}")
 def get_backtest(
     strategy: str,
     symbol: str = Query("SPY"),
     start: str = Query("2022-01-01"),
     end: Optional[str] = Query(None),
+    regime_filter: bool = Query(False),
+    bias_filter: bool = Query(False),
+    dealer_filter: bool = Query(False),
+    edge_threshold: float = Query(0.0),
+    exit_rule: str = Query("50pct"),
 ):
-    """Run or retrieve cached backtest results."""
+    """Run or retrieve cached backtest results with optional signal filters."""
     from backtest.models import BacktestRequest
     from backtest.local_backtest import run_local_backtest
 
@@ -323,40 +376,62 @@ def get_backtest(
         symbol=symbol.upper(),
         start_date=start_date,
         end_date=end_date,
+        regime_filter=regime_filter,
+        bias_filter=bias_filter,
+        dealer_filter=dealer_filter,
+        edge_threshold=edge_threshold,
+        exit_rule=exit_rule,
     )
 
     try:
         result = run_local_backtest(req)
-        stats = result.stats
-        return {
-            "strategy": strategy,
-            "symbol": symbol,
-            "period": {"start": str(start_date), "end": str(end_date)},
-            "source": result.source,
-            "cached": result.cached,
-            "stats": {
-                "total_trades": stats.total_trades,
-                "wins": stats.wins,
-                "losses": stats.losses,
-                "win_rate": stats.win_rate,
-                "avg_win": stats.avg_win,
-                "avg_loss": stats.avg_loss,
-                "avg_pnl": stats.avg_pnl,
-                "total_pnl": stats.total_pnl,
-                "profit_factor": stats.profit_factor,
-                "max_drawdown": stats.max_drawdown,
-                "max_drawdown_pct": stats.max_drawdown_pct,
-                "sharpe_ratio": stats.sharpe_ratio,
-                "avg_dte_at_entry": stats.avg_dte_at_entry,
-                "avg_days_in_trade": stats.avg_days_in_trade,
-            },
-            "equity_curve": result.equity_curve,
-            "regime_breakdown": result.regime_breakdown,
-            "trades_count": len(result.trades) if result.trades else 0,
-        }
+        return _serialize_backtest(result, strategy, symbol, start_date, end_date)
     except Exception as e:
         logger.exception("Backtest failed")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/backtest/compare")
+def compare_backtests(
+    strategies: str = Query("iron_condor,short_put_spread"),
+    symbol: str = Query("SPY"),
+    start: str = Query("2022-01-01"),
+    end: Optional[str] = Query(None),
+    regime_filter: bool = Query(False),
+    bias_filter: bool = Query(False),
+    dealer_filter: bool = Query(False),
+    edge_threshold: float = Query(0.0),
+    exit_rule: str = Query("50pct"),
+):
+    """Compare backtests across multiple strategies."""
+    from backtest.models import BacktestRequest
+    from backtest.local_backtest import run_local_backtest
+
+    end_date = date.fromisoformat(end) if end else date.today()
+    start_date = date.fromisoformat(start)
+    strategy_list = [s.strip() for s in strategies.split(",") if s.strip()]
+
+    results = {}
+    for strat in strategy_list:
+        req = BacktestRequest(
+            strategy=strat,
+            symbol=symbol.upper(),
+            start_date=start_date,
+            end_date=end_date,
+            regime_filter=regime_filter,
+            bias_filter=bias_filter,
+            dealer_filter=dealer_filter,
+            edge_threshold=edge_threshold,
+            exit_rule=exit_rule,
+        )
+        try:
+            result = run_local_backtest(req)
+            results[strat] = _serialize_backtest(result, strat, symbol, start_date, end_date)
+        except Exception as e:
+            logger.warning("Backtest failed for %s: %s", strat, e)
+            results[strat] = {"error": str(e)}
+
+    return {"strategies": results, "symbol": symbol, "period": {"start": str(start_date), "end": str(end_date)}}
 
 
 # ── Journal ───────────────────────────��──────────────────────────────────────

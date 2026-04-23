@@ -195,10 +195,40 @@ Update strategy base.py evaluate() with new conviction weights.
 
 **Step 6: Update UI**
 Add dealer + bias data to API responses.
-Update React components.
+Update React components:
 
-**Step 7: Backtest**
-Run the 6 backtests from SIGNALS.md to validate signal architecture.
+- RegimeDashboard.jsx: add GEX display, dealer regime badge
+- Scanner.jsx: show dealer regime + bias in checklist
+- Add ChainViewer component
+- **Backtest.jsx — update heavily:**
+  1. Fix strategy dropdown — only show 4 active strategies: iron_condor, credit_spread, debit_spread, butterfly (remove the 5 deferred ones still in the list)
+  2. Add a **compare mode** — side-by-side backtests of 2-3 strategies on the same symbol/date range with combined equity curve (different colored lines) and stat comparison table. This is how Trading Copilot's hypothesis testing works: define experiment → run → see results.
+  3. Add **filter toggles** for each signal layer so the user can test "does this filter improve results":
+     - Regime filter ON/OFF (only take trades when regime matches)
+     - Bias filter ON/OFF (only take trades when directional bias aligns)
+     - Dealer regime filter ON/OFF (only take trades when GEX regime matches)
+     - GARCH edge filter ON/OFF (only take trades when edge > threshold)
+     These toggles are the core backtesting feature — they answer "does each signal layer add value?"
+  4. Add **DTE bucket breakdown** table: group results by 0-3, 3-5, 5-7, 7-10, 10-14 DTE to find optimal entry window
+  5. Add **P&L distribution histogram** — show the distribution of trade outcomes, not just the equity curve. Helps visualize fat tails and skew.
+  6. Add **exit rule comparison** — toggle between 50% profit target vs hold-to-expiry to see which exit produces better Sharpe
+  7. Add **trade table** — expandable list of individual backtest trades showing: date, entry/exit price, P&L, DTE, regime at entry, bias at entry, dealer regime. Sortable by any column.
+
+- **Backend (`src/ui/app.py`) changes for backtest:**
+  1. `GET /api/backtest/{strategy}` — add query params: `regime_filter`, `bias_filter`, `dealer_filter`, `edge_threshold`, `exit_rule` (50pct|hold)
+  2. `GET /api/backtest/compare` — accepts `strategies` param (comma-separated), returns results for all, same date range
+  3. Response should include: `stats`, `equity_curve`, `regime_breakdown`, `dte_breakdown`, `pnl_distribution` (histogram buckets), `trades` (list of individual trades)
+
+**Step 7: Run backtests to validate**
+Run the 6 backtests from SIGNALS.md using the UI:
+1. Iron condors: toggle regime filter ON vs OFF — does HIGH_IV filter improve win rate?
+2. Iron condors: toggle dealer filter ON vs OFF — does LONG_GAMMA filter improve win rate?
+3. Credit spreads: toggle bias filter ON vs OFF — does directional bias improve results?
+4. Credit spreads: toggle GARCH edge filter ON vs OFF — does edge > 5% improve results?
+5. Iron condors: compare DTE buckets in the breakdown table
+6. All strategies: compare 50% profit target vs hold-to-expiry exit rules
+
+Use results to calibrate conviction score weights. If a filter doesn't improve results, reduce its weight. If it significantly improves results, increase it.
 
 ---
 

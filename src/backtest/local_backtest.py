@@ -16,7 +16,10 @@ import numpy as np
 from models.black_scholes import black_scholes_price
 from config import RISK_FREE_RATE
 from .models import BacktestRequest, BacktestResult, BacktestTrade
-from .analyzer import analyze_results, compute_regime_breakdown
+from .analyzer import (
+    analyze_results, compute_regime_breakdown,
+    compute_dte_breakdown, compute_pnl_distribution,
+)
 from .cache import get_cached, store_cached
 
 logger = logging.getLogger(__name__)
@@ -82,6 +85,8 @@ def run_local_backtest(request: BacktestRequest) -> BacktestResult:
     for t in trades:
         equity.append(equity[-1] + t.pnl)
     regime_breakdown = compute_regime_breakdown(trades)
+    dte_breakdown = compute_dte_breakdown(trades)
+    pnl_distribution = compute_pnl_distribution(trades)
 
     result = BacktestResult(
         request=request,
@@ -89,6 +94,8 @@ def run_local_backtest(request: BacktestRequest) -> BacktestResult:
         trades=trades,
         equity_curve=equity,
         regime_breakdown=regime_breakdown,
+        dte_breakdown=dte_breakdown,
+        pnl_distribution=pnl_distribution,
         source="local",
     )
 
