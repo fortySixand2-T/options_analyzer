@@ -20,6 +20,7 @@ from config import (
 )
 from . import OptionSignal
 from .strategy_mapper import StrategyRecommendation
+from .providers.flashalpha_client import DealerData
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +51,27 @@ def _classify_credit(strategy: str) -> bool:
     return strategy in _CREDIT_STRATEGIES
 
 
-def _resolve_strikes(signal: OptionSignal, recommendation: StrategyRecommendation) -> List[dict]:
-    """Convert abstract strike_method references to concrete leg dicts."""
+def _resolve_strikes(
+    signal: OptionSignal,
+    recommendation: StrategyRecommendation,
+    dealer_data: Optional[DealerData] = None,
+) -> List[dict]:
+    """Convert abstract strike_method references to concrete leg dicts.
+
+    Uses GEX walls (call_wall/put_wall) and max_pain from dealer_data
+    for intelligent strike placement when available:
+    - call_wall → upper bound for short call strikes
+    - put_wall → lower bound for short put strikes
+    - max_pain → center for butterfly strategies
+    """
     width = _strike_increment(signal.spot)
     atm = _round_strike(signal.spot)
+
+    # Use dealer data for strike anchoring when available
+    call_wall = _round_strike(dealer_data.call_wall) if dealer_data and dealer_data.call_wall else None
+    put_wall = _round_strike(dealer_data.put_wall) if dealer_data and dealer_data.put_wall else None
+    max_pain = _round_strike(dealer_data.max_pain) if dealer_data and dealer_data.max_pain else None
+
     legs = []
 
     for leg_template in recommendation.legs:
@@ -64,17 +82,35 @@ def _resolve_strikes(signal: OptionSignal, recommendation: StrategyRecommendatio
         if method == "signal_strike":
             strike = signal.strike
         elif method == "atm":
-            strike = atm
+            # For butterfly: use max pain as center if available
+            if recommendation.strategy == "butterfly" and max_pain:
+                strike = max_pain
+            else:
+                strike = atm
         elif method == "otm_1":
             if opt_type == "call":
-                strike = atm + width
+                # Use call wall if available and it's beyond ATM+width
+                if call_wall and call_wall > atm and action == "sell":
+                    strike = call_wall
+                else:
+                    strike = atm + width
             else:
-                strike = atm - width
+                # Use put wall if available and it's below ATM-width
+                if put_wall and put_wall < atm and action == "sell":
+                    strike = put_wall
+                else:
+                    strike = atm - width
         elif method == "otm_2":
             if opt_type == "call":
-                strike = atm + 2 * width
+                if call_wall and call_wall > atm and action == "buy":
+                    strike = call_wall + width
+                else:
+                    strike = atm + 2 * width
             else:
-                strike = atm - 2 * width
+                if put_wall and put_wall < atm and action == "buy":
+                    strike = put_wall - width
+                else:
+                    strike = atm - 2 * width
         elif method == "signal_strike - width":
             strike = signal.strike - width
         elif method == "signal_strike + width":
@@ -94,9 +130,13 @@ def _resolve_strikes(signal: OptionSignal, recommendation: StrategyRecommendatio
 def price_recommendation(
     signal: OptionSignal,
     recommendation: StrategyRecommendation,
+    dealer_data: Optional[DealerData] = None,
 ) -> Optional[dict]:
     """Resolve abstract legs to concrete strikes, price via BS,
     compute net premium, Greeks, stops, targets, and P(profit).
+
+    Uses GEX walls and max pain from dealer_data for strike placement
+    when available.
 
     Returns None if pricing fails or entry < $0.05.
     """
@@ -109,8 +149,8 @@ def price_recommendation(
     r = RISK_FREE_RATE
     is_credit = _classify_credit(recommendation.strategy)
 
-    # 1. Resolve strikes
-    resolved_legs = _resolve_strikes(signal, recommendation)
+    # 1. Resolve strikes (using GEX walls/max pain when available)
+    resolved_legs = _resolve_strikes(signal, recommendation, dealer_data)
 
     # 2. Price each leg
     priced_legs = []

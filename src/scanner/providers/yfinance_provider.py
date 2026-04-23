@@ -61,8 +61,8 @@ class YFinanceProvider(ChainProvider):
     # ------------------------------------------------------------------
 
     def get_chain(self, ticker: str,
-                  min_dte: int = 7,
-                  max_dte: int = 90) -> ChainSnapshot:
+                  min_dte: int = 0,
+                  max_dte: int = 14) -> ChainSnapshot:
         """Full option chain filtered by DTE range."""
         self._throttle()
         now = datetime.now()

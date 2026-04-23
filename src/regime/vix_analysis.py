@@ -35,6 +35,7 @@ class VixSnapshot:
     backwardation: bool             # True if VIX > VIX3M (fear)
     term_structure_slope: float     # (VIX3M - VIX) / VIX * 100
     vix_percentile_1y: float        # VIX percentile vs last year
+    vix9d_vix_ratio: Optional[float] = None  # VIX9D/VIX ratio (>1 = short-term fear)
 
 
 def _fetch_last_close(ticker: str) -> Optional[float]:
@@ -92,6 +93,11 @@ def get_vix_data() -> VixSnapshot:
 
     percentile = _fetch_vix_percentile()
 
+    # VIX9D/VIX ratio: >1 signals elevated short-term fear
+    vix9d_vix_ratio = None
+    if vix9d is not None and vix > 0:
+        vix9d_vix_ratio = round(vix9d / vix, 3)
+
     return VixSnapshot(
         vix=round(vix, 2),
         vix9d=round(vix9d, 2) if vix9d else None,
@@ -101,4 +107,5 @@ def get_vix_data() -> VixSnapshot:
         backwardation=backwardation,
         term_structure_slope=round(slope, 2),
         vix_percentile_1y=round(percentile, 1),
+        vix9d_vix_ratio=vix9d_vix_ratio,
     )

@@ -146,3 +146,6 @@
 - [2026-04-22] Modified: src/ui/app.py — Added filter params to backtest endpoint, new /api/backtest/compare endpoint, full trade serialization
 - [2026-04-22] Modified: frontend/src/components/Backtest.jsx — Complete overhaul: compare mode, signal filter toggles, P&L histogram, DTE breakdown, trade table
 - [2026-04-22] Modified: Dockerfile — Changed npm ci to npm install for lock file compatibility
+- [2026-04-22] Modified: src/scanner/providers/yfinance_provider.py — Default DTE range to 0-14
+- [2026-04-22] Modified: src/regime/vix_analysis.py — Added VIX9D/VIX ratio to VixSnapshot
+- [2026-04-22] Modified: src/scanner/strategy_pricer.py — Use GEX walls and max pain for strike placement
