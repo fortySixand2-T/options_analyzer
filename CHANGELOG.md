@@ -156,3 +156,7 @@
 - [2026-04-24] Modified: docker-compose.yml — Fix backtest command to use scripts/run_backtest.py
 - [2026-04-24] Modified: scripts/run_backtest.py — Fix docstring references to old filename
 - [2026-04-24] Modified: start.sh — Fix docker compose detection to properly distinguish plugin vs standalone
+- [2026-04-24] Modified: src/scanner/providers/flashalpha_client.py — Rewrite chain fallback with BS gamma-based GEX, gamma flip detection
+- [2026-04-24] Modified: src/ui/app.py — Auto-fallback to chain-based dealer data when FlashAlpha API key not set
+- [2026-04-24] Modified: src/strategy_scanner.py — Update compute_dealer_data_from_chain call to new ChainSnapshot signature
+- [2026-04-24] Modified: tests/test_risk.py — Update chain fallback test for new ChainSnapshot-based API

@@ -101,11 +101,9 @@ def scan_strategies(
         # Fallback to chain-based computation if API unavailable
         if dealer_data is None:
             try:
-                spot = provider.get_spot(tickers[0])
                 chain = provider.get_chain(tickers[0], min_dte=0, max_dte=14)
-                dealer_data = compute_dealer_data_from_chain(
-                    tickers[0], spot, chain.contracts,
-                )
+                if chain.contracts:
+                    dealer_data = compute_dealer_data_from_chain(chain)
             except Exception as e:
                 logger.warning("Dealer data unavailable: %s", e)
 

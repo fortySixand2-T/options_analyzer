@@ -328,7 +328,8 @@ class TestFlashAlphaClient:
 
     def test_compute_from_chain(self):
         from scanner.providers.flashalpha_client import compute_dealer_data_from_chain
-        from scanner.providers.base import OptionContract
+        from scanner.providers.base import OptionContract, ChainSnapshot
+        from datetime import datetime
         contracts = [
             OptionContract(ticker="SPY", strike=585, expiry="2026-05-01",
                            option_type="call", bid=5, ask=6, mid=5.5, last=5.5,
@@ -343,7 +344,11 @@ class TestFlashAlphaClient:
                            option_type="put", bid=2, ask=3, mid=2.5, last=2.5,
                            volume=300, open_interest=3000, implied_volatility=0.25),
         ]
-        result = compute_dealer_data_from_chain("SPY", 587.0, contracts)
+        chain = ChainSnapshot(
+            ticker="SPY", spot=587.0, fetched_at=datetime.now(),
+            contracts=contracts, expiries=["2026-05-01"],
+        )
+        result = compute_dealer_data_from_chain(chain)
         assert result.symbol == "SPY"
         assert result.source == "chain"
         assert result.max_pain is not None
@@ -351,6 +356,9 @@ class TestFlashAlphaClient:
         assert result.call_wall is not None
         assert result.put_wall is not None
         assert result.dealer_regime in ("LONG_GAMMA", "SHORT_GAMMA")
+        # Should have GEX levels computed via BS gamma
+        assert len(result.levels) > 0
+        assert result.net_gex != 0  # with real gamma, should be non-zero
 
     def test_put_call_ratio_signal(self):
         from scanner.providers.flashalpha_client import classify_dealer_regime, DealerData

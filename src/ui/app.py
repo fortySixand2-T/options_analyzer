@@ -94,8 +94,20 @@ def get_regime(symbol: str = Query("SPY", description="Symbol for dealer data"))
             },
         }
 
-        # Add dealer data if available
+        # Add dealer data — try FlashAlpha first, fall back to chain
         dealer = fetch_gex(symbol.upper())
+        if not dealer:
+            # Chain-based fallback: compute from yfinance options data
+            try:
+                from scanner.providers.flashalpha_client import compute_dealer_data_from_chain
+                from scanner.providers.yfinance_provider import YFinanceProvider
+                provider = YFinanceProvider(delay=0.5)
+                chain = provider.get_chain(symbol.upper(), min_dte=0, max_dte=14)
+                if chain.contracts:
+                    dealer = compute_dealer_data_from_chain(chain)
+            except Exception as chain_err:
+                logger.warning("Chain-based dealer fallback failed: %s", chain_err)
+
         if dealer:
             classification = classify_dealer_regime(dealer)
             response["dealer"] = {
@@ -109,6 +121,7 @@ def get_regime(symbol: str = Query("SPY", description="Symbol for dealer data"))
                 "implication": classification.get("implication"),
                 "bias": classification.get("bias"),
                 "pc_signal": classification.get("pc_signal"),
+                "source": dealer.source,
             }
         else:
             response["dealer"] = None

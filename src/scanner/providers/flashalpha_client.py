@@ -154,39 +154,58 @@ def _parse_gex_response(symbol: str, data: dict) -> DealerData:
     )
 
 
-def compute_dealer_data_from_chain(
-    symbol: str,
-    spot: float,
-    contracts: list,
-) -> DealerData:
-    """Compute dealer positioning from raw option chain data.
+def compute_dealer_data_from_chain(chain_snapshot) -> DealerData:
+    """Compute dealer positioning from an options chain snapshot.
 
-    Fallback when FlashAlpha API is not available. Computes:
-    - Max pain (F5) from OI
-    - Put/call OI ratio (F6)
-    - Call/put walls from max OI strikes (F3/F4)
-    - Approximate net GEX sign (F1)
-    - Gamma flip estimate (F2)
+    Chain-based fallback when FlashAlpha API key is not set. Uses
+    Black-Scholes gamma to compute proper GEX at each strike.
+
+    Signals computed:
+        F1: Net GEX — sum of per-strike gamma exposure ($)
+        F2: Gamma flip — strike where cumulative GEX crosses zero
+        F3: Call wall — strike with highest call open interest
+        F4: Put wall — strike with highest put open interest
+        F5: Max pain — strike minimizing total OI-weighted exercise cost
+        F6: Put/call OI ratio
+        F7: Dealer regime — LONG_GAMMA (net GEX > 0) or SHORT_GAMMA
 
     Parameters
     ----------
-    symbol : str
-    spot : float
-    contracts : list
-        List of OptionContract objects from chain snapshot.
+    chain_snapshot : ChainSnapshot
+        Chain data from any provider (yfinance, etc.).
 
     Returns
     -------
     DealerData
     """
+    from datetime import datetime
+    from models.black_scholes import calculate_greeks
+    from config import RISK_FREE_RATE
+
+    symbol = chain_snapshot.ticker
+    spot = chain_snapshot.spot
+    contracts = chain_snapshot.contracts
+
     call_oi_by_strike: Dict[float, int] = {}
     put_oi_by_strike: Dict[float, int] = {}
     total_call_oi = 0
     total_put_oi = 0
 
+    # Per-strike GEX: OI × gamma × 100 × spot²
+    # Call GEX positive (dealers long calls = long gamma)
+    # Put GEX negative (dealers short puts = short gamma)
+    gex_by_strike: Dict[float, float] = {}
+    call_gex_by_strike: Dict[float, float] = {}
+    put_gex_by_strike: Dict[float, float] = {}
+
+    now = datetime.now()
+
     for c in contracts:
         strike = c.strike
-        oi = getattr(c, 'open_interest', 0)
+        oi = getattr(c, 'open_interest', 0) or 0
+        iv = getattr(c, 'implied_volatility', float('nan'))
+
+        # Accumulate OI by strike
         if c.option_type == "call":
             call_oi_by_strike[strike] = call_oi_by_strike.get(strike, 0) + oi
             total_call_oi += oi
@@ -194,44 +213,120 @@ def compute_dealer_data_from_chain(
             put_oi_by_strike[strike] = put_oi_by_strike.get(strike, 0) + oi
             total_put_oi += oi
 
-    # F5: Max pain — strike where total OI-weighted exercise cost is minimized
+        # Skip contracts with no OI or invalid IV for GEX calc
+        if oi <= 0 or iv != iv or iv <= 0:  # iv != iv checks for NaN
+            continue
+
+        # Compute time to expiry
+        try:
+            expiry_dt = datetime.strptime(c.expiry, '%Y-%m-%d')
+            T = max((expiry_dt - now).days / 365.0, 1 / 365.0)
+        except (ValueError, TypeError):
+            continue
+
+        # Get gamma from Black-Scholes
+        try:
+            greeks = calculate_greeks(
+                S=spot, K=strike, T=T, r=RISK_FREE_RATE,
+                sigma=iv, option_type=c.option_type,
+            )
+            gamma = greeks.get("Gamma", 0.0)
+        except Exception:
+            continue
+
+        # GEX = OI × gamma × 100 (contract multiplier) × spot²
+        contract_gex = oi * gamma * 100.0 * spot * spot
+
+        if strike not in gex_by_strike:
+            gex_by_strike[strike] = 0.0
+            call_gex_by_strike[strike] = 0.0
+            put_gex_by_strike[strike] = 0.0
+
+        if c.option_type == "call":
+            # Dealers long calls → positive gamma
+            gex_by_strike[strike] += contract_gex
+            call_gex_by_strike[strike] += contract_gex
+        else:
+            # Dealers short puts → negative gamma
+            gex_by_strike[strike] -= contract_gex
+            put_gex_by_strike[strike] -= contract_gex
+
+    # F1: Net GEX — sum across all strikes (scale to $M for readability)
+    net_gex = sum(gex_by_strike.values()) / 1e6 if gex_by_strike else 0.0
+
+    # F2: Gamma flip — strike where cumulative GEX crosses zero
+    gamma_flip = _compute_gamma_flip(gex_by_strike, spot)
+
+    # F3: Call wall — strike with highest call OI
+    call_wall = max(call_oi_by_strike, key=call_oi_by_strike.get) if call_oi_by_strike else None
+
+    # F4: Put wall — strike with highest put OI
+    put_wall = max(put_oi_by_strike, key=put_oi_by_strike.get) if put_oi_by_strike else None
+
+    # F5: Max pain
     max_pain = _compute_max_pain(call_oi_by_strike, put_oi_by_strike, spot)
 
     # F6: Put/call OI ratio
     put_call_ratio = (total_put_oi / total_call_oi) if total_call_oi > 0 else 1.0
 
-    # F3/F4: Call wall = max call OI strike, Put wall = max put OI strike
-    call_wall = max(call_oi_by_strike, key=call_oi_by_strike.get) if call_oi_by_strike else None
-    put_wall = max(put_oi_by_strike, key=put_oi_by_strike.get) if put_oi_by_strike else None
-
-    # F1/F2: Approximate GEX and gamma flip from OI distribution
-    # Positive net call OI above spot → dealers long gamma
-    above_spot_call_oi = sum(oi for s, oi in call_oi_by_strike.items() if s > spot)
-    below_spot_put_oi = sum(oi for s, oi in put_oi_by_strike.items() if s < spot)
-    net_gex = float(above_spot_call_oi - below_spot_put_oi)
-
-    # Gamma flip: approximate as the strike where cumulative call gamma
-    # crosses cumulative put gamma. Simplified: use max pain as proxy.
-    gamma_flip = max_pain if max_pain else spot
-
     # F7: Dealer regime
-    if net_gex > 0 and spot >= gamma_flip:
+    if net_gex > 0:
         dealer_regime = "LONG_GAMMA"
     else:
         dealer_regime = "SHORT_GAMMA"
 
+    # Build GEX levels for detailed display
+    levels = []
+    for strike in sorted(gex_by_strike.keys()):
+        levels.append(GexLevel(
+            strike=strike,
+            gex=round(gex_by_strike[strike] / 1e6, 4),
+            call_gex=round(call_gex_by_strike.get(strike, 0) / 1e6, 4),
+            put_gex=round(put_gex_by_strike.get(strike, 0) / 1e6, 4),
+        ))
+
     return DealerData(
         symbol=symbol.upper(),
         spot=spot,
-        net_gex=net_gex,
+        net_gex=round(net_gex, 4),
         gamma_flip=gamma_flip,
         call_wall=call_wall,
         put_wall=put_wall,
         max_pain=max_pain,
         put_call_ratio=round(put_call_ratio, 3),
         dealer_regime=dealer_regime,
+        levels=levels,
         source="chain",
     )
+
+
+def _compute_gamma_flip(
+    gex_by_strike: Dict[float, float],
+    spot: float,
+) -> float:
+    """Find the strike where cumulative GEX crosses zero.
+
+    Walks strikes from low to high, accumulating GEX. The gamma flip
+    is the strike where the running sum changes sign.
+    """
+    if not gex_by_strike:
+        return spot
+
+    sorted_strikes = sorted(gex_by_strike.keys())
+    cumulative = 0.0
+    prev_strike = sorted_strikes[0]
+
+    for strike in sorted_strikes:
+        prev_cum = cumulative
+        cumulative += gex_by_strike[strike]
+        # Check for sign change
+        if prev_cum != 0 and (prev_cum > 0) != (cumulative > 0):
+            return strike
+        prev_strike = strike
+
+    # No crossing found — if net positive, flip is below all strikes;
+    # if net negative, flip is above all strikes. Return spot as fallback.
+    return spot
 
 
 def _compute_max_pain(
