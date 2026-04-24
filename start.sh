@@ -55,16 +55,13 @@ check_docker() {
         echo "  Start Docker Desktop and try again."
         exit 1
     fi
-    if ! command -v docker compose &> /dev/null 2>&1; then
-        # Try legacy docker-compose
-        if command -v docker-compose &> /dev/null 2>&1; then
-            COMPOSE="docker-compose"
-        else
-            echo -e "${RED}Error: docker compose not available.${NC}"
-            exit 1
-        fi
-    else
+    if docker compose version &> /dev/null 2>&1; then
         COMPOSE="docker compose"
+    elif command -v docker-compose &> /dev/null 2>&1; then
+        COMPOSE="docker-compose"
+    else
+        echo -e "${RED}Error: docker compose not available.${NC}"
+        exit 1
     fi
 }
 

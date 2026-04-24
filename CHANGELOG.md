@@ -155,3 +155,4 @@
 - [2026-04-24] Modified: start.sh — Fix backtest command to use scripts/run_backtest.py
 - [2026-04-24] Modified: docker-compose.yml — Fix backtest command to use scripts/run_backtest.py
 - [2026-04-24] Modified: scripts/run_backtest.py — Fix docstring references to old filename
+- [2026-04-24] Modified: start.sh — Fix docker compose detection to properly distinguish plugin vs standalone
