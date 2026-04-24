@@ -34,7 +34,7 @@ services:
     env_file: .env
     volumes:
       - ./data:/app/data
-    command: python scripts/backtest.py --strategy iron_condor --symbol SPY
+    command: python scripts/run_backtest.py --strategy iron_condor --symbol SPY
 
   # Interactive shell with full dev environment
   shell:

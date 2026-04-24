@@ -3,10 +3,10 @@
 Backtest CLI — validate options strategies against historical data.
 
 Usage:
-    python scripts/backtest.py --strategy iron_condor --symbol SPY
-    python scripts/backtest.py --strategy iron_condor --symbol SPY --start 2020-01-01 --end 2025-12-31
-    python scripts/backtest.py --compare --symbols SPY,QQQ --strategies iron_condor,short_put_spread
-    python scripts/backtest.py --validate   # Run all 6 SIGNALS.md backtests
+    python scripts/run_backtest.py --strategy iron_condor --symbol SPY
+    python scripts/run_backtest.py --strategy iron_condor --symbol SPY --start 2020-01-01 --end 2025-12-31
+    python scripts/run_backtest.py --compare --symbols SPY,QQQ --strategies iron_condor,short_put_spread
+    python scripts/run_backtest.py --validate   # Run all 6 SIGNALS.md backtests
 
 Options Analytics Team — 2026-04
 """

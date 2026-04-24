@@ -152,3 +152,6 @@
 - [2026-04-22] Modified: src/backtest/local_backtest.py — Implement regime filter, exit rule toggle, varied DTE entry
 - [2026-04-22] Modified: src/backtest/cache.py — Include filter flags and exit_rule in cache key
 - [2026-04-22] Modified: scripts/backtest.py → scripts/run_backtest.py — Updated CLI with filter flags, --validate mode for SIGNALS.md backtests
+- [2026-04-24] Modified: start.sh — Fix backtest command to use scripts/run_backtest.py
+- [2026-04-24] Modified: docker-compose.yml — Fix backtest command to use scripts/run_backtest.py
+- [2026-04-24] Modified: scripts/run_backtest.py — Fix docstring references to old filename

@@ -128,7 +128,7 @@ case "$CMD" in
         shift || true
         ARGS="${*:---strategy iron_condor --symbol SPY}"
         echo -e "${GREEN}Running backtest: ${NC}$ARGS"
-        $COMPOSE run --rm backtest python scripts/backtest.py $ARGS
+        $COMPOSE run --rm backtest python scripts/run_backtest.py $ARGS
         ;;
 
     test)
