@@ -132,6 +132,20 @@ def get_regime(symbol: str = Query("SPY", description="Symbol for dealer data"))
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Market State ──────────────────────────────────────────────────────────────
+
+@app.get("/api/market-state")
+def get_market_state(symbol: str = Query("SPY", description="Symbol")):
+    """Full L1 market state snapshot — regime, edge, skew, dealer, quality."""
+    try:
+        from market_state import build_market_state
+        state = build_market_state(symbol.upper())
+        return state.to_dict()
+    except Exception as e:
+        logger.exception("Failed to build market state for %s", symbol)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Scanner ────────────────���─────────────────────────────────────────────────
 
 @app.get("/api/scan")

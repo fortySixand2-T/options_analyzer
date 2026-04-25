@@ -56,7 +56,7 @@ def _make_history(n_days=252, ticker='AAPL', base_price=175.0,
     daily_vol = annual_vol / np.sqrt(252)
     returns = np.random.normal(0.0003, daily_vol, n_days)
     prices = base_price * np.cumprod(1 + returns)
-    dates = pd.date_range(end=datetime.now(), periods=n_days, freq='B')
+    dates = pd.date_range(end=datetime.now().date(), periods=len(prices))
     closes = pd.Series(prices, index=dates)
     rv30 = float(np.std(returns[-30:]) * np.sqrt(252))
     rv60 = float(np.std(returns[-60:]) * np.sqrt(252))

@@ -160,3 +160,8 @@
 - [2026-04-24] Modified: src/ui/app.py — Auto-fallback to chain-based dealer data when FlashAlpha API key not set
 - [2026-04-24] Modified: src/strategy_scanner.py — Update compute_dealer_data_from_chain call to new ChainSnapshot signature
 - [2026-04-24] Modified: tests/test_risk.py — Update chain fallback test for new ChainSnapshot-based API
+- [2026-04-24] Created: TRADING_SYSTEM_ARCHITECTURE.md — Four-layer trading system design with Kelly sizing, portfolio engine, and backtest analysis
+- [2026-04-25] Created: src/market_state.py — L1 Market State: aggregates regime, IV-RV edge, vol surface skew, chain quality, bias, dealer into single snapshot
+- [2026-04-25] Created: tests/test_market_state.py — 18 tests for MarketState, VolSurface, ChainQuality
+- [2026-04-25] Modified: src/ui/app.py — Added GET /api/market-state endpoint
+- [2026-04-25] Modified: tests/test_scanner.py — Fixed date_range mismatch causing 10 test failures
