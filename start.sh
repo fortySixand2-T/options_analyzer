@@ -3,14 +3,16 @@
 # Index Options Scanner — one-command launcher
 #
 # Usage:
-#   ./start.sh                  # Launch the full app (backend + frontend)
+#   ./start.sh                  # Launch the app (detached, stays running)
 #   ./start.sh scan             # Run a quick scan from CLI
 #   ./start.sh backtest         # Run a backtest
 #   ./start.sh test             # Run test suite
 #   ./start.sh shell            # Interactive dev shell
+#   ./start.sh dev              # Foreground with hot-reload
 #   ./start.sh stop             # Stop everything
 #   ./start.sh logs             # Tail app logs
 #   ./start.sh build            # Rebuild Docker images
+#   ./start.sh restart          # Stop + rebuild + start
 #   ./start.sh status           # Show running containers
 #   ./start.sh clean            # Stop + remove containers/images
 #
@@ -85,31 +87,72 @@ setup_env() {
     mkdir -p data
 }
 
+wait_for_healthy() {
+    local max_wait=30
+    local waited=0
+    echo -ne "  Waiting for server"
+    while [ $waited -lt $max_wait ]; do
+        if ! $COMPOSE ps app 2>/dev/null | grep -q "Up\|running"; then
+            sleep 1
+            waited=$((waited + 1))
+            echo -n "."
+            continue
+        fi
+        if curl -sf http://localhost:8000/docs > /dev/null 2>&1; then
+            echo ""
+            echo -e "  ${GREEN}✓ Server is up${NC}"
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+        echo -n "."
+    done
+    echo ""
+    echo -e "  ${YELLOW}Server may still be starting — check: ./start.sh logs${NC}"
+}
+
 check_docker
 
 case "$CMD" in
     up|start|"")
         banner
         setup_env
-        echo -e "${GREEN}Starting Options Scanner...${NC}"
+        echo -e "${GREEN}Building and starting Options Scanner...${NC}"
+        $COMPOSE up -d --build app
+        echo ""
         echo -e "  Backend API:  ${BLUE}http://localhost:8000${NC}"
         echo -e "  API docs:     ${BLUE}http://localhost:8000/docs${NC}"
         echo -e "  Web UI:       ${BLUE}http://localhost:8000${NC}"
         echo ""
-        echo -e "  Press ${YELLOW}Ctrl+C${NC} to stop"
+        wait_for_healthy
         echo ""
-        $COMPOSE up --build app
+        echo -e "  ${GREEN}App is running in the background.${NC}"
+        echo -e "  Logs:    ${YELLOW}./start.sh logs${NC}"
+        echo -e "  Stop:    ${YELLOW}./start.sh stop${NC}"
+        echo -e "  Rebuild: ${YELLOW}./start.sh restart${NC}"
+        echo ""
         ;;
 
     dev)
         banner
         setup_env
-        echo -e "${GREEN}Starting in dev mode (hot reload)...${NC}"
+        echo -e "${GREEN}Starting in dev mode (foreground, hot-reload)...${NC}"
         echo -e "  Backend API:  ${BLUE}http://localhost:8000${NC}"
         echo -e "  Frontend dev: ${BLUE}http://localhost:3000${NC} (if running npm dev separately)"
         echo ""
+        echo -e "  Press ${YELLOW}Ctrl+C${NC} to stop"
+        echo ""
         $COMPOSE run --rm --service-ports -e PYTHONPATH=/app/src shell \
             python -m uvicorn ui.app:app --host 0.0.0.0 --port 8000 --reload
+        ;;
+
+    fg|foreground)
+        banner
+        setup_env
+        echo -e "${GREEN}Starting in foreground (Ctrl+C to stop)...${NC}"
+        echo -e "  Backend API:  ${BLUE}http://localhost:8000${NC}"
+        echo ""
+        $COMPOSE up --build app
         ;;
 
     scan)
@@ -143,9 +186,17 @@ case "$CMD" in
         ;;
 
     build)
-        echo -e "${GREEN}Building Docker images...${NC}"
-        $COMPOSE build
-        echo -e "${GREEN}Build complete.${NC}"
+        echo -e "${GREEN}Building Docker images (no cache)...${NC}"
+        $COMPOSE build --no-cache
+        echo -e "${GREEN}Build complete. Run ./start.sh to launch.${NC}"
+        ;;
+
+    restart)
+        echo -e "${YELLOW}Restarting...${NC}"
+        $COMPOSE down
+        $COMPOSE up -d --build app
+        wait_for_healthy
+        echo -e "${GREEN}Restarted.${NC}"
         ;;
 
     stop)
@@ -172,23 +223,25 @@ case "$CMD" in
         echo "Usage: ./start.sh [command]"
         echo ""
         echo "Commands:"
-        echo "  (none), up    Start the full app (API + UI) on :8000"
-        echo "  dev           Start backend with hot-reload"
+        echo "  (none), up    Start the app detached (stays running)"
+        echo "  dev           Start with hot-reload (foreground)"
+        echo "  fg            Start in foreground (Ctrl+C to stop)"
         echo "  scan          Run a CLI scan (pass args after command)"
         echo "  backtest      Run a backtest (pass args after command)"
         echo "  test          Run the test suite"
         echo "  shell         Interactive dev shell"
-        echo "  build         Build Docker images only"
+        echo "  build         Rebuild Docker images (no cache)"
+        echo "  restart       Stop + rebuild + start"
         echo "  stop          Stop all services"
         echo "  logs          Tail app logs"
         echo "  status        Show running containers"
         echo "  clean         Stop + remove everything"
         echo ""
         echo "Examples:"
-        echo "  ./start.sh"
+        echo "  ./start.sh                    # start detached"
         echo "  ./start.sh scan SPY,QQQ --strategies --top 5"
         echo "  ./start.sh backtest --strategy iron_condor --symbol SPY"
-        echo "  ./start.sh dev"
+        echo "  ./start.sh restart            # rebuild + relaunch"
         exit 1
         ;;
 esac
