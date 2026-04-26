@@ -28,7 +28,7 @@ Your edge decays in hours, not days. At 0-14 DTE, theta is nonlinear — a 5 DTE
 +-----------------------------------------------------+
 ```
 
-**Implementation status:** All 4 layers built and wired. L1→L2→L3 pipeline serves via `/api/trade-candidates`. L4 portfolio state via `/api/portfolio`. Tastytrade execution exists but not yet bridged to pipeline output.
+**Implementation status:** All 4 layers built, wired, and bridged to execution. L1→L2→L3 pipeline serves via `/api/trade-candidates`. L4 portfolio state via `/api/portfolio`. Execution bridge: `POST /api/order/from-candidate` runs full pipeline → builds Tastytrade order → dry-run or submit. UI "Preview Order" → "Submit Order (Paper)" flow live.
 
 ---
 
@@ -194,10 +194,16 @@ SPY/QQQ/IWM correlation ~0.7. Three index positions are not independent. Varianc
 - Submit, cancel, get positions
 - API endpoints: `POST /api/order`, `GET /api/positions`
 
+**Built (2026-04-26):**
+- `build_order_from_candidate(TradeCandidate, ExecutionResult)` → `OrderRequest`
+- API endpoint: `POST /api/order/from-candidate` (dry-run preview + live submit)
+- UI "Preview Order" → "Submit Order (Paper)" flow in TradingView
+- Portfolio (L4) auto-update after successful order submission
+
 **Not built:**
-- Bridge from `TradeCandidate` (L2) + `ExecutionResult` (L3) → `OrderRequest`
-- UI "Place Order" button with dry-run preview → confirm → submit flow
-- Portfolio (L4) update after fill confirmation
+- Real OCC symbol resolution from chain data (currently computed from DTE)
+- Order status polling / fill confirmation callback
+- Close/roll existing positions from UI
 
 ---
 
@@ -232,8 +238,8 @@ These are the things that determine whether the system actually makes money.
 **1a. Regression-based confluence weights** ✅ DONE (2026-04-26)
 Per-strategy OLS regressions completed on 422 trades. Key result: edge_pct is the only statistically significant continuous P&L predictor (p<0.001 in 3/4 strategies). Regime and bias work as binary gates, not continuous scalers. Weights updated: edge 25%→35%, regime 20%→15%, dealer 20%→10%, bias 15%→10%, skew 10%→15%, timing 10%→15%. See VALIDATION_RESULTS.md § Per-Strategy OLS Regression.
 
-**1b. Bias signal replay in backtester**
-The bias detector uses daily OHLCV (EMA, RSI, MACD). This data is available from yfinance during the backtest window. Computing bias per-day in the backtest loop would validate (or invalidate) the 15% bias weight. This is a code change, not a data purchase.
+**1b. Bias signal replay in backtester** ✅ DONE (2026-04-26)
+Bias signals computed from daily OHLCV per-day in the backtest loop. BT3/BT3b validated: bias helps put-direction strategies when combined with edge gate.
 
 **1c. Historical options chain data**
 The backtester simulates option P&L from underlying price moves. Real option chains have skew, term structure, and liquidity variation. ThetaData ($30/mo) provides historical chains going back to 2013. This would:
@@ -241,12 +247,9 @@ The backtester simulates option P&L from underlying price moves. Real option cha
 - Compute real IV at entry/exit for accurate P&L
 - Validate chain quality filtering
 
-### Priority 2: Execution bridge
+### Priority 2: Execution bridge ✅ DONE (2026-04-26)
 
-Connect the pipeline to Tastytrade paper trading:
-- `build_order_from_candidate(TradeCandidate, ExecutionResult)` → `OrderRequest`
-- UI: "Place Order" button → dry-run preview → confirm → submit
-- Portfolio update after fill
+`build_order_from_candidate()` converts L2 TradeCandidate + L3 ExecutionResult → OrderRequest. API endpoint `POST /api/order/from-candidate` supports dry-run preview and live submission. UI flow: Preview Order → review legs/price/risk → Submit Order (Paper). Portfolio auto-updates after fill. Remaining: real OCC symbol resolution, fill polling, close/roll UI.
 
 ### Priority 3: Intraday state machine
 

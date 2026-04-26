@@ -197,3 +197,8 @@
 - [2026-04-26] Modified: src/trade_generator.py — Regression-calibrated confluence weights: edge 25%→35%, regime 20%→15%, dealer 20%→10%, bias 15%→10%, skew 10%→15%, timing 10%→15%
 - [2026-04-26] Modified: TRADING_SYSTEM_ARCHITECTURE.md — Marked regression weight calibration (1a) as done; updated with validated backtest state
 - [2026-04-26] Created: scripts/per_strategy_regression.py — Per-strategy OLS regression script for confluence weight calibration
+- [2026-04-26] Modified: src/execution/order_manager.py — Added build_order_from_candidate() bridge: TradeCandidate + ExecutionResult → OrderRequest
+- [2026-04-26] Modified: src/ui/app.py — Added POST /api/order/from-candidate endpoint with dry-run preview and live submit
+- [2026-04-26] Modified: frontend/src/components/TradingView.jsx — Added "Preview Order" → "Submit Order (Paper)" flow to TradeCard
+- [2026-04-26] Modified: frontend/src/components/Dashboard.css — Added order placement button and preview panel styles
+- [2026-04-26] Modified: TRADING_SYSTEM_ARCHITECTURE.md — Marked execution bridge (Priority 2) as done

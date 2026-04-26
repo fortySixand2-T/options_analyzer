@@ -7,7 +7,7 @@ export default function TradingView() {
   const [queryPath, setQueryPath] = useState(null);
 
   const { data, loading, error } = useApi(queryPath, { manual: !queryPath });
-  const { data: portfolio } = useApi('/api/portfolio');
+  const { data: portfolio, refetch: refetchPortfolio } = useApi('/api/portfolio');
 
   function handleScan() {
     setQueryPath(`/api/trade-candidates?symbol=${symbol.toUpperCase()}`);
@@ -32,7 +32,12 @@ export default function TradingView() {
       {data && (
         <>
           <MarketStatePanel state={data.market_state} />
-          <CandidatesPanel candidates={data.candidates} count={data.tradeable_count} />
+          <CandidatesPanel
+            candidates={data.candidates}
+            count={data.tradeable_count}
+            symbol={symbol}
+            onOrderPlaced={refetchPortfolio}
+          />
         </>
       )}
 
@@ -132,7 +137,7 @@ function MarketStatePanel({ state }) {
 }
 
 
-function CandidatesPanel({ candidates, count }) {
+function CandidatesPanel({ candidates, count, symbol, onOrderPlaced }) {
   const [expanded, setExpanded] = useState(null);
 
   if (!candidates || candidates.length === 0) {
@@ -150,18 +155,78 @@ function CandidatesPanel({ candidates, count }) {
         Trade Candidates ({count} tradeable of {candidates.length})
       </div>
       {candidates.map((tc, i) => (
-        <TradeCard key={i} tc={tc} isExpanded={expanded === i}
-          onToggle={() => setExpanded(expanded === i ? null : i)} />
+        <TradeCard key={i} tc={tc} index={i} symbol={symbol}
+          isExpanded={expanded === i}
+          onToggle={() => setExpanded(expanded === i ? null : i)}
+          onOrderPlaced={onOrderPlaced} />
       ))}
     </div>
   );
 }
 
 
-function TradeCard({ tc, isExpanded, onToggle }) {
+function TradeCard({ tc, index, symbol, isExpanded, onToggle, onOrderPlaced }) {
   const executable = tc.execution?.executable;
-  const scoreColor = tc.confluence_score >= 75 ? 'green'
-    : tc.confluence_score >= 60 ? 'amber' : 'red';
+  const [orderState, setOrderState] = useState(null); // null | 'previewing' | 'preview' | 'submitting' | 'result'
+  const [orderData, setOrderData] = useState(null);
+
+  async function handlePreview(e) {
+    e.stopPropagation();
+    setOrderState('previewing');
+    try {
+      const res = await fetch('/api/order/from-candidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: symbol,
+          candidate_index: index,
+          dry_run: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOrderData({ status: 'error', message: data.detail || 'Request failed' });
+        setOrderState('result');
+      } else {
+        setOrderData(data);
+        setOrderState('preview');
+      }
+    } catch (err) {
+      setOrderData({ status: 'error', message: err.message });
+      setOrderState('result');
+    }
+  }
+
+  async function handleSubmit(e) {
+    e.stopPropagation();
+    setOrderState('submitting');
+    try {
+      const res = await fetch('/api/order/from-candidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: symbol,
+          candidate_index: index,
+          dry_run: false,
+        }),
+      });
+      const data = await res.json();
+      setOrderData(data);
+      setOrderState('result');
+      if (data.status === 'submitted' || data.status === 'filled') {
+        onOrderPlaced?.();
+      }
+    } catch (err) {
+      setOrderData({ status: 'error', message: err.message });
+      setOrderState('result');
+    }
+  }
+
+  function handleCancel(e) {
+    e.stopPropagation();
+    setOrderState(null);
+    setOrderData(null);
+  }
 
   return (
     <div className="strategy-card" onClick={onToggle}>
@@ -257,6 +322,71 @@ function TradeCard({ tc, isExpanded, onToggle }) {
               ) : (
                 <div className="exec-blocked red">
                   Blocked: {tc.execution.reason}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Order placement flow */}
+          {tc.execution?.executable && (
+            <div className="order-section">
+              {orderState === null && (
+                <button className="btn-order" onClick={handlePreview}>
+                  Preview Order
+                </button>
+              )}
+
+              {orderState === 'previewing' && (
+                <div className="order-status muted">Building order preview...</div>
+              )}
+
+              {orderState === 'preview' && orderData && (
+                <div className="order-preview">
+                  <h4>Order Preview</h4>
+                  <div className="order-details">
+                    <span>{orderData.order?.strategy?.replace(/_/g, ' ')}</span>
+                    <span>{orderData.order?.contracts} contracts</span>
+                    <span>Limit: ${orderData.order?.price?.toFixed(2)}</span>
+                    <span>Risk: ${orderData.order?.risk_dollars?.toFixed(0)}</span>
+                  </div>
+                  <table className="data-table compact">
+                    <thead><tr><th>Action</th><th>Type</th><th>Strike</th><th>Symbol</th></tr></thead>
+                    <tbody>
+                      {orderData.order?.legs?.map((leg, j) => (
+                        <tr key={j}>
+                          <td className={leg.action.includes('buy') ? 'green' : 'red'}>
+                            {leg.action.replace(/_/g, ' ').toUpperCase()}
+                          </td>
+                          <td>{leg.option_type}</td>
+                          <td className="mono">{leg.strike?.toFixed(0)}</td>
+                          <td className="mono muted" style={{ fontSize: '0.75rem' }}>{leg.symbol}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="order-actions">
+                    <button className="btn-confirm" onClick={handleSubmit}>
+                      Submit Order (Paper)
+                    </button>
+                    <button className="btn-cancel" onClick={handleCancel}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {orderState === 'submitting' && (
+                <div className="order-status muted">Submitting order...</div>
+              )}
+
+              {orderState === 'result' && orderData && (
+                <div className={`order-result ${orderData.status === 'submitted' || orderData.status === 'filled' ? 'green' : 'red'}`}>
+                  <strong>{orderData.status?.toUpperCase()}</strong>: {orderData.message}
+                  {orderData.order_id && <span className="mono muted"> (ID: {orderData.order_id})</span>}
+                  {orderData.is_paper && <span className="muted"> [PAPER]</span>}
+                  <button className="btn-cancel" onClick={handleCancel} style={{ marginLeft: '1rem' }}>
+                    Dismiss
+                  </button>
                 </div>
               )}
             </div>

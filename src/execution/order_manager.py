@@ -316,6 +316,83 @@ class OrderManager:
         return list(self._order_history)
 
 
+def build_order_from_candidate(
+    trade_candidate,
+    execution_result,
+    order_type: str = "limit",
+    price: Optional[float] = None,
+) -> OrderRequest:
+    """Build an OrderRequest from TradeCandidate (L2) + ExecutionResult (L3).
+
+    This is the execution bridge: L2 decides *what* to trade, L3 decides
+    *how much* and whether spreads are tight enough. This function converts
+    that into a Tastytrade-ready OrderRequest.
+
+    Parameters
+    ----------
+    trade_candidate : TradeCandidate
+        From L2 trade generator (has legs, strategy, symbol, DTE).
+    execution_result : ExecutionResult
+        From L3 sizing (has contracts, adjusted entry, go/no-go).
+    order_type : str
+        "limit" or "market".
+    price : float, optional
+        Override limit price. If None, uses execution_result.adjusted_entry.
+
+    Returns
+    -------
+    OrderRequest
+    """
+    if not execution_result.executable:
+        raise ValueError(f"Trade not executable: {execution_result.reason}")
+
+    contracts = execution_result.size.contracts
+
+    legs = []
+    for leg_dict in trade_candidate.legs:
+        action_raw = leg_dict.get("action", "buy")
+        option_type = leg_dict.get("option_type", "call")
+        strike = float(leg_dict.get("strike", 0))
+
+        # Map simple action to order action
+        if action_raw == "sell":
+            action = "sell_to_open"
+        else:
+            action = "buy_to_open"
+
+        # Resolve expiry from candidate or compute from DTE
+        expiry = trade_candidate.expiry or ""
+        occ_symbol = _build_occ_symbol(
+            trade_candidate.symbol, strike, option_type,
+            trade_candidate.suggested_dte,
+        )
+
+        legs.append(OrderLeg(
+            action=action,
+            symbol=occ_symbol,
+            quantity=contracts,
+            option_type=option_type,
+            strike=strike,
+            expiry=expiry,
+        ))
+
+    # Price: use adjusted entry from L3 (includes slippage), or override
+    if price is not None:
+        order_price = price
+    elif execution_result.adjusted_entry is not None:
+        order_price = execution_result.adjusted_entry
+    else:
+        order_price = None
+
+    return OrderRequest(
+        underlying=trade_candidate.symbol,
+        strategy=trade_candidate.strategy,
+        legs=legs,
+        order_type=order_type,
+        price=order_price,
+    )
+
+
 def build_order_from_strategy(strategy_result, contracts: int = 1,
                                order_type: str = "limit",
                                price: Optional[float] = None) -> OrderRequest:

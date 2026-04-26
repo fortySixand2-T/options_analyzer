@@ -668,6 +668,136 @@ async def ws_greeks(websocket):
 
 # ── Order Execution ──────────────────────────────────────────────────────────
 
+class CandidateOrderRequest(BaseModel):
+    symbol: str = "SPY"
+    portfolio_value: float = 100_000
+    candidate_index: int = 0  # which candidate from the scan result
+    order_type: str = "limit"
+    price_override: Optional[float] = None
+    dry_run: bool = True  # default to dry run for safety
+
+
+@app.post("/api/order/from-candidate")
+def order_from_candidate(req: CandidateOrderRequest):
+    """Execution bridge: scan → pick candidate → build order → submit.
+
+    Runs the full L1→L2→L3 pipeline, picks the candidate at candidate_index,
+    builds a Tastytrade OrderRequest, and submits (or dry-runs).
+    """
+    from market_state import build_market_state
+    from trade_generator import generate_trades
+    from sizing import assess_execution
+    from execution.order_manager import (
+        OrderManager, build_order_from_candidate,
+    )
+
+    # Run L1→L2 pipeline
+    state = build_market_state(req.symbol.upper())
+    candidates = generate_trades(state)
+
+    if not candidates:
+        raise HTTPException(status_code=404, detail="No trade candidates found")
+    if req.candidate_index >= len(candidates):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Candidate index {req.candidate_index} out of range (0-{len(candidates)-1})",
+        )
+
+    tc = candidates[req.candidate_index]
+
+    # L3: execution assessment
+    execution = assess_execution(
+        trade_candidate=tc,
+        portfolio_value=req.portfolio_value,
+    )
+
+    if not execution.executable:
+        return {
+            "status": "blocked",
+            "reason": execution.reason,
+            "candidate": tc.to_dict(),
+            "execution": execution.to_dict(),
+        }
+
+    # Build order from candidate + execution result
+    try:
+        order_req = build_order_from_candidate(
+            trade_candidate=tc,
+            execution_result=execution,
+            order_type=req.order_type,
+            price=req.price_override,
+        )
+        order_req.dry_run = req.dry_run
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Preview mode: return order details without submitting
+    if req.dry_run:
+        return {
+            "status": "preview",
+            "candidate": tc.to_dict(),
+            "execution": execution.to_dict(),
+            "order": {
+                "underlying": order_req.underlying,
+                "strategy": order_req.strategy,
+                "legs": [
+                    {
+                        "action": leg.action,
+                        "symbol": leg.symbol,
+                        "quantity": leg.quantity,
+                        "option_type": leg.option_type,
+                        "strike": leg.strike,
+                        "expiry": leg.expiry,
+                    }
+                    for leg in order_req.legs
+                ],
+                "order_type": order_req.order_type,
+                "price": order_req.price,
+                "contracts": execution.size.contracts,
+                "risk_dollars": execution.size.risk_dollars,
+            },
+            "message": "Dry run — review order details before submitting with dry_run=false",
+        }
+
+    # Live submission
+    mgr = OrderManager()
+    if not mgr.connect():
+        raise HTTPException(status_code=503, detail="Cannot connect to Tastytrade")
+
+    result = mgr.submit(order_req)
+
+    # Update portfolio after successful submission
+    if result.status.value in ("submitted", "filled"):
+        try:
+            pf = _get_portfolio()
+            from portfolio import Position
+            from datetime import datetime
+            import uuid
+            strikes = [leg.strike for leg in order_req.legs]
+            width = max(strikes) - min(strikes) if len(strikes) >= 2 else 5
+            pf.add_position(Position(
+                position_id=result.order_id or str(uuid.uuid4())[:8],
+                symbol=tc.symbol,
+                strategy=tc.strategy,
+                contracts=execution.size.contracts,
+                entry_price=order_req.price or 0,
+                is_credit=tc.is_credit,
+                max_loss=width * 100 * execution.size.contracts,
+                entry_time=datetime.now(),
+            ))
+        except Exception as e:
+            logger.warning("Portfolio update after order failed: %s", e)
+
+    return {
+        "status": result.status.value,
+        "order_id": result.order_id,
+        "message": result.message,
+        "is_paper": result.is_paper,
+        "candidate": tc.to_dict(),
+        "execution": execution.to_dict(),
+    }
+
+
 class PlaceOrderRequest(BaseModel):
     underlying: str
     strategy: str
