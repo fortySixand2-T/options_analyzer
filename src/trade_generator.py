@@ -175,8 +175,9 @@ def _dealer_sub_score(market_state, strategy: str) -> float:
         return 0.8 if dealer == "LONG_GAMMA" else 0.3
     if strategy == "butterfly":
         return 0.9 if dealer == "LONG_GAMMA" else 0.4
-    # Debit directional
-    return 0.7 if dealer == "SHORT_GAMMA" else 0.4
+    # Debit directional — dealer filter was a no-op in backtests,
+    # so slight preference for SHORT_GAMMA but near-neutral otherwise
+    return 0.7 if dealer == "SHORT_GAMMA" else 0.5
 
 
 def _bias_sub_score(market_state, strategy: str) -> float:
@@ -268,9 +269,18 @@ def _timing_sub_score(market_state, strategy: str) -> float:
     if ts is None:
         return 0.5
 
+    # Weekend or outside market hours → neutral (user is planning, not executing)
+    weekday = ts.weekday()
+    if weekday >= 5:  # Saturday=5, Sunday=6
+        return 0.5
+
     hour = ts.hour
     minute = ts.minute
     t = hour + minute / 60.0
+
+    # Pre-market or after-hours → neutral
+    if t < 9.5 or t > 16.0:
+        return 0.5
 
     if strategy in CREDIT_STRATEGIES:
         # Best: 10:00-11:00 ET (IV elevated from open, spreads tightening)

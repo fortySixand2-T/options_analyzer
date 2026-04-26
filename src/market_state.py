@@ -112,16 +112,30 @@ class MarketState:
 
         Primary gate: IV-RV spread must be meaningful.
         Secondary: chain must be liquid enough to execute.
+
+        Backtested edge requirements (SPY 2022-2026, 3% slippage):
+        - Credit strategies: IV must be rich (edge > 5%) — validated for short_put_spread
+        - Long put spread: IV must be cheap (edge > 5%) — Sharpe 3.38 with filter
+        - Long call spread: directional momentum > IV cheapness — no edge gate needed
+          (edge filter drops Sharpe from 1.74 to -0.87; regime filter helps instead)
+        - Butterfly: no edge gate needed — structure profits from pin, not IV direction
         """
         if self.chain_quality.quality_score < 0.3:
             return False  # chain too illiquid
 
         if strategy in CREDIT_STRATEGIES:
             # Selling premium: need IV to be rich vs realized
-            return self.iv_rv_spread > 0.02 and self.iv_rv_edge_pct > 5.0
-        elif strategy in DEBIT_STRATEGIES:
-            # Buying premium: need IV to be cheap vs realized
-            return self.iv_rv_spread < -0.02 and self.iv_rv_edge_pct < -5.0
+            return self.iv_rv_spread > 0.01 and self.iv_rv_edge_pct > 5.0
+        elif strategy == "long_put_spread":
+            # Buying put spreads: need IV cheap — backtested edge > 5% required
+            return self.iv_rv_spread < -0.01 and self.iv_rv_edge_pct < -5.0
+        elif strategy == "long_call_spread":
+            # Directional: edge filter hurts this strategy (kills momentum trades)
+            # Regime filter is the right gate (handled in strategy_candidates)
+            return True
+        elif strategy == "butterfly":
+            # Pin strategy: profits from price convergence, not IV direction
+            return True
         return False
 
     def edge_magnitude(self) -> float:

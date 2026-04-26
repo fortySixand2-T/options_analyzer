@@ -179,3 +179,13 @@
 - [2026-04-25] Modified: scripts/run_backtest.py — Added --slippage and --exit-rule strategy options
 - [2026-04-25] Modified: src/sizing.py — Updated STRATEGY_STATS from backtests with 3% slippage (only long_call_spread and butterfly tradeable)
 - [2026-04-25] Modified: src/ui/app.py — Wired L1→L2→L3 pipeline in /api/trade-candidates, made portfolio stateful
+- [2026-04-26] Created: frontend/src/components/TradingView.jsx — Trades tab with MarketState, CandidatesPanel, PortfolioPanel
+- [2026-04-26] Modified: frontend/src/App.jsx — Added Trades tab with TradingView component
+- [2026-04-26] Modified: frontend/src/components/Dashboard.css — Added styles for score breakdown, exit rules, execution, hedge triggers
+- [2026-04-26] Modified: src/scanner/providers/yfinance_provider.py — Fixed NaN handling for volume/open_interest/bid/ask from yfinance
+- [2026-04-26] Modified: src/market_state.py — Relaxed IV-RV absolute spread threshold from 0.02 to 0.01 for low-IV environments
+- [2026-04-26] Modified: frontend/src/components/Backtest.jsx — Added slippage control, per-strategy exit rule toggle, limited to 4 active strategies
+- [2026-04-26] Modified: src/ui/app.py — Added slippage_pct query param to backtest and compare endpoints
+- [2026-04-26] Modified: src/sizing.py — Updated STRATEGY_STATS from 6 validation backtests: long_put_spread (Sharpe 3.38) and short_put_spread (Sharpe 1.14) now tradeable with edge>5% filter
+- [2026-04-26] Modified: src/market_state.py — Per-strategy edge gates: no gate for long_call_spread (edge filter hurts directional plays) and butterfly (pin strategy)
+- [2026-04-26] Modified: src/trade_generator.py — Fixed weekend timing penalty (neutral when market closed), adjusted dealer sub-score for debit strategies based on backtest validation

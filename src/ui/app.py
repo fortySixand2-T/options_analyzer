@@ -453,6 +453,7 @@ def get_backtest(
     dealer_filter: bool = Query(False),
     edge_threshold: float = Query(0.0),
     exit_rule: str = Query("50pct"),
+    slippage_pct: float = Query(0.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
 ):
     """Run or retrieve cached backtest results with optional signal filters."""
     from backtest.models import BacktestRequest
@@ -471,6 +472,7 @@ def get_backtest(
         dealer_filter=dealer_filter,
         edge_threshold=edge_threshold,
         exit_rule=exit_rule,
+        slippage_pct=slippage_pct,
     )
 
     try:
@@ -492,6 +494,7 @@ def compare_backtests(
     dealer_filter: bool = Query(False),
     edge_threshold: float = Query(0.0),
     exit_rule: str = Query("50pct"),
+    slippage_pct: float = Query(0.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
 ):
     """Compare backtests across multiple strategies."""
     from backtest.models import BacktestRequest
@@ -513,6 +516,7 @@ def compare_backtests(
             dealer_filter=dealer_filter,
             edge_threshold=edge_threshold,
             exit_rule=exit_rule,
+            slippage_pct=slippage_pct,
         )
         try:
             result = run_local_backtest(req)

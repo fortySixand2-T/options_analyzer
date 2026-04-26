@@ -24,11 +24,17 @@ logger = logging.getLogger(__name__)
 
 
 # ── Backtest-derived stats per strategy ───────────────────────────────────────
-# From TRADING_SYSTEM_ARCHITECTURE.md backtest results.
-# Updated 2026-04-25 from backtests: SPY 2022-2026, 3% slippage, per-strategy exits.
-# Only long_call_spread (Sharpe 0.70) and butterfly (Sharpe 1.89) survive.
-# Credit strategies are negative Kelly even with regime+edge filters.
-# Long put spread is net negative (SPY bullish drift hurts puts).
+# Updated 2026-04-26 from 6 validation backtests: SPY 2022-2026, 3% slippage,
+# per-strategy exit rules, with optimal filter configurations.
+#
+# Key finding: strategy viability depends heavily on filter + exit rule combo.
+# Stats below use each strategy's best validated configuration:
+#   - butterfly:          strategy exits, no filters needed      (Sharpe 2.09)
+#   - long_put_spread:    strategy exits + GARCH edge > 5%       (Sharpe 3.38)
+#   - long_call_spread:   strategy exits + regime filter         (Sharpe 2.07)
+#   - short_put_spread:   strategy exits + GARCH edge > 5%       (Sharpe 1.14)
+#   - iron_condor:        negative in all configs                (Sharpe -2.39)
+#   - short_call_spread:  negative in all configs                (Sharpe -0.81)
 
 @dataclass(frozen=True)
 class StrategyStats:
@@ -41,28 +47,28 @@ class StrategyStats:
 
 STRATEGY_STATS: Dict[str, StrategyStats] = {
     "iron_condor": StrategyStats(
-        win_rate=0.378, avg_win=85, avg_loss=197,
+        win_rate=0.422, avg_win=85, avg_loss=197,
         kelly=-0.47, tradeable=False,
     ),
     "short_put_spread": StrategyStats(
-        win_rate=0.748, avg_win=69, avg_loss=258,
-        kelly=-0.13, tradeable=False,
+        win_rate=0.804, avg_win=77, avg_loss=212,
+        kelly=0.26, tradeable=True,   # requires GARCH edge > 5%
     ),
     "short_call_spread": StrategyStats(
-        win_rate=0.648, avg_win=80, avg_loss=237,
+        win_rate=0.667, avg_win=80, avg_loss=237,
         kelly=-0.09, tradeable=False,
     ),
     "long_call_spread": StrategyStats(
-        win_rate=0.495, avg_win=167, avg_loss=133,
-        kelly=0.12, tradeable=True,
+        win_rate=0.598, avg_win=176, avg_loss=140,
+        kelly=0.28, tradeable=True,   # benefits from regime filter
     ),
     "long_put_spread": StrategyStats(
-        win_rate=0.436, avg_win=173, avg_loss=158,
-        kelly=-0.05, tradeable=False,
+        win_rate=0.625, avg_win=206, avg_loss=127,
+        kelly=0.39, tradeable=True,   # requires GARCH edge > 5%
     ),
     "butterfly": StrategyStats(
-        win_rate=0.506, avg_win=819, avg_loss=370,
-        kelly=0.27, tradeable=True,
+        win_rate=0.506, avg_win=869, avg_loss=354,
+        kelly=0.30, tradeable=True,
     ),
 }
 

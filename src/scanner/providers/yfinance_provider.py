@@ -9,6 +9,7 @@ Options Analytics Team — 2026-04-02
 """
 
 import logging
+import math
 import time
 import warnings
 from datetime import datetime, timedelta
@@ -20,6 +21,18 @@ import yfinance as yf
 from .base import ChainProvider, ChainSnapshot, HistoryData, OptionContract
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_int(val, default=0):
+    """Convert to int, treating NaN/None as default."""
+    if val is None:
+        return default
+    try:
+        if math.isnan(float(val)):
+            return default
+    except (TypeError, ValueError):
+        return default
+    return int(val)
 
 
 class YFinanceProvider(ChainProvider):
@@ -96,9 +109,9 @@ class YFinanceProvider(ChainProvider):
 
             for opt_type, df in [('call', chain.calls), ('put', chain.puts)]:
                 for _, row in df.iterrows():
-                    bid = float(row.get('bid', 0))
-                    ask = float(row.get('ask', 0))
-                    if bid <= 0 or ask <= 0:
+                    bid = float(row.get('bid', 0) or 0)
+                    ask = float(row.get('ask', 0) or 0)
+                    if math.isnan(bid) or math.isnan(ask) or bid <= 0 or ask <= 0:
                         continue
                     mid = (bid + ask) / 2.0
                     iv = float(row.get('impliedVolatility', float('nan')))
@@ -111,8 +124,8 @@ class YFinanceProvider(ChainProvider):
                         ask=ask,
                         mid=mid,
                         last=float(row.get('lastPrice', 0)),
-                        volume=int(row.get('volume', 0) or 0),
-                        open_interest=int(row.get('openInterest', 0) or 0),
+                        volume=_safe_int(row.get('volume', 0)),
+                        open_interest=_safe_int(row.get('openInterest', 0)),
                         implied_volatility=iv,
                     ))
 

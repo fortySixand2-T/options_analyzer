@@ -22,8 +22,9 @@ export default function Backtest() {
   const [biasFilter, setBiasFilter] = useState(false);
   const [dealerFilter, setDealerFilter] = useState(false);
   const [edgeThreshold, setEdgeThreshold] = useState(0);
+  const [slippage, setSlippage] = useState(3);
   const [compareMode, setCompareMode] = useState(false);
-  const [compareStrategies, setCompareStrategies] = useState(['iron_condor', 'short_put_spread']);
+  const [compareStrategies, setCompareStrategies] = useState(['iron_condor', 'long_call_spread']);
   const [showTrades, setShowTrades] = useState(false);
   const [sortCol, setSortCol] = useState('entry_date');
   const [sortAsc, setSortAsc] = useState(false);
@@ -37,6 +38,7 @@ export default function Backtest() {
     if (biasFilter) p.set('bias_filter', 'true');
     if (dealerFilter) p.set('dealer_filter', 'true');
     if (edgeThreshold > 0) p.set('edge_threshold', edgeThreshold);
+    if (slippage > 0) p.set('slippage_pct', (slippage / 100).toFixed(4));
     return p;
   }
 
@@ -114,11 +116,19 @@ export default function Backtest() {
             onChange={e => setEdgeThreshold(+e.target.value)} min={0} step={1} />
           %
         </label>
+        <label className="input-label">
+          Slippage
+          <input className="input small" type="number" value={slippage}
+            onChange={e => setSlippage(+e.target.value)} min={0} max={10} step={0.5} />
+          %
+        </label>
         <div className="toggle-group">
           <button className={`toggle ${exitRule === '50pct' ? 'active' : ''}`}
             onClick={() => setExitRule('50pct')}>50% Target</button>
           <button className={`toggle ${exitRule === 'hold' ? 'active' : ''}`}
             onClick={() => setExitRule('hold')}>Hold to Expiry</button>
+          <button className={`toggle ${exitRule === 'strategy' ? 'active' : ''}`}
+            onClick={() => setExitRule('strategy')}>Per-Strategy</button>
         </div>
       </div>
 
