@@ -104,6 +104,79 @@ Even the best configuration (regime filter, 7-10 DTE bucket) produces negative e
 
 During optimal market hours with aligned signals, scores reach 64. Weekend scans correctly show ~59 (below threshold) since execution isn't possible. The threshold is appropriately selective.
 
+## Data Limitations and Caveats
+
+These backtests use **real historical SPY price data** (daily OHLCV from yfinance) but **simulate option behavior** rather than replaying actual options markets. Results are meaningful for relative comparisons (strategy A vs B, filter ON vs OFF) but absolute P&L numbers would differ with real options data.
+
+### What's real
+- Underlying price data (daily OHLCV, 2022-2026)
+- Regime classification derived from realized volatility
+- 3% slippage applied symmetrically on entry and exit
+- Per-strategy exit rules (profit targets, stop losses, time exits)
+
+### What's simulated / assumed
+- **Option prices are modeled, not historical.** Spread P&L is derived from the underlying's price movement and assumed IV, not from actual bid/ask/mid prices on real option chains. Real chains have skew, term structure, and liquidity variation that the simulation doesn't capture.
+- **Slippage is a flat 3% assumption.** Real slippage varies by time of day, spread width, DTE, and liquidity. Short-DTE butterflies in illiquid strikes could see 10%+ slippage; tight SPY credit spreads might see 1%.
+- **Dealer and bias filters are untested.** The backtester has no historical dealer positioning or intraday bias data. BT1 (dealer) and BT3 (bias) returned identical ON/OFF results. The 20% dealer weight and 15% bias weight in confluence scoring are theoretical.
+- **No earnings, dividends, or early assignment.** The simulation doesn't account for ex-dividend dates, earnings IV crush, or early assignment risk on short legs.
+- **Single underlying (SPY).** Results may not generalize to QQQ, IWM, or individual stocks with different vol dynamics.
+
+### What's needed for real-world validation
+
+To move from simulated to real-world backtesting, the system needs historical options chain data. This is the single biggest gap.
+
+#### 1. Historical options chain data (critical)
+
+Actual daily (or intraday) snapshots of every option contract: strike, expiry, bid, ask, mid, IV, volume, open interest, Greeks.
+
+**Sources (by cost):**
+
+| Source | Coverage | Cost | Notes |
+|---|---|---|---|
+| CBOE DataShop | SPX/SPY/VIX, 2004+ | ~$1,000-3,000/dataset | Gold standard. End-of-day snapshots. |
+| OptionMetrics (IvyDB) | All US equities, 1996+ | Academic license or $5K+/yr | Best for research. Via WRDS if at a university. |
+| ThetaData | US equities, 2013+ | $30-100/mo | Intraday quotes, good API. Best value. |
+| Polygon.io | US equities, 2019+ | $30-200/mo | REST API, options snapshots. |
+| Tradier | US equities | $0 (delayed) / $10/mo (real-time) | Limited history depth. |
+| FirstRate Data | US equities, 2010+ | ~$100-500 one-time | CSV downloads. |
+
+**Recommended:** ThetaData ($30/mo) for development, CBOE DataShop for final validation of the 4-year backtest window.
+
+With real chain data, the backtester would:
+- Use actual bid/ask spreads instead of flat 3% slippage
+- Compute real IV at entry/exit for accurate P&L
+- Filter by actual liquidity (volume, OI) per strike
+- Capture IV crush, skew shifts, and term structure changes
+
+#### 2. Historical dealer positioning data (high value)
+
+Daily GEX, gamma flip, call/put walls, max pain, put/call ratio.
+
+| Source | Coverage | Cost |
+|---|---|---|
+| SpotGamma | SPY/SPX/QQQ, 2020+ | $50-500/mo |
+| SqueezeMetrics (DIX/GEX) | SPX, 2011+ | Free (DIX), $100/mo (detailed) |
+| FlashAlpha | Multi-name | Varies |
+
+With dealer history, BT1 (dealer filter) and the 20% dealer weight could be properly validated. If dealer data doesn't improve results, the weight should be redistributed.
+
+#### 3. Intraday price data (moderate value)
+
+1-minute or 5-minute bars for entry/exit timing validation. Currently the backtester uses daily bars, so intraday timing signals (entry window optimization) are untested.
+
+Available from yfinance (60 days), Polygon.io (2+ years), or ThetaData.
+
+#### 4. Historical bias signal replay (low cost)
+
+The bias detector uses daily OHLCV (EMA, RSI, MACD, etc.) which is already available from yfinance. The backtester just needs to compute bias signals per-day during the backtest loop rather than skipping them. This is a code change, not a data purchase.
+
+### Recommended upgrade path
+
+1. **Immediate (free):** Compute daily bias signals in the backtester to validate BT3. Code change only.
+2. **Short-term ($30/mo):** ThetaData subscription for historical chains. Replace simulated option P&L with actual chain-based P&L. Re-run all 6 backtests.
+3. **Medium-term ($50-100/mo):** Add SpotGamma or SqueezeMetrics for dealer history. Validate BT1 and the dealer weight.
+4. **Final validation:** CBOE DataShop for authoritative SPY chain data. Publish results with confidence intervals.
+
 ---
 
-*Generated 2026-04-26 from 6 validation backtests. Re-run after adding dealer/bias historical data or changing slippage assumptions.*
+*Generated 2026-04-26 from 6 validation backtests. Re-run after adding historical options chain data, dealer history, or changing slippage assumptions.*

@@ -189,4 +189,4 @@
 - [2026-04-26] Modified: src/sizing.py — Updated STRATEGY_STATS from 6 validation backtests: long_put_spread (Sharpe 3.38) and short_put_spread (Sharpe 1.14) now tradeable with edge>5% filter
 - [2026-04-26] Modified: src/market_state.py — Per-strategy edge gates: no gate for long_call_spread (edge filter hurts directional plays) and butterfly (pin strategy)
 - [2026-04-26] Modified: src/trade_generator.py — Fixed weekend timing penalty (neutral when market closed), adjusted dealer sub-score for debit strategies based on backtest validation
-- [2026-04-26] Created: VALIDATION_RESULTS.md — Full results from 6 validation backtests with strategy rankings and key decisions
+- [2026-04-26] Created: VALIDATION_RESULTS.md — Full results from 6 validation backtests with strategy rankings, key decisions, data limitations, and upgrade path
