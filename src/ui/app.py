@@ -165,6 +165,19 @@ def get_trade_candidates(symbol: str = Query("SPY", description="Symbol")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/portfolio")
+def get_portfolio():
+    """L4 portfolio snapshot — positions, Greeks, risk, hedge triggers."""
+    try:
+        from portfolio import Portfolio
+        # Return current portfolio state (empty if no positions yet)
+        pf = Portfolio()
+        return pf.to_dict()
+    except Exception as e:
+        logger.exception("Failed to get portfolio")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Scanner ────────────────���─────────────────────────────────────────────────
 
 @app.get("/api/scan")

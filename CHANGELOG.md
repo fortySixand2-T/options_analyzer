@@ -170,3 +170,6 @@
 - [2026-04-25] Modified: src/ui/app.py — Added GET /api/trade-candidates endpoint
 - [2026-04-25] Created: src/sizing.py — L3 Execution & Sizing: Kelly criterion, slippage model, spread cost check, position sizing
 - [2026-04-25] Created: tests/test_execution.py — 29 tests for Kelly, sizing, slippage, execution model
+- [2026-04-25] Created: src/portfolio.py — L4 Portfolio Engine: position tracking, Greeks limits, correlation risk, hedge triggers
+- [2026-04-25] Created: tests/test_portfolio.py — 34 tests for portfolio constraints, Greeks, correlation, hedging
+- [2026-04-25] Modified: src/ui/app.py — Added GET /api/portfolio endpoint
