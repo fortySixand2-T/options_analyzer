@@ -63,8 +63,10 @@ def parse_args(argv=None):
     p.add_argument('--edge-threshold', type=float, default=0.0,
                    help='Min GARCH edge %% to enter (default: 0)')
     p.add_argument('--exit-rule', type=str, default='50pct',
-                   choices=['50pct', 'hold'],
-                   help='Exit rule: 50pct profit target or hold to expiry')
+                   choices=['50pct', 'hold', 'strategy'],
+                   help='Exit rule: 50pct target, hold to expiry, or per-strategy rules')
+    p.add_argument('--slippage', type=float, default=0.0,
+                   help='Slippage as %% of premium (e.g., 3.0 = 3%%). Default: 0')
     p.add_argument('--verbose', '-v', action='store_true',
                    help='Verbose output')
     return p.parse_args(argv)
@@ -97,6 +99,8 @@ def print_result(result, label=None):
     if filters:
         print(f"  Filters: {', '.join(filters)}")
     print(f"  Exit rule: {req.exit_rule}")
+    if req.slippage_pct > 0:
+        print(f"  Slippage: {req.slippage_pct:.1f}% of premium")
 
     print()
     print(f"  Trades:         {stats.total_trades}")
@@ -302,6 +306,7 @@ def main(argv=None):
                     dealer_filter=args.dealer_filter,
                     edge_threshold=args.edge_threshold,
                     exit_rule=args.exit_rule,
+                    slippage_pct=args.slippage,
                 )
                 result = run_local_backtest(req)
                 print_result(result)
@@ -319,6 +324,7 @@ def main(argv=None):
         dealer_filter=args.dealer_filter,
         edge_threshold=args.edge_threshold,
         exit_rule=args.exit_rule,
+        slippage_pct=args.slippage,
     )
 
     result = run_local_backtest(req)

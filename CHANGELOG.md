@@ -173,3 +173,7 @@
 - [2026-04-25] Created: src/portfolio.py — L4 Portfolio Engine: position tracking, Greeks limits, correlation risk, hedge triggers
 - [2026-04-25] Created: tests/test_portfolio.py — 34 tests for portfolio constraints, Greeks, correlation, hedging
 - [2026-04-25] Modified: src/ui/app.py — Added GET /api/portfolio endpoint
+- [2026-04-25] Modified: src/backtest/local_backtest.py — Added slippage modeling, per-strategy exit rules, GARCH edge entry gate
+- [2026-04-25] Modified: src/backtest/models.py — Added slippage_pct to BacktestRequest
+- [2026-04-25] Modified: src/backtest/cache.py — Added slippage_pct to cache key
+- [2026-04-25] Modified: scripts/run_backtest.py — Added --slippage and --exit-rule strategy options

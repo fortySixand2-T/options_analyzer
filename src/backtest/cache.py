@@ -50,6 +50,7 @@ def _cache_key(request: BacktestRequest) -> str:
         "bias_filter": request.bias_filter,
         "dealer_filter": request.dealer_filter,
         "edge_threshold": request.edge_threshold,
+        "slippage_pct": request.slippage_pct,
     }
     raw = json.dumps(key_data, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()[:32]

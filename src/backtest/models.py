@@ -30,6 +30,7 @@ class BacktestRequest(BaseModel):
     bias_filter: bool = False               # only enter when directional bias aligns
     dealer_filter: bool = False             # only enter when dealer regime matches
     edge_threshold: float = 0.0             # min GARCH edge % to enter
+    slippage_pct: float = 0.0               # % of premium lost to slippage (e.g., 3.0 = 3%)
 
 
 class BacktestTrade(BaseModel):

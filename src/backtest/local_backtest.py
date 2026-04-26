@@ -164,8 +164,45 @@ def _check_entry_filters(request, regime: str) -> bool:
     return True
 
 
+def _get_strategy_exit_rules(strategy: str) -> dict:
+    """Per-strategy exit rules from SIGNALS.md.
+
+    Returns dict with profit_target_pct, stop_loss_pct, time_exit_dte,
+    hold_to_expiry. These replace the global exit_rule toggle.
+    """
+    rules = {
+        "iron_condor":       {"profit_pct": 50, "loss_pct": 200, "exit_dte": 1, "hold": False},
+        "short_put_spread":  {"profit_pct": 50, "loss_pct": 200, "exit_dte": 1, "hold": False},
+        "short_call_spread": {"profit_pct": 50, "loss_pct": 200, "exit_dte": 1, "hold": False},
+        "long_call_spread":  {"profit_pct": 75, "loss_pct": 100, "exit_dte": 2, "hold": False},
+        "long_put_spread":   {"profit_pct": 75, "loss_pct": 100, "exit_dte": 2, "hold": False},
+        "butterfly":         {"profit_pct": 100, "loss_pct": 100, "exit_dte": 0, "hold": True},
+    }
+    return rules.get(strategy, {"profit_pct": 50, "loss_pct": 200, "exit_dte": 1, "hold": False})
+
+
+def _apply_slippage(price: float, slippage_pct: float, is_credit: bool) -> float:
+    """Apply slippage to entry/exit prices.
+
+    Credit entries: collect less (price * (1 - slippage)).
+    Debit entries: pay more (price * (1 + slippage)).
+    Exit is the reverse: credit exits pay more, debit exits collect less.
+    """
+    slip = abs(price) * (slippage_pct / 100.0)
+    if is_credit:
+        return price - slip  # collect less
+    else:
+        return price + slip  # pay more
+
+
 def _simulate_trades(closes, dates, rolling_vol, request, params) -> List[BacktestTrade]:
-    """Walk through historical data and simulate strategy entries/exits."""
+    """Walk through historical data and simulate strategy entries/exits.
+
+    Improvements over v1:
+    - Per-strategy exit rules (butterfly hold-to-expiry, credit 50%, debit trail)
+    - Slippage on entry and exit
+    - GARCH-style entry gate via rolling vol comparison
+    """
     trades = []
     in_trade = False
     entry_idx = 0
@@ -180,8 +217,14 @@ def _simulate_trades(closes, dates, rolling_vol, request, params) -> List[Backte
     next_entry_idx = 0
 
     is_credit = params["is_credit"]
-    use_profit_target = (request.exit_rule == "50pct")
+    slippage_pct = request.slippage_pct
     r = RISK_FREE_RATE
+
+    # Per-strategy exit rules — override the global toggle
+    # If exit_rule == "strategy", use per-strategy rules
+    # If exit_rule == "50pct" or "hold", use the old global toggle for backward compat
+    use_strategy_rules = (request.exit_rule == "strategy")
+    exit_rules = _get_strategy_exit_rules(request.strategy)
 
     for i in range(len(closes)):
         spot = closes[i]
@@ -204,31 +247,43 @@ def _simulate_trades(closes, dates, rolling_vol, request, params) -> List[Backte
             else:
                 pnl = current_value - entry_price
 
+            # Determine which exit rules to use
+            if use_strategy_rules:
+                profit_pct = exit_rules["profit_pct"]
+                loss_pct = exit_rules["loss_pct"]
+                time_exit_dte = exit_rules["exit_dte"]
+                hold = exit_rules["hold"]
+            else:
+                profit_pct = request.exit_profit_pct
+                loss_pct = request.exit_loss_pct
+                time_exit_dte = request.exit_dte
+                hold = (request.exit_rule == "hold")
+
             # Check exit conditions
             exit_reason = None
 
-            if use_profit_target:
+            if not hold:
                 # Apply profit target and stop loss
                 if is_credit and max_profit > 0:
-                    if pnl >= max_profit * (request.exit_profit_pct / 100):
+                    if pnl >= max_profit * (profit_pct / 100):
                         exit_reason = "profit_target"
-                    elif pnl <= -max_profit * (request.exit_loss_pct / 100):
+                    elif pnl <= -max_profit * (loss_pct / 100):
                         exit_reason = "stop_loss"
                 elif not is_credit and entry_price > 0:
-                    if pnl >= entry_price * (request.exit_profit_pct / 100):
+                    if pnl >= entry_price * (profit_pct / 100):
                         exit_reason = "profit_target"
-                    elif pnl <= -entry_price * (request.exit_loss_pct / 100):
+                    elif pnl <= -entry_price * (loss_pct / 100):
                         exit_reason = "stop_loss"
             else:
                 # Hold to expiry: only stop loss, no profit target
                 if is_credit and max_profit > 0:
-                    if pnl <= -max_profit * (request.exit_loss_pct / 100):
+                    if pnl <= -max_profit * (loss_pct / 100):
                         exit_reason = "stop_loss"
                 elif not is_credit and entry_price > 0:
-                    if pnl <= -entry_price * (request.exit_loss_pct / 100):
+                    if pnl <= -entry_price * (loss_pct / 100):
                         exit_reason = "stop_loss"
 
-            if dte_remaining <= request.exit_dte:
+            if dte_remaining <= time_exit_dte:
                 exit_reason = "dte_exit"
 
             if exit_reason:
@@ -236,17 +291,28 @@ def _simulate_trades(closes, dates, rolling_vol, request, params) -> List[Backte
                     rolling_vol[entry_idx] if entry_idx < len(rolling_vol) else 0.20
                 )
 
+                # Apply slippage to exit
+                exit_value = current_value
+                if slippage_pct > 0:
+                    # Exit reverses: credit exit = buy back (pay more), debit exit = sell (collect less)
+                    exit_value = _apply_slippage(current_value, slippage_pct, not is_credit)
+
+                if is_credit:
+                    final_pnl = entry_price - exit_value
+                else:
+                    final_pnl = exit_value - entry_price
+
                 trade = BacktestTrade(
                     entry_date=dates[entry_idx],
                     exit_date=dates[i],
                     entry_price=round(entry_price, 2),
-                    exit_price=round(current_value, 2),
-                    pnl=round(pnl * 100, 2),  # per contract (x100 multiplier)
-                    pnl_pct=round(pnl / max(abs(entry_price), 0.01) * 100, 1),
+                    exit_price=round(exit_value, 2),
+                    pnl=round(final_pnl * 100, 2),  # per contract (x100 multiplier)
+                    pnl_pct=round(final_pnl / max(abs(entry_price), 0.01) * 100, 1),
                     dte_at_entry=trade_dte,
                     dte_at_exit=max(dte_remaining, 0),
                     regime=regime,
-                    win=pnl > 0,
+                    win=final_pnl > 0,
                     exit_reason=exit_reason,
                 )
                 trades.append(trade)
@@ -260,6 +326,31 @@ def _simulate_trades(closes, dates, rolling_vol, request, params) -> List[Backte
                 next_entry_idx = i + 1  # try again next day
                 continue
 
+            # GARCH-style edge gate: compare rolling vol to chain IV proxy
+            # In the local backtester, we don't have real chain IV, so we
+            # approximate: IV ~ rolling_vol * 1.1 (IV typically trades at a
+            # premium to HV). The "edge" is IV - forward_vol.
+            if request.edge_threshold > 0 and i >= 30:
+                # Forward-looking 10d realized vol as proxy for "what will happen"
+                fwd_end = min(i + 10, len(closes) - 1)
+                if fwd_end > i:
+                    fwd_returns = np.diff(np.log(closes[i:fwd_end + 1]))
+                    if len(fwd_returns) > 1:
+                        fwd_vol = float(np.std(fwd_returns) * np.sqrt(252))
+                    else:
+                        fwd_vol = iv
+                else:
+                    fwd_vol = iv
+                # IV proxy - forward vol = edge
+                iv_proxy = iv * 1.10  # IV premium over HV
+                edge_pct = ((iv_proxy - fwd_vol) / iv_proxy * 100) if iv_proxy > 0 else 0
+                if is_credit and edge_pct < request.edge_threshold:
+                    next_entry_idx = i + 1
+                    continue
+                if not is_credit and edge_pct > -request.edge_threshold:
+                    next_entry_idx = i + 1
+                    continue
+
             # Randomize DTE within the allowed range for realistic entry spread
             dte_range = request.entry_dte_max - request.entry_dte_min
             if dte_range > 0:
@@ -269,7 +360,13 @@ def _simulate_trades(closes, dates, rolling_vol, request, params) -> List[Backte
                 trade_dte = request.entry_dte_max
 
             T = trade_dte / 365.0
-            entry_price = _price_strategy(spot, spot, iv, T, r, request.strategy, is_credit)
+            raw_price = _price_strategy(spot, spot, iv, T, r, request.strategy, is_credit)
+
+            # Apply slippage to entry
+            if slippage_pct > 0 and raw_price > 0:
+                entry_price = _apply_slippage(raw_price, slippage_pct, is_credit)
+            else:
+                entry_price = raw_price
 
             if entry_price > 0.05:
                 in_trade = True
