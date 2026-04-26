@@ -146,6 +146,25 @@ def get_market_state(symbol: str = Query("SPY", description="Symbol")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/trade-candidates")
+def get_trade_candidates(symbol: str = Query("SPY", description="Symbol")):
+    """L2 trade candidates — confluence-scored trades from market state."""
+    try:
+        from market_state import build_market_state
+        from trade_generator import generate_trades
+        state = build_market_state(symbol.upper())
+        trades = generate_trades(state)
+        return {
+            "symbol": symbol.upper(),
+            "market_state": state.to_dict(),
+            "candidates": [t.to_dict() for t in trades],
+            "count": len(trades),
+        }
+    except Exception as e:
+        logger.exception("Failed to generate trade candidates for %s", symbol)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Scanner ────────────────���─────────────────────────────────────────────────
 
 @app.get("/api/scan")

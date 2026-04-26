@@ -165,3 +165,6 @@
 - [2026-04-25] Created: tests/test_market_state.py — 18 tests for MarketState, VolSurface, ChainQuality
 - [2026-04-25] Modified: src/ui/app.py — Added GET /api/market-state endpoint
 - [2026-04-25] Modified: tests/test_scanner.py — Fixed date_range mismatch causing 10 test failures
+- [2026-04-25] Created: src/trade_generator.py — L2 Trade Generation: confluence scoring, per-strategy exit rules, vol-surface strike selection, intraday timing
+- [2026-04-25] Created: tests/test_trade_generator.py — 56 tests for L2 trade generator (sub-scores, legs, DTE, timing, end-to-end)
+- [2026-04-25] Modified: src/ui/app.py — Added GET /api/trade-candidates endpoint
