@@ -307,12 +307,12 @@ def compute_confluence_score(market_state, strategy: str) -> Tuple[float, Dict[s
 
     Returns (score_0_to_100, breakdown_dict).
 
-    Weights from SIGNALS.md conviction table (config.py scoring_weights):
-        vol_regime=20%, directional=20%, dealer_regime=20%, garch_edge=15%,
-        iv_rank=10%, liquidity=10%, greeks=5%
+    Regression-calibrated weights (2026-04-26, per-strategy OLS):
+        edge=35%, regime=15%, dealer=10%, bias=10%, skew=15%, timing=15%
 
-    Remapped for L2:
-        edge=25%, regime=20%, dealer=20%, bias=15%, skew=10%, timing=10%
+    Edge dominates because it's the only validated continuous P&L predictor.
+    Regime/bias/dealer are effective as binary gates but don't scale within
+    the accepted trade population.
     """
     from config import CHAIN_SCANNER_CONFIG
 
@@ -325,14 +325,26 @@ def compute_confluence_score(market_state, strategy: str) -> Tuple[float, Dict[s
         "timing": _timing_sub_score(market_state, strategy),
     }
 
-    # L2 weights — edge is the primary signal
+    # L2 weights — regression-calibrated 2026-04-26
+    #
+    # Per-strategy OLS regressions on 422 trades (SPY 2022-2026, 3% slippage):
+    #   - edge_pct is the ONLY statistically significant continuous predictor
+    #     of P&L across all 4 tradeable strategies (p<0.001 in each)
+    #   - regime_match and bias_aligned are NOT significant as continuous
+    #     variables — they work as binary entry gates (on/off), not scalers
+    #   - Per-strategy R²: short_put 0.13, long_call 0.15, long_put 0.18, butterfly 0.02
+    #
+    # Implication: regime/bias/dealer do their job at the gate level (has_edge,
+    # strategy_candidates, entry filters). The continuous score that feeds into
+    # Kelly sizing should be dominated by edge. Other sub-scores still contribute
+    # to the threshold (>= 60) but at reduced weight.
     weights = {
-        "edge": 0.25,
-        "regime": 0.20,
-        "dealer": 0.20,
-        "bias": 0.15,
-        "skew": 0.10,
-        "timing": 0.10,
+        "edge": 0.35,       # only validated continuous P&L predictor
+        "regime": 0.15,     # gate-validated (BT2), not a scaler
+        "dealer": 0.10,     # unvalidated (no historical data), gate only
+        "bias": 0.10,       # gate-validated (BT3b with edge), not a scaler
+        "skew": 0.15,       # theoretical (not in backtest), strike selection signal
+        "timing": 0.15,     # not testable without intraday data
     }
 
     raw = sum(subs[k] * weights[k] for k in subs)

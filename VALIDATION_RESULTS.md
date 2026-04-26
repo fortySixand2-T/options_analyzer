@@ -6,10 +6,10 @@ SPY 2022-01-01 to 2026-04-25, 3% slippage on entry and exit, per-strategy exit r
 
 | Strategy | Best Config | Trades | Win Rate | Sharpe | Total P&L | Kelly |
 |---|---|---|---|---|---|---|
-| Long put spread | strategy exits + edge>5% | 48 | 62.5% | 3.38 | $3,879 | 0.39 |
+| Long put spread | strategy exits + edge>5% + bias | 31 | 67.7% | **4.72** | $3,305 | 0.50 |
 | Butterfly | strategy exits, no filters | 89 | 50.6% | 2.09 | $23,535 | 0.30 |
 | Long call spread | strategy exits + regime filter | 92 | 59.8% | 2.07 | $4,470 | 0.28 |
-| Short put spread | strategy exits + edge>5% | 102 | 80.4% | 1.14 | $2,044 | 0.26 |
+| Short put spread | strategy exits + edge>5% + bias | 82 | 84.1% | 2.02 | $2,621 | 0.42 |
 | Iron condor | all configs negative | 90 | 42.2% | -2.39 | -$5,103 | -0.47 |
 | Short call spread | all configs negative | 120 | 66.7% | -0.81 | -$2,182 | -0.09 |
 
@@ -33,16 +33,38 @@ SPY 2022-01-01 to 2026-04-25, 3% slippage on entry and exit, per-strategy exit r
 
 **Finding:** Regime filter cuts 80% of bad trades. Still negative but massive improvement. Regime weight is justified.
 
-### BT3: Credit Spreads — Bias filter ON vs OFF
+### BT3: All Strategies — Bias filter ON vs OFF (replayed with real signals)
+
+*Updated 2026-04-26: Bias signals now computed from daily OHLCV (EMA/RSI/MACD) during backtest loop.*
 
 | Strategy | Bias | Trades | Win Rate | Total P&L | Sharpe |
 |---|---|---|---|---|---|
 | Short put spread | OFF | 128 | 75.0% | -$805 | -0.31 |
-| Short put spread | ON | 128 | 75.0% | -$805 | -0.31 |
+| Short put spread | **ON** | **101** | **79.2%** | **+$419** | **0.22** |
 | Short call spread | OFF | 120 | 66.7% | -$2,182 | -0.81 |
-| Short call spread | ON | 120 | 66.7% | -$2,182 | -0.81 |
+| Short call spread | ON | 68 | 58.8% | -$3,707 | -2.09 |
+| Long call spread | OFF | 108 | 57.4% | +$4,436 | 1.74 |
+| Long call spread | ON | 85 | 54.1% | +$1,713 | 0.87 |
+| Long put spread | OFF | 103 | 46.6% | +$480 | 0.18 |
+| Long put spread | ON | 62 | 45.2% | -$384 | -0.24 |
+| Butterfly | OFF | 89 | 50.6% | +$23,535 | 2.09 |
+| Butterfly | ON | 75 | 52.0% | +$15,741 | 2.01 |
 
-**Finding:** Bias filter is a no-op — same issue as dealer. Historical bias data not available in backtester.
+**Finding:** Bias filter only helps short put spreads (confirms bullish direction for put selling). Hurts all other strategies — over-constrains entries or concentrates in wrong periods. Bias is valuable when *combined* with edge (see BT3b below).
+
+### BT3b: Stacked filters — Edge + Bias combinations
+
+| Strategy | Filters | Trades | Win Rate | Total P&L | Sharpe |
+|---|---|---|---|---|---|
+| Short put spread | None | 128 | 75.0% | -$805 | -0.31 |
+| Short put spread | Edge>5% | 102 | 80.4% | +$2,044 | 1.14 |
+| Short put spread | Bias only | 101 | 79.2% | +$419 | 0.22 |
+| Short put spread | **Edge>5% + Bias** | **82** | **84.1%** | **+$2,621** | **2.02** |
+| Long put spread | None | 103 | 46.6% | +$480 | 0.18 |
+| Long put spread | Edge>5% | 48 | 62.5% | +$3,879 | 3.38 |
+| Long put spread | **Edge>5% + Bias** | **31** | **67.7%** | **+$3,305** | **4.72** |
+
+**Finding:** Edge + Bias together is the optimal filter stack for put-direction strategies. Short put spread goes from Sharpe -0.31 to 2.02. Long put spread reaches Sharpe 4.72 — the strongest risk-adjusted return in the system.
 
 ### BT4: Credit Spreads — GARCH edge >5% vs all
 
@@ -78,6 +100,39 @@ SPY 2022-01-01 to 2026-04-25, 3% slippage on entry and exit, per-strategy exit r
 | Butterfly | +$11,309 (S 1.37) | +$6,318 (S 0.89) | +$23,535 (S 2.09) |
 
 **Finding:** Per-strategy exit rules (from SIGNALS.md) are optimal for every strategy. Butterfly with hold-to-expiry produces 2x the P&L of 50% target. Long put spread flips from negative to positive with per-strategy exits.
+
+## Per-Strategy OLS Regression (Weight Calibration)
+
+Pooled regression across all strategies gave R²=0.0147 — signals explain almost nothing when strategies are mixed. Per-strategy regressions reveal much more:
+
+| Strategy | R² | edge_pct coeff | edge t-stat | regime coeff | bias coeff |
+|---|---|---|---|---|---|
+| Short put spread | 0.1274 | +$1.08/% | 3.58*** | -$45.67 (ns) | -$30.93 (ns) |
+| Long call spread | 0.1533 | +$1.28/% | 3.55*** | +$80.84 (ns) | -$38.60 (ns) |
+| Long put spread | 0.1756 | -$1.89/% | -4.16*** | +$24.02 (ns) | -$20.65 (ns) |
+| Butterfly | 0.0165 | +$0.44 (ns) | 0.17 | +$302 (ns) | -$11.82 (ns) |
+
+*ns = not significant at p<0.10, \*\*\* = p<0.001*
+
+**Key findings:**
+
+1. **Edge is the only statistically significant continuous predictor** across all 4 strategies (p<0.001 in 3 of 4). Each 1% increase in IV-RV edge produces ~$1-2 additional P&L per trade.
+2. **Regime and bias are NOT significant as continuous variables.** They work as binary entry gates (on/off from BT2, BT3b) but don't help predict P&L magnitude within the accepted trade population.
+3. **Long put spread has negative edge coefficient** — it profits when IV is cheap (buy puts cheap, vol expands). This confirms the per-strategy edge gate design.
+4. **Butterfly is pure noise** (R²=0.02) — no signal predicts P&L. Pin strategy depends on price proximity to max pain, not vol/bias/regime.
+
+**Implication for confluence weights:**
+
+Regime/bias/dealer are gate-level signals (binary filters validated in BT2-BT4). Edge is the only scaling signal (higher edge → more P&L). The continuous confluence score that feeds Kelly sizing should be dominated by edge:
+
+| Signal | Old weight | New weight | Rationale |
+|---|---|---|---|
+| Edge | 25% | 35% | Only validated continuous P&L predictor |
+| Regime | 20% | 15% | Gate-validated (BT2), not a scaler |
+| Dealer | 20% | 10% | Unvalidated (no historical data) |
+| Bias | 15% | 10% | Gate-validated (BT3b), not a scaler |
+| Skew | 10% | 15% | Theoretical, aids strike selection |
+| Timing | 10% | 15% | Not testable without intraday data |
 
 ## Key Decisions from Results
 

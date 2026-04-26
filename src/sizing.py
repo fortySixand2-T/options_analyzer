@@ -24,17 +24,19 @@ logger = logging.getLogger(__name__)
 
 
 # ── Backtest-derived stats per strategy ───────────────────────────────────────
-# Updated 2026-04-26 from 6 validation backtests: SPY 2022-2026, 3% slippage,
-# per-strategy exit rules, with optimal filter configurations.
+# Updated 2026-04-26 from validation backtests with bias signal replay.
+# SPY 2022-2026, 3% slippage, per-strategy exit rules.
 #
-# Key finding: strategy viability depends heavily on filter + exit rule combo.
-# Stats below use each strategy's best validated configuration:
-#   - butterfly:          strategy exits, no filters needed      (Sharpe 2.09)
-#   - long_put_spread:    strategy exits + GARCH edge > 5%       (Sharpe 3.38)
-#   - long_call_spread:   strategy exits + regime filter         (Sharpe 2.07)
-#   - short_put_spread:   strategy exits + GARCH edge > 5%       (Sharpe 1.14)
+# Each strategy uses its best validated filter combination:
+#   - butterfly:          strategy exits, no filters             (Sharpe 2.09, 89 trades)
+#   - long_put_spread:    strategy exits + edge>5% + bias        (Sharpe 4.72, 31 trades)
+#   - long_call_spread:   strategy exits + regime filter         (Sharpe 2.07, 92 trades)
+#   - short_put_spread:   strategy exits + edge>5% + bias        (Sharpe 2.02, 82 trades)
 #   - iron_condor:        negative in all configs                (Sharpe -2.39)
 #   - short_call_spread:  negative in all configs                (Sharpe -0.81)
+#
+# Bias filter validated 2026-04-26: helps put-direction strategies when
+# combined with edge gate. Hurts call-direction strategies (over-constrains).
 
 @dataclass(frozen=True)
 class StrategyStats:
@@ -51,8 +53,8 @@ STRATEGY_STATS: Dict[str, StrategyStats] = {
         kelly=-0.47, tradeable=False,
     ),
     "short_put_spread": StrategyStats(
-        win_rate=0.804, avg_win=77, avg_loss=212,
-        kelly=0.26, tradeable=True,   # requires GARCH edge > 5%
+        win_rate=0.841, avg_win=75, avg_loss=198,
+        kelly=0.42, tradeable=True,   # requires edge>5% + bullish bias
     ),
     "short_call_spread": StrategyStats(
         win_rate=0.667, avg_win=80, avg_loss=237,
@@ -60,11 +62,11 @@ STRATEGY_STATS: Dict[str, StrategyStats] = {
     ),
     "long_call_spread": StrategyStats(
         win_rate=0.598, avg_win=176, avg_loss=140,
-        kelly=0.28, tradeable=True,   # benefits from regime filter
+        kelly=0.28, tradeable=True,   # benefits from regime filter, no bias gate
     ),
     "long_put_spread": StrategyStats(
-        win_rate=0.625, avg_win=206, avg_loss=127,
-        kelly=0.39, tradeable=True,   # requires GARCH edge > 5%
+        win_rate=0.677, avg_win=211, avg_loss=113,
+        kelly=0.50, tradeable=True,   # requires edge>5% + bearish bias
     ),
     "butterfly": StrategyStats(
         win_rate=0.506, avg_win=869, avg_loss=354,

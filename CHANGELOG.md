@@ -190,3 +190,10 @@
 - [2026-04-26] Modified: src/market_state.py — Per-strategy edge gates: no gate for long_call_spread (edge filter hurts directional plays) and butterfly (pin strategy)
 - [2026-04-26] Modified: src/trade_generator.py — Fixed weekend timing penalty (neutral when market closed), adjusted dealer sub-score for debit strategies based on backtest validation
 - [2026-04-26] Created: VALIDATION_RESULTS.md — Full results from 6 validation backtests with strategy rankings, key decisions, data limitations, and upgrade path
+- [2026-04-26] Modified: src/backtest/local_backtest.py — Added daily bias signal replay (EMA/RSI/MACD computed from historical OHLCV per-day in backtest loop)
+- [2026-04-26] Modified: src/backtest/models.py — Added bias_score, bias_label, edge_pct, iv_at_entry signal snapshot fields to BacktestTrade
+- [2026-04-26] Modified: VALIDATION_RESULTS.md — Added BT3 bias filter results and BT3b stacked filter (edge+bias) results; added Per-Strategy OLS Regression section with weight calibration
+- [2026-04-26] Modified: src/sizing.py — Updated STRATEGY_STATS with edge+bias filter results: short_put_spread Sharpe 2.02, long_put_spread Sharpe 4.72
+- [2026-04-26] Modified: src/trade_generator.py — Regression-calibrated confluence weights: edge 25%→35%, regime 20%→15%, dealer 20%→10%, bias 15%→10%, skew 10%→15%, timing 10%→15%
+- [2026-04-26] Modified: TRADING_SYSTEM_ARCHITECTURE.md — Marked regression weight calibration (1a) as done; updated with validated backtest state
+- [2026-04-26] Created: scripts/per_strategy_regression.py — Per-strategy OLS regression script for confluence weight calibration

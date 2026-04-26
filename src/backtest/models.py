@@ -47,6 +47,11 @@ class BacktestTrade(BaseModel):
     score: Optional[float] = None           # strategy score at entry
     win: bool = False
     exit_reason: str = ""                   # "profit_target", "stop_loss", "expiry", "dte_exit"
+    # Signal snapshots at entry — for regression-based weight calibration
+    bias_score: Optional[int] = None        # directional bias score at entry
+    bias_label: Optional[str] = None        # e.g. "LEAN_BULLISH"
+    edge_pct: Optional[float] = None        # IV-RV edge % at entry
+    iv_at_entry: Optional[float] = None     # rolling vol at entry
 
 
 class BacktestStats(BaseModel):

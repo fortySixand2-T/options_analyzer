@@ -57,7 +57,7 @@ def run_local_backtest(request: BacktestRequest) -> BacktestResult:
                 request.start_date, request.end_date)
 
     # Fetch historical data
-    closes, dates = _fetch_history(request.symbol, request.start_date, request.end_date)
+    closes, dates, ohlcv_df = _fetch_history(request.symbol, request.start_date, request.end_date)
     if len(closes) < 30:
         logger.warning("Insufficient history for %s", request.symbol)
         return BacktestResult(
@@ -78,6 +78,7 @@ def run_local_backtest(request: BacktestRequest) -> BacktestResult:
         rolling_vol=rolling_vol,
         request=request,
         params=params,
+        ohlcv_df=ohlcv_df,
     )
 
     stats = analyze_results(trades)
@@ -106,15 +107,20 @@ def run_local_backtest(request: BacktestRequest) -> BacktestResult:
 
 
 def _fetch_history(symbol: str, start: date, end: date):
-    """Fetch historical closes from yfinance."""
+    """Fetch historical OHLCV from yfinance.
+
+    Returns (closes, dates, ohlcv_df) where ohlcv_df is the full DataFrame
+    needed for bias detection. The closes array and dates list maintain
+    backward compatibility.
+    """
     import yfinance as yf
     ticker = yf.Ticker(symbol)
     hist = ticker.history(start=start.isoformat(), end=end.isoformat())
     if hist.empty:
-        return np.array([]), []
+        return np.array([]), [], None
     closes = hist['Close'].values
     dates = [d.date() for d in hist.index]
-    return closes, dates
+    return closes, dates, hist
 
 
 def _rolling_vol(returns: np.ndarray, window: int = 20) -> np.ndarray:
@@ -139,7 +145,26 @@ def _classify_regime(iv: float) -> str:
         return "LOW_IV"
 
 
-def _check_entry_filters(request, regime: str) -> bool:
+def _compute_bias_at_index(ohlcv_df, idx: int, lookback: int = 30):
+    """Compute directional bias from OHLCV ending at index idx.
+
+    Returns (bias_score, bias_label) or (None, None) if insufficient data.
+    Requires at least `lookback` rows of history.
+    """
+    if ohlcv_df is None or idx < lookback:
+        return None, None
+    try:
+        from bias_detector import detect_bias
+        window = ohlcv_df.iloc[max(0, idx - lookback):idx + 1].copy()
+        if len(window) < lookback:
+            return None, None
+        result = detect_bias(window)
+        return result.score, result.label
+    except Exception:
+        return None, None
+
+
+def _check_entry_filters(request, regime: str, bias_score=None, bias_label=None) -> bool:
     """Check if signal filters allow entry. Returns True if entry is allowed."""
     if request.regime_filter:
         # Only enter when regime matches the strategy's ideal regime
@@ -155,11 +180,22 @@ def _check_entry_filters(request, regime: str) -> bool:
         if regime not in allowed:
             return False
 
-    # Note: bias_filter, dealer_filter, and edge_threshold cannot be
-    # meaningfully applied in the local backtester since we don't have
-    # historical dealer positioning or real-time bias signals.
-    # They are included in the request model for the UI toggles and
-    # future integration with historical signal data.
+    if request.bias_filter and bias_score is not None:
+        # Check if directional bias aligns with strategy direction
+        bullish_strategies = {"short_put_spread", "long_call_spread"}
+        bearish_strategies = {"short_call_spread", "long_put_spread"}
+        neutral_strategies = {"iron_condor", "butterfly"}
+
+        if request.strategy in bullish_strategies and bias_score < 2:
+            return False  # need bullish bias
+        if request.strategy in bearish_strategies and bias_score > -2:
+            return False  # need bearish bias
+        if request.strategy in neutral_strategies and abs(bias_score) > 3:
+            return False  # need neutral bias
+
+    # Note: dealer_filter cannot be applied in the local backtester
+    # since we don't have historical dealer positioning data.
+    # This requires a data subscription (SpotGamma, SqueezeMetrics).
 
     return True
 
@@ -195,13 +231,15 @@ def _apply_slippage(price: float, slippage_pct: float, is_credit: bool) -> float
         return price + slip  # pay more
 
 
-def _simulate_trades(closes, dates, rolling_vol, request, params) -> List[BacktestTrade]:
+def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None) -> List[BacktestTrade]:
     """Walk through historical data and simulate strategy entries/exits.
 
     Improvements over v1:
     - Per-strategy exit rules (butterfly hold-to-expiry, credit 50%, debit trail)
     - Slippage on entry and exit
     - GARCH-style entry gate via rolling vol comparison
+    - Daily bias signal computation from OHLCV for directional filter
+    - Per-trade signal snapshots for regression-based weight calibration
     """
     trades = []
     in_trade = False
@@ -211,6 +249,9 @@ def _simulate_trades(closes, dates, rolling_vol, request, params) -> List[Backte
     max_profit = 0.0
     max_loss = 0.0
     trade_dte = 0  # actual DTE at entry
+    entry_bias_score = None
+    entry_bias_label = None
+    entry_edge_pct = None
 
     # Entry frequency: every entry_dte_min days
     entry_interval = max(request.entry_dte_min, 7)
@@ -314,15 +355,22 @@ def _simulate_trades(closes, dates, rolling_vol, request, params) -> List[Backte
                     regime=regime,
                     win=final_pnl > 0,
                     exit_reason=exit_reason,
+                    bias_score=entry_bias_score,
+                    bias_label=entry_bias_label,
+                    edge_pct=round(entry_edge_pct, 2) if entry_edge_pct is not None else None,
+                    iv_at_entry=round(rolling_vol[entry_idx], 4) if entry_idx < len(rolling_vol) else None,
                 )
                 trades.append(trade)
                 in_trade = False
                 next_entry_idx = i + 5  # cool-off period
 
         elif i >= next_entry_idx:
+            # Compute bias at this point in time
+            bias_score, bias_label = _compute_bias_at_index(ohlcv_df, i)
+
             # Check signal filters before entering
             regime = _classify_regime(iv)
-            if not _check_entry_filters(request, regime):
+            if not _check_entry_filters(request, regime, bias_score, bias_label):
                 next_entry_idx = i + 1  # try again next day
                 continue
 
@@ -372,6 +420,20 @@ def _simulate_trades(closes, dates, rolling_vol, request, params) -> List[Backte
                 in_trade = True
                 entry_idx = i
                 entry_spot = spot
+                entry_bias_score = bias_score
+                entry_bias_label = bias_label
+                # Capture edge at entry (same calculation as the filter)
+                if i >= 30:
+                    fwd_end = min(i + 10, len(closes) - 1)
+                    if fwd_end > i:
+                        fwd_returns = np.diff(np.log(closes[i:fwd_end + 1]))
+                        fwd_vol = float(np.std(fwd_returns) * np.sqrt(252)) if len(fwd_returns) > 1 else iv
+                    else:
+                        fwd_vol = iv
+                    iv_proxy = iv * 1.10
+                    entry_edge_pct = ((iv_proxy - fwd_vol) / iv_proxy * 100) if iv_proxy > 0 else 0
+                else:
+                    entry_edge_pct = None
                 if is_credit:
                     max_profit = entry_price
                     max_loss = entry_price * 2  # approximate for spreads
