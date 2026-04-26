@@ -177,3 +177,5 @@
 - [2026-04-25] Modified: src/backtest/models.py — Added slippage_pct to BacktestRequest
 - [2026-04-25] Modified: src/backtest/cache.py — Added slippage_pct to cache key
 - [2026-04-25] Modified: scripts/run_backtest.py — Added --slippage and --exit-rule strategy options
+- [2026-04-25] Modified: src/sizing.py — Updated STRATEGY_STATS from backtests with 3% slippage (only long_call_spread and butterfly tradeable)
+- [2026-04-25] Modified: src/ui/app.py — Wired L1→L2→L3 pipeline in /api/trade-candidates, made portfolio stateful

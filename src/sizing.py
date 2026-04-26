@@ -25,7 +25,10 @@ logger = logging.getLogger(__name__)
 
 # ── Backtest-derived stats per strategy ───────────────────────────────────────
 # From TRADING_SYSTEM_ARCHITECTURE.md backtest results.
-# These are the baseline — should be updated as backtests improve.
+# Updated 2026-04-25 from backtests: SPY 2022-2026, 3% slippage, per-strategy exits.
+# Only long_call_spread (Sharpe 0.70) and butterfly (Sharpe 1.89) survive.
+# Credit strategies are negative Kelly even with regime+edge filters.
+# Long put spread is net negative (SPY bullish drift hurts puts).
 
 @dataclass(frozen=True)
 class StrategyStats:
@@ -38,28 +41,28 @@ class StrategyStats:
 
 STRATEGY_STATS: Dict[str, StrategyStats] = {
     "iron_condor": StrategyStats(
-        win_rate=0.43, avg_win=118, avg_loss=171,
-        kelly=-0.38, tradeable=False,
+        win_rate=0.378, avg_win=85, avg_loss=197,
+        kelly=-0.47, tradeable=False,
     ),
     "short_put_spread": StrategyStats(
-        win_rate=0.75, avg_win=68, avg_loss=232,
-        kelly=-0.11, tradeable=False,
+        win_rate=0.748, avg_win=69, avg_loss=258,
+        kelly=-0.13, tradeable=False,
     ),
     "short_call_spread": StrategyStats(
-        win_rate=0.64, avg_win=78, avg_loss=212,
-        kelly=-0.05, tradeable=False,
+        win_rate=0.648, avg_win=80, avg_loss=237,
+        kelly=-0.09, tradeable=False,
     ),
     "long_call_spread": StrategyStats(
-        win_rate=0.65, avg_win=148, avg_loss=172,
-        kelly=0.24, tradeable=True,
+        win_rate=0.495, avg_win=167, avg_loss=133,
+        kelly=0.12, tradeable=True,
     ),
     "long_put_spread": StrategyStats(
-        win_rate=0.65, avg_win=148, avg_loss=172,
-        kelly=0.24, tradeable=True,  # assume similar to long call
+        win_rate=0.436, avg_win=173, avg_loss=158,
+        kelly=-0.05, tradeable=False,
     ),
     "butterfly": StrategyStats(
-        win_rate=0.46, avg_win=520, avg_loss=271,
-        kelly=0.26, tradeable=True,
+        win_rate=0.506, avg_win=819, avg_loss=370,
+        kelly=0.27, tradeable=True,
     ),
 }
 

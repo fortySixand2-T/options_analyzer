@@ -147,31 +147,62 @@ def get_market_state(symbol: str = Query("SPY", description="Symbol")):
 
 
 @app.get("/api/trade-candidates")
-def get_trade_candidates(symbol: str = Query("SPY", description="Symbol")):
-    """L2 trade candidates — confluence-scored trades from market state."""
+def get_trade_candidates(
+    symbol: str = Query("SPY", description="Symbol"),
+    portfolio_value: float = Query(100_000, description="Portfolio value for sizing"),
+):
+    """Full L1→L2→L3 pipeline: market state → trade candidates → sizing.
+
+    Returns ranked trade candidates with confluence scores and Kelly-derived
+    position sizing. Strategies with negative historical Kelly are blocked.
+    """
     try:
         from market_state import build_market_state
         from trade_generator import generate_trades
+        from sizing import assess_execution
+
         state = build_market_state(symbol.upper())
         trades = generate_trades(state)
+
+        # Enrich each candidate with L3 execution assessment
+        enriched = []
+        for tc in trades:
+            execution = assess_execution(
+                trade_candidate=tc,
+                portfolio_value=portfolio_value,
+            )
+            entry = tc.to_dict()
+            entry["execution"] = execution.to_dict()
+            enriched.append(entry)
+
         return {
             "symbol": symbol.upper(),
             "market_state": state.to_dict(),
-            "candidates": [t.to_dict() for t in trades],
-            "count": len(trades),
+            "candidates": enriched,
+            "count": len(enriched),
+            "tradeable_count": sum(1 for e in enriched if e["execution"]["executable"]),
         }
     except Exception as e:
         logger.exception("Failed to generate trade candidates for %s", symbol)
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# In-memory portfolio singleton (persists across requests within a session)
+_portfolio_instance = None
+
+def _get_portfolio():
+    global _portfolio_instance
+    if _portfolio_instance is None:
+        from portfolio import Portfolio
+        _portfolio_instance = Portfolio()
+    return _portfolio_instance
+
+
 @app.get("/api/portfolio")
 def get_portfolio():
     """L4 portfolio snapshot — positions, Greeks, risk, hedge triggers."""
     try:
-        from portfolio import Portfolio
-        # Return current portfolio state (empty if no positions yet)
-        pf = Portfolio()
+        pf = _get_portfolio()
         return pf.to_dict()
     except Exception as e:
         logger.exception("Failed to get portfolio")
