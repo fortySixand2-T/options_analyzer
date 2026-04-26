@@ -168,3 +168,5 @@
 - [2026-04-25] Created: src/trade_generator.py — L2 Trade Generation: confluence scoring, per-strategy exit rules, vol-surface strike selection, intraday timing
 - [2026-04-25] Created: tests/test_trade_generator.py — 56 tests for L2 trade generator (sub-scores, legs, DTE, timing, end-to-end)
 - [2026-04-25] Modified: src/ui/app.py — Added GET /api/trade-candidates endpoint
+- [2026-04-25] Created: src/sizing.py — L3 Execution & Sizing: Kelly criterion, slippage model, spread cost check, position sizing
+- [2026-04-25] Created: tests/test_execution.py — 29 tests for Kelly, sizing, slippage, execution model
