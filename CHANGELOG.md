@@ -21,6 +21,12 @@
 - [2026-04-27] Modified: src/data/chain_store.py — Added get_intraday_snapshots() and get_intraday_snapshot_times() helpers
 - [2026-04-27] Modified: docker-compose.yml — Added collect-intraday service for 0 DTE data loop
 - [2026-04-27] Modified: start.sh — Added collect-intraday command
+- [2026-04-27] Created: src/data/intraday_models.py — Pydantic v2 models for 0 DTE signals (DayType, DayClassification, MoveExhaustion, IntradayState)
+- [2026-04-27] Created: src/signals/__init__.py — Intraday signal layer package
+- [2026-04-27] Created: src/signals/day_classifier.py — Day-type classifier (RANGE_DAY/TREND_DAY/UNCERTAIN) from first 30-min range, VIX change, overnight gap
+- [2026-04-27] Created: src/signals/move_exhaustion.py — Move exhaustion signal (safe/caution/exhausted/overextended) tracking daily move consumption
+- [2026-04-27] Created: src/signals/intraday_gex.py — Intraday GEX recomputation and gamma flip movement tracking
+- [2026-04-27] Created: src/signals/intraday_state.py — Full intraday state builder combining bars, chains, day classification, exhaustion, and GEX
 
 - [2026-04-02] Created: Dockerfile — Multi-stage build (prod + dev targets) for the options pricing toolkit
 - [2026-04-02] Created: .dockerignore — Excludes venvs, caches, and generated output from Docker build context
