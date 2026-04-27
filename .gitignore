@@ -46,8 +46,9 @@ plots/
 frontend/node_modules/
 frontend/dist/
 
-# Data (SQLite DBs)
-data/
+# Data (SQLite DBs at project root)
+/data/
+!src/data/
 
 # Secrets / keys
 *.key

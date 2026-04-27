@@ -43,6 +43,26 @@ services:
       - ./data:/app/data
     command: python scripts/run_backtest.py --strategy iron_condor --symbol SPY
 
+  # Intraday data collector (0 DTE support)
+  collect-intraday:
+    build:
+      context: .
+      target: prod
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    command: python scripts/collect_intraday.py loop
+
+  # Daily chain snapshot collector
+  collect:
+    build:
+      context: .
+      target: prod
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    command: python scripts/collect_chains.py SPY,QQQ,^SPX,^NDX,IWM,META,AAPL,AMZN,NFLX,GOOG --max-dte 60
+
   # Interactive shell with full dev environment
   shell:
     build:

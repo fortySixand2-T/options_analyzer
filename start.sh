@@ -6,6 +6,8 @@
 #   ./start.sh                  # Launch the app (detached, stays running)
 #   ./start.sh scan             # Run a quick scan from CLI
 #   ./start.sh backtest         # Run a backtest
+#   ./start.sh collect          # Collect daily chain snapshots
+#   ./start.sh collect-stats    # Show snapshot DB statistics
 #   ./start.sh test             # Run test suite
 #   ./start.sh shell            # Interactive dev shell
 #   ./start.sh dev              # Foreground with hot-reload
@@ -171,6 +173,30 @@ case "$CMD" in
         $COMPOSE run --rm backtest python scripts/run_backtest.py $ARGS
         ;;
 
+    collect-intraday)
+        setup_env
+        shift || true
+        MODE="${1:-bars}"
+        shift || true
+        ARGS="$*"
+        echo -e "${GREEN}Intraday collection (${MODE}): ${NC}$ARGS"
+        $COMPOSE run --rm collect-intraday python scripts/collect_intraday.py $MODE $ARGS
+        ;;
+
+    collect)
+        setup_env
+        shift || true
+        ARGS="${*:-SPY,QQQ,IWM}"
+        echo -e "${GREEN}Collecting chain snapshots: ${NC}$ARGS"
+        $COMPOSE run --rm collect python scripts/collect_chains.py $ARGS
+        ;;
+
+    collect-stats)
+        setup_env
+        echo -e "${GREEN}Chain snapshot database stats:${NC}"
+        $COMPOSE run --rm collect python scripts/collect_chains.py --stats
+        ;;
+
     test)
         echo -e "${GREEN}Running test suite...${NC}"
         $COMPOSE run --rm test
@@ -228,6 +254,8 @@ case "$CMD" in
         echo "  fg            Start in foreground (Ctrl+C to stop)"
         echo "  scan          Run a CLI scan (pass args after command)"
         echo "  backtest      Run a backtest (pass args after command)"
+        echo "  collect       Collect daily chain snapshots (pass tickers after)"
+        echo "  collect-stats Show chain snapshot database statistics"
         echo "  test          Run the test suite"
         echo "  shell         Interactive dev shell"
         echo "  build         Rebuild Docker images (no cache)"
@@ -241,6 +269,8 @@ case "$CMD" in
         echo "  ./start.sh                    # start detached"
         echo "  ./start.sh scan SPY,QQQ --strategies --top 5"
         echo "  ./start.sh backtest --strategy iron_condor --symbol SPY"
+        echo "  ./start.sh collect SPY,QQQ,IWM --max-dte 30"
+        echo "  ./start.sh collect-stats"
         echo "  ./start.sh restart            # rebuild + relaunch"
         exit 1
         ;;

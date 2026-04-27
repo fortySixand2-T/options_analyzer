@@ -845,6 +845,101 @@ def place_order(req: PlaceOrderRequest):
     }
 
 
+# ── Chain Snapshots ──────────────────────────────────────────────────────────
+
+@app.post("/api/chain-snapshots/collect")
+def collect_chain_snapshots(
+    symbols: str = Query("SPY,QQQ,IWM", description="Comma-separated symbols"),
+    max_dte: int = Query(60, description="Max DTE to collect"),
+):
+    """Trigger daily chain snapshot collection for the given tickers."""
+    from data.chain_collector import collect_daily_snapshots
+
+    tickers = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not tickers:
+        raise HTTPException(status_code=400, detail="No symbols provided")
+
+    try:
+        result = collect_daily_snapshots(tickers=tickers, max_dte=max_dte)
+        return result
+    except Exception as e:
+        logger.exception("Chain snapshot collection failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/chain-snapshots/stats")
+def chain_snapshot_stats():
+    """Database statistics for stored chain snapshots."""
+    from data.chain_store import get_db_stats
+    return get_db_stats()
+
+
+@app.get("/api/chain-snapshots/{symbol}/dates")
+def chain_snapshot_dates(symbol: str):
+    """List available snapshot dates for a symbol."""
+    from data.chain_store import get_available_dates
+    dates = get_available_dates(symbol.upper())
+    return {"symbol": symbol.upper(), "dates": dates, "count": len(dates)}
+
+
+@app.get("/api/chain-snapshots/{symbol}/{date}")
+def chain_snapshot_detail(
+    symbol: str,
+    date: str,
+    option_type: Optional[str] = Query(None, description="Filter: call or put"),
+    min_strike: Optional[float] = Query(None),
+    max_strike: Optional[float] = Query(None),
+):
+    """Retrieve a stored chain snapshot for a symbol and date."""
+    from data.chain_store import get_snapshot
+    snapshot = get_snapshot(symbol.upper(), date)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail=f"No snapshot for {symbol} on {date}")
+
+    contracts = snapshot.contracts
+    if option_type:
+        contracts = [c for c in contracts if c.option_type == option_type]
+    if min_strike is not None:
+        contracts = [c for c in contracts if c.strike >= min_strike]
+    if max_strike is not None:
+        contracts = [c for c in contracts if c.strike <= max_strike]
+
+    return {
+        "symbol": snapshot.ticker,
+        "date": date,
+        "spot": snapshot.spot,
+        "expiries": snapshot.expiries,
+        "contracts_count": len(contracts),
+        "contracts": [
+            {
+                "strike": c.strike,
+                "expiry": c.expiry,
+                "option_type": c.option_type,
+                "bid": c.bid,
+                "ask": c.ask,
+                "mid": c.mid,
+                "last": c.last,
+                "volume": c.volume,
+                "open_interest": c.open_interest,
+                "implied_volatility": c.implied_volatility,
+            }
+            for c in contracts
+        ],
+    }
+
+
+@app.get("/api/iv-history/{symbol}")
+def iv_history(
+    symbol: str,
+    start: str = Query("", description="Start date YYYY-MM-DD"),
+    end: str = Query("", description="End date YYYY-MM-DD"),
+):
+    """IV history for a symbol from stored snapshots."""
+    from data.chain_store import get_iv_history
+    history = get_iv_history(symbol.upper(), start_date=start, end_date=end)
+    return {"symbol": symbol.upper(), "history": history, "count": len(history)}
+
+
 @app.get("/api/positions")
 def get_positions():
     """Get current account positions from Tastytrade."""

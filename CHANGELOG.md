@@ -1,5 +1,27 @@
 # Changelog
 
+- [2026-04-27] Created: src/data/__init__.py — Data storage layer package
+- [2026-04-27] Created: src/data/chain_store.py — SQLite storage for daily chain snapshots (3 tables: chain_snapshots, chain_contracts, iv_snapshots)
+- [2026-04-27] Created: src/data/chain_collector.py — Daily collection pipeline using YFinanceProvider with IV extraction
+- [2026-04-27] Created: scripts/collect_chains.py — CLI for chain collection with --stats and --dates modes
+- [2026-04-27] Modified: src/ui/app.py — Added 5 chain snapshot API endpoints (collect, stats, dates, detail, iv-history)
+- [2026-04-27] Modified: docker-compose.yml — Added collect service for chain snapshot collection
+- [2026-04-27] Modified: start.sh — Added collect and collect-stats commands
+- [2026-04-27] Created: scripts/daily_collect.sh — Crontab-ready script for automated daily collection (SPY, QQQ, ^SPX, ^NDX, IWM, FAANG)
+- [2026-04-27] Modified: src/data/chain_collector.py — Added ^SPX and ^NDX to default tickers (yfinance uses ^ prefix for index options)
+- [2026-04-27] Modified: docker-compose.yml — Updated collect service with full 10-ticker list
+- [2026-04-27] Modified: src/data/chain_store.py — Added snapshot label support (eod/shortdte) for multiple daily snapshots per ticker
+- [2026-04-27] Modified: src/data/chain_collector.py — Added label passthrough, updated defaults to 10 tickers
+- [2026-04-27] Modified: scripts/collect_chains.py — Added --label CLI flag
+- [2026-04-27] Created: scripts/daily_collect_shortdte.sh — Morning 1-7 DTE collection for ^SPX, SPY, ^NDX, QQQ
+- [2026-04-27] Created: src/data/intraday_store.py — SQLite storage for 5-min/1-min OHLCV bars (data/intraday.db)
+- [2026-04-27] Created: src/data/intraday_collector.py — Intraday pipeline: bars + 30-min chain snapshots + loop mode
+- [2026-04-27] Created: scripts/collect_intraday.py — CLI for intraday collection (bars/chain/loop/stats modes)
+- [2026-04-27] Modified: src/scanner/providers/yfinance_provider.py — Added get_intraday() and get_intraday_history() methods
+- [2026-04-27] Modified: src/data/chain_store.py — Added get_intraday_snapshots() and get_intraday_snapshot_times() helpers
+- [2026-04-27] Modified: docker-compose.yml — Added collect-intraday service for 0 DTE data loop
+- [2026-04-27] Modified: start.sh — Added collect-intraday command
+
 - [2026-04-02] Created: Dockerfile — Multi-stage build (prod + dev targets) for the options pricing toolkit
 - [2026-04-02] Created: .dockerignore — Excludes venvs, caches, and generated output from Docker build context
 - [2026-04-02] Created: docker-compose.yml — Services for test, shell, bs, mc, and scenario workflows
@@ -202,3 +224,4 @@
 - [2026-04-26] Modified: frontend/src/components/TradingView.jsx — Added "Preview Order" → "Submit Order (Paper)" flow to TradeCard
 - [2026-04-26] Modified: frontend/src/components/Dashboard.css — Added order placement button and preview panel styles
 - [2026-04-26] Modified: TRADING_SYSTEM_ARCHITECTURE.md — Marked execution bridge (Priority 2) as done
+- [2026-04-26] Created: docs/historical_data_options.md — QuantConnect vs ThetaData analysis for historical options chain data

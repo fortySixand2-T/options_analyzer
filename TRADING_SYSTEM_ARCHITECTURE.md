@@ -241,11 +241,17 @@ Per-strategy OLS regressions completed on 422 trades. Key result: edge_pct is th
 **1b. Bias signal replay in backtester** ✅ DONE (2026-04-26)
 Bias signals computed from daily OHLCV per-day in the backtest loop. BT3/BT3b validated: bias helps put-direction strategies when combined with edge gate.
 
-**1c. Historical options chain data**
-The backtester simulates option P&L from underlying price moves. Real option chains have skew, term structure, and liquidity variation. ThetaData ($30/mo) provides historical chains going back to 2013. This would:
+**1c. Historical options chain data** — Phase 1 (collection) ✅ DONE (2026-04-27)
+Daily chain snapshot collector built. Stores full option chains (bid/ask/IV/OI/Greeks per contract) to SQLite via `src/data/chain_store.py`. Pipeline: `./start.sh collect` runs `YFinanceProvider.get_chain()` for SPY/QQQ/IWM, stores to `data/chain_snapshots.db` (3 tables: chain_snapshots, chain_contracts, iv_snapshots). API endpoints: `/api/chain-snapshots/*` and `/api/iv-history/*`. First snapshot: 2026-04-27, 8,553 contracts across 3 tickers.
+
+**Phase 2 remaining:**
+- Run collector daily to accumulate dataset (after 2-3 months: parallel validation)
+- Build backtester adapter to read from chain_snapshots instead of simulating P&L
 - Replace flat 3% slippage with actual bid-ask spread measurements
 - Compute real IV at entry/exit for accurate P&L
-- Validate chain quality filtering
+- Optional: ThetaData ($30/mo) for historical backfill to 2013+
+- Optional: CBOE DataShop for institutional-grade cross-validation
+- See `docs/historical_data_options.md` for full provider analysis
 
 ### Priority 2: Execution bridge ✅ DONE (2026-04-26)
 
@@ -265,4 +271,4 @@ These require intraday or end-of-day chain snapshots to compute historically.
 
 ---
 
-*Options Analytics Team — 2026-04. Last updated 2026-04-26 with validation backtest results.*
+*Options Analytics Team — 2026-04. Last updated 2026-04-27 with chain snapshot pipeline.*

@@ -174,6 +174,42 @@ class YFinanceProvider(ChainProvider):
             )
 
     # ------------------------------------------------------------------
+    # Intraday bars (not in ChainProvider ABC — concrete method only)
+    # ------------------------------------------------------------------
+
+    def get_intraday(
+        self, ticker: str, interval: str = "5m", period: str = "5d",
+    ) -> pd.DataFrame:
+        """Fetch intraday OHLCV bars from yfinance.
+
+        Intervals: '1m' (max 7 days), '5m' (max 60 days), '15m', '30m'.
+        Returns DataFrame with DatetimeIndex and columns: Open, High, Low, Close, Volume.
+        """
+        self._throttle()
+        try:
+            t = yf.Ticker(ticker)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                hist = t.history(period=period, interval=interval)
+            if hist.empty:
+                logger.warning("No intraday data for %s (%s, %s)", ticker, interval, period)
+                return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
+            return hist[["Open", "High", "Low", "Close", "Volume"]]
+        except Exception as e:
+            logger.warning("Failed to fetch intraday for %s: %s", ticker, e)
+            return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
+
+    def get_intraday_history(
+        self, ticker: str, days: int = 5, interval: str = "5m",
+    ) -> pd.DataFrame:
+        """Convenience: fetch intraday bars for the last N trading days.
+
+        Maps days to yfinance period string. Max: 7 days for '1m', 60 days for '5m'.
+        """
+        period = f"{days}d"
+        return self.get_intraday(ticker, interval=interval, period=period)
+
+    # ------------------------------------------------------------------
     # Risk-free rate
     # ------------------------------------------------------------------
 
