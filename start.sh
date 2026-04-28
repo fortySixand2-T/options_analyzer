@@ -183,6 +183,14 @@ case "$CMD" in
         $COMPOSE run --rm collect-intraday python scripts/collect_intraday.py $MODE $ARGS
         ;;
 
+    intraday-backtest)
+        setup_env
+        shift || true
+        ARGS="${*:---strategy 0dte_iron_condor --symbol SPY}"
+        echo -e "${GREEN}Running 0 DTE intraday backtest: ${NC}$ARGS"
+        $COMPOSE run --rm backtest python scripts/run_intraday_backtest.py $ARGS
+        ;;
+
     collect)
         setup_env
         shift || true
@@ -256,6 +264,7 @@ case "$CMD" in
         echo "  backtest      Run a backtest (pass args after command)"
         echo "  collect       Collect daily chain snapshots (pass tickers after)"
         echo "  collect-stats Show chain snapshot database statistics"
+        echo "  intraday-backtest  Run 0 DTE intraday backtest (pass args)"
         echo "  test          Run the test suite"
         echo "  shell         Interactive dev shell"
         echo "  build         Rebuild Docker images (no cache)"
@@ -271,6 +280,7 @@ case "$CMD" in
         echo "  ./start.sh backtest --strategy iron_condor --symbol SPY"
         echo "  ./start.sh collect SPY,QQQ,IWM --max-dte 30"
         echo "  ./start.sh collect-stats"
+        echo "  ./start.sh intraday-backtest --strategy 0dte_iron_condor --symbol SPY"
         echo "  ./start.sh restart            # rebuild + relaunch"
         exit 1
         ;;

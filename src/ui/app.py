@@ -940,6 +940,50 @@ def iv_history(
     return {"symbol": symbol.upper(), "history": history, "count": len(history)}
 
 
+@app.get("/api/backtest/intraday/{strategy}")
+def get_intraday_backtest(
+    strategy: str,
+    symbol: str = Query("SPY", description="Ticker symbol"),
+    start_date: str = Query("", description="Start date YYYY-MM-DD"),
+    end_date: str = Query("", description="End date YYYY-MM-DD"),
+    entry_times: str = Query("10:00,10:30,11:00", description="Comma-separated entry times ET"),
+    exit_time: str = Query("15:45", description="Force exit time ET"),
+    day_type: str = Query("RANGE_DAY", description="Day-type filter (RANGE_DAY/TREND_DAY/none)"),
+    dealer_regime: str = Query("LONG_GAMMA", description="Dealer filter (LONG_GAMMA/SHORT_GAMMA/none)"),
+    wing_width: float = Query(5.0, description="Wing width in $"),
+    profit_target: float = Query(50.0, description="Profit target % of max profit"),
+    stop_loss: float = Query(200.0, description="Stop loss % of max profit"),
+):
+    """Run a 0 DTE intraday backtest using stored 5-min bars."""
+    from datetime import timedelta
+    from backtest.intraday_backtest import run_intraday_backtest
+    from backtest.intraday_models import IntradayBacktestRequest
+
+    end_dt = date.fromisoformat(end_date) if end_date else date.today()
+    start_dt = date.fromisoformat(start_date) if start_date else end_dt - timedelta(days=30)
+
+    request = IntradayBacktestRequest(
+        strategy=strategy,
+        symbol=symbol.upper(),
+        start_date=start_dt,
+        end_date=end_dt,
+        entry_windows=[t.strip() for t in entry_times.split(",")],
+        exit_time=exit_time,
+        day_type_filter=None if day_type.lower() == "none" else day_type,
+        dealer_filter=None if dealer_regime.lower() == "none" else dealer_regime,
+        wing_width=wing_width,
+        profit_target_pct=profit_target,
+        stop_loss_pct=stop_loss,
+    )
+
+    try:
+        result = run_intraday_backtest(request)
+        return result.model_dump()
+    except Exception as e:
+        logger.error("Intraday backtest failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/positions")
 def get_positions():
     """Get current account positions from Tastytrade."""

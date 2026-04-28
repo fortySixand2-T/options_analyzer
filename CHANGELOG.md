@@ -27,6 +27,11 @@
 - [2026-04-27] Created: src/signals/move_exhaustion.py — Move exhaustion signal (safe/caution/exhausted/overextended) tracking daily move consumption
 - [2026-04-27] Created: src/signals/intraday_gex.py — Intraday GEX recomputation and gamma flip movement tracking
 - [2026-04-27] Created: src/signals/intraday_state.py — Full intraday state builder combining bars, chains, day classification, exhaustion, and GEX
+- [2026-04-28] Created: src/backtest/intraday_models.py — Pydantic v2 models for 0 DTE backtester (request, trade, stats, result)
+- [2026-04-28] Created: src/backtest/intraday_backtest.py — 0 DTE intraday backtester engine walking 5-min bars with intraday theta decay
+- [2026-04-28] Created: scripts/run_intraday_backtest.py — CLI for intraday backtesting with day-type/dealer/exhaustion filters
+- [2026-04-28] Modified: src/ui/app.py — Added /api/backtest/intraday/{strategy} endpoint
+- [2026-04-28] Modified: start.sh — Added intraday-backtest command
 
 - [2026-04-02] Created: Dockerfile — Multi-stage build (prod + dev targets) for the options pricing toolkit
 - [2026-04-02] Created: .dockerignore — Excludes venvs, caches, and generated output from Docker build context
