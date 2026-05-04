@@ -1,5 +1,6 @@
 # Changelog
 
+- [2026-05-03] Created: tests/test_swing_functional.py — 59 functional tests for swing system (iron butterfly pricing, backtester extensions, deferred strategies, market state fields, edge integration, decision matrix, scanner pipeline, API routes, registry, config)
 - [2026-05-03] Created: src/edge/__init__.py — Edge measurement modules package
 - [2026-05-03] Created: src/edge/vrp.py — Variance Risk Premium (VRP) measurement across DTE term structure buckets
 - [2026-05-03] Created: src/edge/term_structure.py — IV term structure analysis, kink detection, calendar trade signal
