@@ -209,6 +209,30 @@ def get_portfolio():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/portfolio/allocation")
+def get_allocation(
+    regime: str = Query("MODERATE_IV", description="Current market regime"),
+    vrp_rich: bool = Query(False, description="VRP exceeds threshold"),
+    vrp_pct: float = Query(0.0, description="VRP percentage"),
+    directional: bool = Query(False, description="Clear directional bias"),
+    swing_bias_score: int = Query(0, description="Swing bias score (-10 to 10)"),
+    portfolio_value: float = Query(100_000, description="Total portfolio value"),
+):
+    """Compute capital allocation between short-DTE and swing books."""
+    try:
+        from portfolio_allocator import compute_allocation
+        alloc = compute_allocation(
+            regime=regime, vrp_rich=vrp_rich, vrp_pct=vrp_pct,
+            directional=directional, swing_bias_score=swing_bias_score,
+        )
+        result = alloc.to_dict()
+        result["dollars"] = alloc.for_portfolio(portfolio_value)
+        return result
+    except Exception as e:
+        logger.exception("Failed to compute allocation")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Scanner ────────────────���─────────────────────────────────────────────────
 
 @app.get("/api/scan")

@@ -1,5 +1,10 @@
 # Changelog
 
+- [2026-05-04] Created: src/portfolio_allocator.py — Regime-based capital allocation between short-DTE and swing books (60/40 base, VRP/regime/directional adjustments)
+- [2026-05-04] Modified: src/portfolio.py — Multi-book tracking (book property, per-book risk/greeks/PnL), cross-book correlation warnings, book-level risk limits
+- [2026-05-04] Modified: src/sizing.py — Added swing strategy stats (calendar, diagonal, iron butterfly, long straddle) for Kelly sizing
+- [2026-05-04] Modified: src/ui/app.py — Added GET /api/portfolio/allocation endpoint
+- [2026-05-04] Created: tests/test_portfolio_allocator.py — 35 tests for portfolio allocator, cross-book risk, book tracking, sizing, API
 - [2026-05-03] Created: tests/test_swing_functional.py — 59 functional tests for swing system (iron butterfly pricing, backtester extensions, deferred strategies, market state fields, edge integration, decision matrix, scanner pipeline, API routes, registry, config)
 - [2026-05-03] Created: src/edge/__init__.py — Edge measurement modules package
 - [2026-05-03] Created: src/edge/vrp.py — Variance Risk Premium (VRP) measurement across DTE term structure buckets

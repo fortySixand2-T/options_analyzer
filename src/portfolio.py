@@ -23,6 +23,16 @@ logger = logging.getLogger(__name__)
 
 # ── Position ──────────────────────────────────────────────────────────────────
 
+SWING_STRATEGIES = {
+    "calendar_spread", "diagonal_spread", "iron_butterfly", "long_straddle",
+}
+
+SHORT_DTE_STRATEGIES = {
+    "iron_condor", "short_put_spread", "short_call_spread",
+    "long_call_spread", "long_put_spread", "butterfly",
+}
+
+
 @dataclass
 class Position:
     """A single open position in the portfolio."""
@@ -49,6 +59,12 @@ class Position:
     profit_target: float = 0.0
     stop_loss: float = 0.0
     dte_remaining: int = 0
+
+    @property
+    def book(self) -> str:
+        if self.strategy in SWING_STRATEGIES:
+            return "swing"
+        return "short_dte"
 
     def update_greeks(self, delta: float, gamma: float,
                       theta: float, vega: float):
@@ -277,6 +293,102 @@ class Portfolio:
 
         return triggers
 
+    # ── Multi-book tracking ──────────────────────────────────────────────
+
+    def positions_for_book(self, book: str) -> List[Position]:
+        return [p for p in self.positions if p.book == book]
+
+    def book_risk(self, book: str) -> float:
+        return sum(p.max_loss for p in self.positions_for_book(book))
+
+    def book_greeks(self, book: str) -> Dict[str, float]:
+        positions = self.positions_for_book(book)
+        return {
+            "delta": sum(p.delta for p in positions),
+            "gamma": sum(p.gamma for p in positions),
+            "theta": sum(p.theta for p in positions),
+            "vega": sum(p.vega for p in positions),
+        }
+
+    def book_pnl(self, book: str) -> float:
+        return sum(p.unrealized_pnl for p in self.positions_for_book(book))
+
+    # ── Cross-book correlation risk ──────────────────────────────────────
+
+    def cross_book_warnings(self) -> List[Dict]:
+        """Detect correlated risk across short-DTE and swing books."""
+        warnings = []
+        short_positions = self.positions_for_book("short_dte")
+        swing_positions = self.positions_for_book("swing")
+
+        if not short_positions or not swing_positions:
+            return warnings
+
+        short_symbols: Dict[str, List[Position]] = {}
+        for p in short_positions:
+            short_symbols.setdefault(p.symbol, []).append(p)
+
+        for sp in swing_positions:
+            if sp.symbol not in short_symbols:
+                continue
+            short_here = short_symbols[sp.symbol]
+
+            short_credit = [p for p in short_here if p.is_credit]
+            if short_credit and sp.is_credit:
+                warnings.append({
+                    "warning": f"Correlated short vol on {sp.symbol}",
+                    "detail": (
+                        f"Short-DTE {short_credit[0].strategy} + "
+                        f"swing {sp.strategy} = concentrated short vol"
+                    ),
+                    "severity": "high",
+                })
+
+            short_delta = sum(p.delta for p in short_here)
+            combined = short_delta + sp.delta
+            if abs(combined) > 30:
+                warnings.append({
+                    "warning": f"Combined delta on {sp.symbol}: {combined:+.0f}",
+                    "detail": "Cross-book delta exceeds 30 on single underlying",
+                    "severity": "medium",
+                })
+
+        total_vega = self.net_vega
+        if total_vega < -200:
+            warnings.append({
+                "warning": f"Portfolio short vega {total_vega:+.0f}",
+                "detail": "Combined short vol across both books exceeds -200 vega",
+                "severity": "high",
+            })
+
+        return warnings
+
+    def can_add_to_book(
+        self,
+        book: str,
+        symbol: str,
+        strategy: str,
+        max_loss: float,
+        book_risk_limit: float,
+        delta: float = 0.0,
+        gamma: float = 0.0,
+        theta: float = 0.0,
+        vega: float = 0.0,
+    ) -> Tuple[bool, str]:
+        """Check if adding to a specific book would violate book or portfolio limits."""
+        ok, reason = self.can_add(symbol, strategy, max_loss, delta, gamma, theta, vega)
+        if not ok:
+            return False, reason
+
+        current_book_risk = self.book_risk(book)
+        if current_book_risk + max_loss > book_risk_limit:
+            return False, (
+                f"{book} book risk would be ${current_book_risk + max_loss:,.0f} "
+                f"(limit ${book_risk_limit:,.0f})"
+            )
+
+        return True, "ok"
+
     # ── Serialization ─────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
@@ -310,4 +422,19 @@ class Portfolio:
                 "max_risk": self.limits.max_risk,
             },
             "hedge_triggers": self.hedge_triggers(),
+            "books": {
+                "short_dte": {
+                    "positions": len(self.positions_for_book("short_dte")),
+                    "risk": round(self.book_risk("short_dte"), 2),
+                    "greeks": {k: round(v, 2) for k, v in self.book_greeks("short_dte").items()},
+                    "pnl": round(self.book_pnl("short_dte"), 2),
+                },
+                "swing": {
+                    "positions": len(self.positions_for_book("swing")),
+                    "risk": round(self.book_risk("swing"), 2),
+                    "greeks": {k: round(v, 2) for k, v in self.book_greeks("swing").items()},
+                    "pnl": round(self.book_pnl("swing"), 2),
+                },
+            },
+            "cross_book_warnings": self.cross_book_warnings(),
         }

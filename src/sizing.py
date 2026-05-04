@@ -72,6 +72,23 @@ STRATEGY_STATS: Dict[str, StrategyStats] = {
         win_rate=0.506, avg_win=869, avg_loss=354,
         kelly=0.30, tradeable=True,
     ),
+    # Swing strategies — initial estimates, calibrate from Phase 5 backtests
+    "calendar_spread": StrategyStats(
+        win_rate=0.60, avg_win=150, avg_loss=120,
+        kelly=0.10, tradeable=True,
+    ),
+    "diagonal_spread": StrategyStats(
+        win_rate=0.55, avg_win=180, avg_loss=150,
+        kelly=0.08, tradeable=True,
+    ),
+    "iron_butterfly": StrategyStats(
+        win_rate=0.55, avg_win=200, avg_loss=180,
+        kelly=0.06, tradeable=True,
+    ),
+    "long_straddle": StrategyStats(
+        win_rate=0.40, avg_win=500, avg_loss=180,
+        kelly=0.11, tradeable=True,
+    ),
 }
 
 
