@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-04] Modified: src/sizing.py — Calibrated swing strategy stats from Phase 5 backtests; iron_butterfly marked non-tradeable (negative Kelly)
+- [2026-05-04] Modified: src/config.py — Reweighted SWING_SCANNER_CONFIG: vol_regime 15%→25%, vrp 25%→20%, term_structure 20%→15% per regression
 - [2026-05-04] Created: scripts/swing_validation.py — 6 swing validation backtests (VRP filter, regime filter, DTE buckets, swing bias filter)
 - [2026-05-04] Created: scripts/swing_regression.py — Swing strategy OLS regression for confluence weight calibration
 - [2026-05-04] Modified: scripts/run_backtest.py — Added --swing-validate, --vrp-filter, --vrp-threshold, --swing-bias-filter CLI args

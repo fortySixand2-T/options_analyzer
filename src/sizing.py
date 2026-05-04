@@ -72,22 +72,22 @@ STRATEGY_STATS: Dict[str, StrategyStats] = {
         win_rate=0.506, avg_win=869, avg_loss=354,
         kelly=0.30, tradeable=True,
     ),
-    # Swing strategies — initial estimates, calibrate from Phase 5 backtests
+    # Swing strategies — calibrated from Phase 5 backtests (SPY 2022-2026, 3% slippage)
     "calendar_spread": StrategyStats(
-        win_rate=0.60, avg_win=150, avg_loss=120,
-        kelly=0.10, tradeable=True,
+        win_rate=0.740, avg_win=592, avg_loss=650,
+        kelly=0.46, tradeable=True,   # strong baseline, no filter needed
     ),
     "diagonal_spread": StrategyStats(
-        win_rate=0.55, avg_win=180, avg_loss=150,
-        kelly=0.08, tradeable=True,
+        win_rate=0.740, avg_win=592, avg_loss=650,
+        kelly=0.46, tradeable=True,   # needs directional bias alignment
     ),
     "iron_butterfly": StrategyStats(
-        win_rate=0.55, avg_win=200, avg_loss=180,
-        kelly=0.06, tradeable=True,
+        win_rate=0.553, avg_win=333, avg_loss=496,
+        kelly=-0.11, tradeable=False,  # negative expectancy — needs real chain VRP data
     ),
     "long_straddle": StrategyStats(
-        win_rate=0.40, avg_win=500, avg_loss=180,
-        kelly=0.11, tradeable=True,
+        win_rate=0.536, avg_win=1008, avg_loss=729,
+        kelly=0.20, tradeable=True,   # requires LOW_IV regime filter
     ),
 }
 

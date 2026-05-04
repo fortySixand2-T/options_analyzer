@@ -61,10 +61,15 @@ SWING_SCANNER_CONFIG = {
         "max_spread_pct": 12.0,
         "moneyness_range": [0.85, 1.15],
     },
+    # Calibrated from Phase 5 regression (SPY 2022-2026):
+    #   iv_at_entry significant for calendar/diagonal (t~1.7)
+    #   swing_bias significant for iron_butterfly (t=1.69)
+    #   edge_pct significant for long_straddle (t=-2.04, negative = buy vol cheap)
+    #   VRP needs real chain data — keep weight but can't validate yet
     "scoring_weights": {
-        "vrp": 0.25,
-        "term_structure": 0.20,
-        "vol_regime": 0.15,
+        "vol_regime": 0.25,
+        "vrp": 0.20,
+        "term_structure": 0.15,
         "garch_edge": 0.15,
         "directional": 0.10,
         "dealer_regime": 0.10,

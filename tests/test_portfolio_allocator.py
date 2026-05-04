@@ -361,9 +361,12 @@ class TestSwingSizing:
         from sizing import STRATEGY_STATS
         for name in ["calendar_spread", "diagonal_spread", "iron_butterfly", "long_straddle"]:
             assert name in STRATEGY_STATS
-            assert STRATEGY_STATS[name].tradeable is True
+        # Iron butterfly is not tradeable without real chain VRP data
+        assert STRATEGY_STATS["calendar_spread"].tradeable is True
+        assert STRATEGY_STATS["long_straddle"].tradeable is True
+        assert STRATEGY_STATS["iron_butterfly"].tradeable is False
 
-    def test_compute_size_for_swing(self):
+    def test_compute_size_for_swing_tradeable(self):
         from sizing import compute_position_size
         result = compute_position_size(
             strategy="calendar_spread",
@@ -373,6 +376,17 @@ class TestSwingSizing:
         )
         assert result.contracts >= 1
         assert result.reason == "ok"
+
+    def test_compute_size_for_swing_blocked(self):
+        from sizing import compute_position_size
+        result = compute_position_size(
+            strategy="iron_butterfly",
+            portfolio_value=100_000,
+            max_loss_per_contract=500,
+            confluence_score=80,
+        )
+        assert result.contracts == 0
+        assert "Negative" in result.reason
 
 
 # ── API: Allocation Endpoint ──────────────────────────────────────────────
