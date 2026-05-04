@@ -31,6 +31,10 @@ class BacktestRequest(BaseModel):
     dealer_filter: bool = False             # only enter when dealer regime matches
     edge_threshold: float = 0.0             # min GARCH edge % to enter
     slippage_pct: float = 0.0               # % of premium lost to slippage (e.g., 3.0 = 3%)
+    # Swing-specific filters
+    vrp_filter: bool = False                # only enter when VRP > vrp_threshold
+    vrp_threshold: float = 3.0             # min VRP % for swing credit strategies
+    swing_bias_filter: bool = False         # use swing bias (SMA 20/50/200) instead of short-term
 
 
 class BacktestTrade(BaseModel):
@@ -52,6 +56,9 @@ class BacktestTrade(BaseModel):
     bias_label: Optional[str] = None        # e.g. "LEAN_BULLISH"
     edge_pct: Optional[float] = None        # IV-RV edge % at entry
     iv_at_entry: Optional[float] = None     # rolling vol at entry
+    swing_bias_score: Optional[int] = None  # SMA 20/50/200 bias score
+    swing_bias_label: Optional[str] = None
+    vrp_at_entry: Optional[float] = None    # VRP % at entry
 
 
 class BacktestStats(BaseModel):

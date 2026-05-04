@@ -46,6 +46,8 @@ def parse_args(argv=None):
                    help='Compare multiple strategies/symbols')
     p.add_argument('--validate', action='store_true',
                    help='Run all 6 SIGNALS.md validation backtests')
+    p.add_argument('--swing-validate', action='store_true',
+                   help='Run 6 swing strategy validation backtests')
     p.add_argument('--delta', type=float, default=0.20,
                    help='Target entry delta (default: 0.20)')
     p.add_argument('--min-dte', type=int, default=3,
@@ -65,6 +67,12 @@ def parse_args(argv=None):
     p.add_argument('--exit-rule', type=str, default='50pct',
                    choices=['50pct', 'hold', 'strategy'],
                    help='Exit rule: 50pct target, hold to expiry, or per-strategy rules')
+    p.add_argument('--vrp-filter', action='store_true',
+                   help='Only enter swing credit strategies when VRP > threshold')
+    p.add_argument('--vrp-threshold', type=float, default=3.0,
+                   help='Min VRP %% for swing credit entry (default: 3.0)')
+    p.add_argument('--swing-bias-filter', action='store_true',
+                   help='Use swing bias (SMA 20/50/200) for swing entry filter')
     p.add_argument('--slippage', type=float, default=0.0,
                    help='Slippage as %% of premium (e.g., 3.0 = 3%%). Default: 0')
     p.add_argument('--verbose', '-v', action='store_true',
@@ -287,6 +295,11 @@ def main(argv=None):
         run_validation(start_date, end_date)
         return
 
+    if args.swing_validate:
+        from swing_validation import run_swing_validation
+        run_swing_validation(args.symbol, start_date, end_date)
+        return
+
     if args.compare:
         symbols = [s.strip() for s in (args.symbols or args.symbol).split(',')]
         strategies = [s.strip() for s in (args.strategies or args.strategy).split(',')]
@@ -307,6 +320,9 @@ def main(argv=None):
                     edge_threshold=args.edge_threshold,
                     exit_rule=args.exit_rule,
                     slippage_pct=args.slippage,
+                    vrp_filter=args.vrp_filter,
+                    vrp_threshold=args.vrp_threshold,
+                    swing_bias_filter=args.swing_bias_filter,
                 )
                 result = run_local_backtest(req)
                 print_result(result)
@@ -325,6 +341,9 @@ def main(argv=None):
         edge_threshold=args.edge_threshold,
         exit_rule=args.exit_rule,
         slippage_pct=args.slippage,
+        vrp_filter=args.vrp_filter,
+        vrp_threshold=args.vrp_threshold,
+        swing_bias_filter=args.swing_bias_filter,
     )
 
     result = run_local_backtest(req)

@@ -239,10 +239,6 @@ def _check_entry_filters(request, regime: str, bias_score=None, bias_label=None)
         if request.strategy in neutral_strategies and abs(bias_score) > 3:
             return False  # need neutral bias
 
-    # Note: dealer_filter cannot be applied in the local backtester
-    # since we don't have historical dealer positioning data.
-    # This requires a data subscription (SpotGamma, SqueezeMetrics).
-
     return True
 
 
@@ -299,6 +295,9 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
     entry_bias_score = None
     entry_bias_label = None
     entry_edge_pct = None
+    entry_swing_bias_score = None
+    entry_swing_bias_label = None
+    entry_vrp = None
 
     is_swing = request.strategy in _SWING_STRATEGIES
 
@@ -408,6 +407,9 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
                     bias_label=entry_bias_label,
                     edge_pct=round(entry_edge_pct, 2) if entry_edge_pct is not None else None,
                     iv_at_entry=round(rolling_vol[entry_idx], 4) if entry_idx < len(rolling_vol) else None,
+                    swing_bias_score=entry_swing_bias_score,
+                    swing_bias_label=entry_swing_bias_label,
+                    vrp_at_entry=round(entry_vrp, 2) if entry_vrp is not None else None,
                 )
                 trades.append(trade)
                 in_trade = False
@@ -451,6 +453,26 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
                     next_entry_idx = i + 1
                     continue
 
+            # VRP filter for swing credit strategies
+            if request.vrp_filter and is_swing and is_credit:
+                vrp = _compute_vrp_at_index(rolling_vol, i)
+                if vrp < request.vrp_threshold:
+                    next_entry_idx = i + 1
+                    continue
+
+            # Swing bias filter
+            if request.swing_bias_filter and is_swing:
+                sb_score, sb_label = _compute_swing_bias_at_index(ohlcv_df, i)
+                if sb_score is None:
+                    next_entry_idx = i + 1
+                    continue
+                # Directional strategies need aligned bias
+                directional_credit = {"diagonal_spread"}
+                directional_debit = {"long_straddle"}
+                if request.strategy in directional_credit and abs(sb_score) < 3:
+                    next_entry_idx = i + 1
+                    continue
+
             # Randomize DTE within the allowed range for realistic entry spread
             dte_range = request.entry_dte_max - request.entry_dte_min
             if dte_range > 0:
@@ -474,6 +496,16 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
                 entry_spot = spot
                 entry_bias_score = bias_score
                 entry_bias_label = bias_label
+                # Capture swing signals at entry
+                if is_swing:
+                    sb_s, sb_l = _compute_swing_bias_at_index(ohlcv_df, i)
+                    entry_swing_bias_score = sb_s
+                    entry_swing_bias_label = sb_l
+                    entry_vrp = _compute_vrp_at_index(rolling_vol, i)
+                else:
+                    entry_swing_bias_score = None
+                    entry_swing_bias_label = None
+                    entry_vrp = None
                 # Capture edge at entry (same calculation as the filter)
                 if i >= 30:
                     fwd_end = min(i + 10, len(closes) - 1)

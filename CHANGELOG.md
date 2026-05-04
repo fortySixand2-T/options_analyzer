@@ -1,5 +1,10 @@
 # Changelog
 
+- [2026-05-04] Created: scripts/swing_validation.py — 6 swing validation backtests (VRP filter, regime filter, DTE buckets, swing bias filter)
+- [2026-05-04] Created: scripts/swing_regression.py — Swing strategy OLS regression for confluence weight calibration
+- [2026-05-04] Modified: scripts/run_backtest.py — Added --swing-validate, --vrp-filter, --vrp-threshold, --swing-bias-filter CLI args
+- [2026-05-04] Modified: src/backtest/models.py — Added vrp_filter, vrp_threshold, swing_bias_filter to BacktestRequest; swing signal snapshots to BacktestTrade
+- [2026-05-04] Modified: src/backtest/local_backtest.py — VRP entry filter, swing bias entry filter, swing signal capture at entry
 - [2026-05-04] Created: src/portfolio_allocator.py — Regime-based capital allocation between short-DTE and swing books (60/40 base, VRP/regime/directional adjustments)
 - [2026-05-04] Modified: src/portfolio.py — Multi-book tracking (book property, per-book risk/greeks/PnL), cross-book correlation warnings, book-level risk limits
 - [2026-05-04] Modified: src/sizing.py — Added swing strategy stats (calendar, diagonal, iron butterfly, long straddle) for Kelly sizing
