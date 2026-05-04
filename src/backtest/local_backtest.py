@@ -36,7 +36,17 @@ _STRATEGY_PARAMS = {
     "butterfly":         {"is_credit": False, "legs": 4, "wings": 1},
     "calendar_spread":   {"is_credit": False, "legs": 2, "wings": 0},
     "diagonal_spread":   {"is_credit": False, "legs": 2, "wings": 1},
+    "iron_butterfly":    {"is_credit": True,  "legs": 4, "wings": 2},
     "naked_put_1dte":    {"is_credit": True,  "legs": 1, "wings": 0},
+}
+
+_SWING_STRATEGIES = {"calendar_spread", "diagonal_spread", "iron_butterfly", "long_straddle"}
+
+_SWING_EXIT_RULES = {
+    "calendar_spread":  {"profit_pct": 50, "loss_pct": 100, "exit_dte": 5, "hold": False},
+    "diagonal_spread":  {"profit_pct": 50, "loss_pct": 100, "exit_dte": 5, "hold": False},
+    "iron_butterfly":   {"profit_pct": 25, "loss_pct": 200, "exit_dte": 7, "hold": False},
+    "long_straddle":    {"profit_pct": 100, "loss_pct": 50, "exit_dte": 7, "hold": False},
 }
 
 
@@ -164,6 +174,38 @@ def _compute_bias_at_index(ohlcv_df, idx: int, lookback: int = 30):
         return None, None
 
 
+def _compute_swing_bias_at_index(ohlcv_df, idx: int, lookback: int = 200):
+    """Compute swing-timeframe bias from OHLCV ending at index idx.
+
+    Uses SMA 20/50/200 alignment instead of short-term EMA 9/21.
+    """
+    if ohlcv_df is None or idx < lookback:
+        return None, None
+    try:
+        from swing.bias import detect_swing_bias
+        window = ohlcv_df.iloc[max(0, idx - lookback):idx + 1].copy()
+        if len(window) < 50:
+            return None, None
+        result = detect_swing_bias(window)
+        return result.score, result.label
+    except Exception:
+        return None, None
+
+
+def _compute_vrp_at_index(rolling_vol, idx: int) -> float:
+    """Approximate VRP at index: IV premium proxy minus realized vol.
+
+    Returns VRP as a percentage (positive = IV rich = premium sellers' edge).
+    """
+    if idx >= len(rolling_vol):
+        return 0.0
+    rv = rolling_vol[idx]
+    iv_proxy = rv * 1.10
+    if iv_proxy <= 0:
+        return 0.0
+    return (iv_proxy - rv) / iv_proxy * 100
+
+
 def _check_entry_filters(request, regime: str, bias_score=None, bias_label=None) -> bool:
     """Check if signal filters allow entry. Returns True if entry is allowed."""
     if request.regime_filter:
@@ -175,6 +217,10 @@ def _check_entry_filters(request, regime: str, bias_score=None, bias_label=None)
             "long_call_spread": {"LOW_IV", "MODERATE_IV"},
             "long_put_spread": {"LOW_IV", "MODERATE_IV"},
             "butterfly": {"LOW_IV", "MODERATE_IV"},
+            "calendar_spread": {"HIGH_IV", "MODERATE_IV"},
+            "diagonal_spread": {"HIGH_IV", "MODERATE_IV"},
+            "iron_butterfly": {"HIGH_IV"},
+            "long_straddle": {"LOW_IV"},
         }
         allowed = strategy_regimes.get(request.strategy, set())
         if regime not in allowed:
@@ -213,6 +259,7 @@ def _get_strategy_exit_rules(strategy: str) -> dict:
         "long_call_spread":  {"profit_pct": 75, "loss_pct": 100, "exit_dte": 2, "hold": False},
         "long_put_spread":   {"profit_pct": 75, "loss_pct": 100, "exit_dte": 2, "hold": False},
         "butterfly":         {"profit_pct": 100, "loss_pct": 100, "exit_dte": 0, "hold": True},
+        **_SWING_EXIT_RULES,
     }
     return rules.get(strategy, {"profit_pct": 50, "loss_pct": 200, "exit_dte": 1, "hold": False})
 
@@ -253,9 +300,11 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
     entry_bias_label = None
     entry_edge_pct = None
 
-    # Entry frequency: every entry_dte_min days
-    entry_interval = max(request.entry_dte_min, 7)
-    next_entry_idx = 0
+    is_swing = request.strategy in _SWING_STRATEGIES
+
+    # Entry frequency: swing trades need more spacing
+    entry_interval = max(request.entry_dte_min, 14 if is_swing else 7)
+    next_entry_idx = 200 if is_swing else 0  # swing needs 200 bars for SMA200
 
     is_credit = params["is_credit"]
     slippage_pct = request.slippage_pct
@@ -365,8 +414,11 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
                 next_entry_idx = i + 5  # cool-off period
 
         elif i >= next_entry_idx:
-            # Compute bias at this point in time
-            bias_score, bias_label = _compute_bias_at_index(ohlcv_df, i)
+            # Compute bias at this point in time (swing or short-term)
+            if is_swing:
+                bias_score, bias_label = _compute_swing_bias_at_index(ohlcv_df, i)
+            else:
+                bias_score, bias_label = _compute_bias_at_index(ohlcv_df, i)
 
             # Check signal filters before entering
             regime = _classify_regime(iv)
@@ -491,6 +543,14 @@ def _price_strategy(spot, entry_spot, iv, T, r, strategy, is_credit) -> float:
             call = black_scholes_price(spot, atm, T, r, iv, "call")
             put = black_scholes_price(spot, atm, T, r, iv, "put")
             return call + put
+
+        elif strategy in ("iron_butterfly",):
+            wing_width = inc * 5
+            sell_call = black_scholes_price(spot, atm, T, r, iv, "call")
+            buy_call = black_scholes_price(spot, atm + wing_width, T, r, iv, "call")
+            sell_put = black_scholes_price(spot, atm, T, r, iv, "put")
+            buy_put = black_scholes_price(spot, atm - wing_width, T, r, iv, "put")
+            return (sell_call - buy_call) + (sell_put - buy_put)
 
         elif strategy in ("naked_put_1dte",):
             return black_scholes_price(spot, atm - inc, T, r, iv, "put")

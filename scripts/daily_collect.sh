@@ -17,15 +17,8 @@ echo "=========================================="
 echo "Chain collection — $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=========================================="
 
-# Use docker-compose (whichever is available)
-if docker compose version &> /dev/null 2>&1; then
-    COMPOSE="docker compose"
-elif command -v docker-compose &> /dev/null 2>&1; then
-    COMPOSE="docker-compose"
-else
-    echo "ERROR: docker compose not available"
-    exit 1
-fi
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+COMPOSE="docker-compose"
 
 $COMPOSE run --rm collect python scripts/collect_chains.py "$TICKERS" --max-dte "$MAX_DTE"
 

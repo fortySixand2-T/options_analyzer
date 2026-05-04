@@ -105,7 +105,51 @@ def _init_schema(conn: sqlite3.Connection):
 
         CREATE INDEX IF NOT EXISTS idx_iv_ticker_date
             ON iv_snapshots(ticker, snapshot_date);
+
+        CREATE TABLE IF NOT EXISTS swing_signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            snapshot_date TEXT NOT NULL,
+            -- VRP
+            vrp_overall REAL,
+            vrp_overall_pct REAL,
+            vrp_richest_bucket TEXT,
+            vrp_buckets_json TEXT,
+            -- Term structure
+            term_structure_slope REAL,
+            term_structure_slope_per_dte REAL,
+            calendar_signal REAL,
+            kink_expiry TEXT,
+            kink_magnitude REAL,
+            contango INTEGER,
+            front_iv REAL,
+            back_iv REAL,
+            -- Swing bias
+            swing_bias_label TEXT,
+            swing_bias_score REAL,
+            swing_atr_percentile REAL,
+            -- Earnings
+            earnings_days INTEGER,
+            earnings_iv_inflation REAL,
+            expected_move_pct REAL,
+            in_earnings_window INTEGER,
+            -- Skew
+            skew_25d REAL,
+            skew_zscore REAL,
+            -- Decision
+            recommended_strategy TEXT,
+            recommendation_rationale TEXT,
+            UNIQUE(ticker, snapshot_date)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_swing_signals_ticker_date
+            ON swing_signals(ticker, snapshot_date);
     """)
+    # Add skew column if not present (safe migration for existing DBs)
+    try:
+        conn.execute("ALTER TABLE iv_snapshots ADD COLUMN skew_25d REAL")
+    except sqlite3.OperationalError:
+        pass  # column already exists
 
 
 # ── Write operations ─────────────────────────────────────────────────────────
@@ -198,6 +242,7 @@ def store_iv_snapshot(
     realized_vol_60d: Optional[float],
     spot: Optional[float],
     label: str = "eod",
+    skew_25d: Optional[float] = None,
 ):
     """Store daily IV summary (inspired by Trading-copilot's iv_history)."""
     conn = _get_conn()
@@ -205,22 +250,132 @@ def store_iv_snapshot(
         conn.execute("""
             INSERT INTO iv_snapshots
                 (ticker, snapshot_date, label, atm_iv_call, atm_iv_put, atm_iv_avg,
-                 realized_vol_30d, realized_vol_60d, spot)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 realized_vol_30d, realized_vol_60d, spot, skew_25d)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(ticker, snapshot_date, label) DO UPDATE SET
                 atm_iv_call = excluded.atm_iv_call,
                 atm_iv_put = excluded.atm_iv_put,
                 atm_iv_avg = excluded.atm_iv_avg,
                 realized_vol_30d = excluded.realized_vol_30d,
                 realized_vol_60d = excluded.realized_vol_60d,
-                spot = excluded.spot
+                spot = excluded.spot,
+                skew_25d = excluded.skew_25d
         """, (
             ticker, snapshot_date, label, atm_iv_call, atm_iv_put, atm_iv_avg,
-            realized_vol_30d, realized_vol_60d, spot,
+            realized_vol_30d, realized_vol_60d, spot, skew_25d,
         ))
         conn.commit()
     except Exception as e:
         logger.error("Failed to store IV snapshot for %s: %s", ticker, e)
+    finally:
+        conn.close()
+
+
+def store_swing_signals(
+    ticker: str,
+    snapshot_date: str,
+    vrp_overall: Optional[float] = None,
+    vrp_overall_pct: Optional[float] = None,
+    vrp_richest_bucket: Optional[str] = None,
+    vrp_buckets_json: Optional[str] = None,
+    term_structure_slope: Optional[float] = None,
+    term_structure_slope_per_dte: Optional[float] = None,
+    calendar_signal: Optional[float] = None,
+    kink_expiry: Optional[str] = None,
+    kink_magnitude: Optional[float] = None,
+    contango: Optional[bool] = None,
+    front_iv: Optional[float] = None,
+    back_iv: Optional[float] = None,
+    swing_bias_label: Optional[str] = None,
+    swing_bias_score: Optional[float] = None,
+    swing_atr_percentile: Optional[float] = None,
+    earnings_days: Optional[int] = None,
+    earnings_iv_inflation: Optional[float] = None,
+    expected_move_pct: Optional[float] = None,
+    in_earnings_window: Optional[bool] = None,
+    skew_25d: Optional[float] = None,
+    skew_zscore: Optional[float] = None,
+    recommended_strategy: Optional[str] = None,
+    recommendation_rationale: Optional[str] = None,
+):
+    """Persist all swing edge signals for backtester replay."""
+    import json
+
+    conn = _get_conn()
+    try:
+        conn.execute("""
+            INSERT INTO swing_signals
+                (ticker, snapshot_date,
+                 vrp_overall, vrp_overall_pct, vrp_richest_bucket, vrp_buckets_json,
+                 term_structure_slope, term_structure_slope_per_dte, calendar_signal,
+                 kink_expiry, kink_magnitude, contango, front_iv, back_iv,
+                 swing_bias_label, swing_bias_score, swing_atr_percentile,
+                 earnings_days, earnings_iv_inflation, expected_move_pct, in_earnings_window,
+                 skew_25d, skew_zscore,
+                 recommended_strategy, recommendation_rationale)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ticker, snapshot_date) DO UPDATE SET
+                vrp_overall = excluded.vrp_overall,
+                vrp_overall_pct = excluded.vrp_overall_pct,
+                vrp_richest_bucket = excluded.vrp_richest_bucket,
+                vrp_buckets_json = excluded.vrp_buckets_json,
+                term_structure_slope = excluded.term_structure_slope,
+                term_structure_slope_per_dte = excluded.term_structure_slope_per_dte,
+                calendar_signal = excluded.calendar_signal,
+                kink_expiry = excluded.kink_expiry,
+                kink_magnitude = excluded.kink_magnitude,
+                contango = excluded.contango,
+                front_iv = excluded.front_iv,
+                back_iv = excluded.back_iv,
+                swing_bias_label = excluded.swing_bias_label,
+                swing_bias_score = excluded.swing_bias_score,
+                swing_atr_percentile = excluded.swing_atr_percentile,
+                earnings_days = excluded.earnings_days,
+                earnings_iv_inflation = excluded.earnings_iv_inflation,
+                expected_move_pct = excluded.expected_move_pct,
+                in_earnings_window = excluded.in_earnings_window,
+                skew_25d = excluded.skew_25d,
+                skew_zscore = excluded.skew_zscore,
+                recommended_strategy = excluded.recommended_strategy,
+                recommendation_rationale = excluded.recommendation_rationale
+        """, (
+            ticker, snapshot_date,
+            vrp_overall, vrp_overall_pct, vrp_richest_bucket, vrp_buckets_json,
+            term_structure_slope, term_structure_slope_per_dte, calendar_signal,
+            kink_expiry, kink_magnitude,
+            int(contango) if contango is not None else None,
+            front_iv, back_iv,
+            swing_bias_label, swing_bias_score, swing_atr_percentile,
+            earnings_days, earnings_iv_inflation, expected_move_pct,
+            int(in_earnings_window) if in_earnings_window is not None else None,
+            skew_25d, skew_zscore,
+            recommended_strategy, recommendation_rationale,
+        ))
+        conn.commit()
+        logger.info("Stored swing signals: %s %s", ticker, snapshot_date)
+    except Exception as e:
+        logger.error("Failed to store swing signals for %s: %s", ticker, e)
+    finally:
+        conn.close()
+
+
+def get_swing_signals(
+    ticker: str, start_date: str = "", end_date: str = "",
+) -> List[dict]:
+    """Retrieve swing signal history for backtester replay."""
+    conn = _get_conn()
+    try:
+        sql = "SELECT * FROM swing_signals WHERE ticker = ?"
+        params: list = [ticker]
+        if start_date:
+            sql += " AND snapshot_date >= ?"
+            params.append(start_date)
+        if end_date:
+            sql += " AND snapshot_date <= ?"
+            params.append(end_date)
+        sql += " ORDER BY snapshot_date"
+        rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
 

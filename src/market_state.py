@@ -41,6 +41,7 @@ class VolSurface:
     call_25d_iv: Optional[float] = None # 25-delta call IV
     skew_25d: float = 0.0              # put_25d_iv - atm_iv (positive = normal skew)
     skew_rr: float = 0.0               # 25d risk reversal: call_25d - put_25d (negative = put skew)
+    skew_zscore: float = 0.0           # current skew vs 20-day rolling (>1.5 = extreme)
     iv_by_strike: Dict[float, float] = field(default_factory=dict)
 
 
@@ -101,6 +102,22 @@ class MarketState:
     put_wall: Optional[float] = None
     max_pain: Optional[float] = None
     put_call_ratio: Optional[float] = None
+
+    # VRP (variance risk premium) across term structure
+    vrp_curve: Optional[dict] = None    # VRPCurve.to_dict() or None if unavailable
+    vrp_overall: float = 0.0            # weighted average VRP (positive = IV rich)
+    vrp_richest_bucket: Optional[str] = None  # DTE bucket with highest VRP %
+
+    # IV term structure
+    term_structure: Optional[dict] = None  # TermStructure.to_dict() or None
+    term_structure_slope: float = 0.0      # (back - front) / front * 100
+    calendar_signal: float = 0.0           # -1 to +1 calendar opportunity
+
+    # Earnings
+    earnings_days: Optional[int] = None    # days to next earnings (None for indices)
+    earnings_iv_inflation: float = 0.0     # 0-1 how inflated IV is pre-earnings
+    expected_move_pct: float = 0.0         # market-implied expected move %
+    in_earnings_window: bool = False       # 2-10 days before earnings
 
     # Event risk
     event_active: bool = False
@@ -202,6 +219,7 @@ class MarketState:
                 "call_25d_iv": round(self.vol_surface.call_25d_iv, 4) if self.vol_surface.call_25d_iv else None,
                 "skew_25d": round(self.vol_surface.skew_25d, 4),
                 "skew_rr": round(self.vol_surface.skew_rr, 4),
+                "skew_zscore": round(self.vol_surface.skew_zscore, 2),
             },
             "chain_quality": {
                 "avg_spread_pct": round(self.chain_quality.avg_spread_pct, 2),
@@ -229,6 +247,22 @@ class MarketState:
                 "active": self.event_active,
                 "type": self.event_type,
                 "days": self.event_days,
+            },
+            "vrp": {
+                "overall": round(self.vrp_overall, 4),
+                "richest_bucket": self.vrp_richest_bucket,
+                "curve": self.vrp_curve,
+            },
+            "term_structure": {
+                "slope": round(self.term_structure_slope, 2),
+                "calendar_signal": round(self.calendar_signal, 3),
+                "detail": self.term_structure,
+            },
+            "earnings": {
+                "days": self.earnings_days,
+                "iv_inflation": round(self.earnings_iv_inflation, 3),
+                "expected_move_pct": round(self.expected_move_pct, 2),
+                "in_window": self.in_earnings_window,
             },
             "edge": {
                 "has_credit_edge": self.has_edge("iron_condor"),
@@ -349,14 +383,43 @@ def compute_vol_surface(chain_snapshot, spot: float) -> VolSurface:
         if iv == iv and iv > 0:
             iv_by_strike[c.strike] = iv
 
+    # Skew z-score from historical iv_snapshots
+    skew_zscore = _compute_skew_zscore(chain_snapshot.ticker, skew_25d)
+
     return VolSurface(
         atm_iv=atm_iv,
         put_25d_iv=put_25d_iv,
         call_25d_iv=call_25d_iv,
         skew_25d=skew_25d,
         skew_rr=skew_rr,
+        skew_zscore=skew_zscore,
         iv_by_strike=iv_by_strike,
     )
+
+
+def _compute_skew_zscore(ticker: str, current_skew: float, window: int = 20) -> float:
+    """Compute z-score of current skew vs rolling historical skew.
+
+    Uses stored skew_25d values from iv_snapshots table.
+    Returns 0 if insufficient history.
+    """
+    try:
+        from data.chain_store import get_iv_history
+        rows = get_iv_history(ticker)
+        skew_values = [
+            r["skew_25d"] for r in rows
+            if r.get("skew_25d") is not None
+        ]
+        if len(skew_values) < window:
+            return 0.0
+        recent = skew_values[-window:]
+        mean = sum(recent) / len(recent)
+        std = (sum((x - mean) ** 2 for x in recent) / len(recent)) ** 0.5
+        if std < 1e-6:
+            return 0.0
+        return (current_skew - mean) / std
+    except Exception:
+        return 0.0
 
 
 def compute_chain_quality(chain_snapshot, spot: float) -> ChainQuality:
@@ -539,6 +602,53 @@ def build_market_state(
     # 11. Chain quality
     chain_quality = compute_chain_quality(chain_snapshot, spot)
 
+    # 11b. VRP curve
+    vrp_curve_data = None
+    vrp_overall = 0.0
+    vrp_richest = None
+    try:
+        from edge.vrp import compute_vrp_curve, extract_chain_iv_by_dte
+        iv_by_dte = extract_chain_iv_by_dte(chain_snapshot)
+        if iv_by_dte:
+            vrp_result = compute_vrp_curve(iv_by_dte, hv20)
+            vrp_curve_data = vrp_result.to_dict()
+            vrp_overall = vrp_result.overall_vrp
+            vrp_richest = vrp_result.richest_bucket
+    except Exception as e:
+        logger.debug("VRP computation skipped for %s: %s", symbol, e)
+
+    # 11c. Term structure
+    ts_data = None
+    ts_slope = 0.0
+    cal_signal = 0.0
+    try:
+        from edge.term_structure import compute_iv_term_structure
+        ts = compute_iv_term_structure(chain_snapshot, spot)
+        if ts.expiries:
+            ts_data = ts.to_dict()
+            ts_slope = ts.slope
+            cal_signal = ts.calendar_signal
+    except Exception as e:
+        logger.debug("Term structure computation skipped for %s: %s", symbol, e)
+
+    # 11d. Earnings
+    earn_days = None
+    earn_iv_inflation = 0.0
+    earn_exp_move = 0.0
+    earn_in_window = False
+    try:
+        from edge.earnings import compute_earnings_info
+        earn_info = compute_earnings_info(
+            ticker=symbol, current_iv=chain_iv, baseline_iv=hv20, spot=spot,
+        )
+        if earn_info.has_earnings:
+            earn_days = earn_info.days_to_earnings
+            earn_iv_inflation = earn_info.iv_inflation
+            earn_exp_move = earn_info.expected_move_pct
+            earn_in_window = earn_info.in_earnings_window
+    except Exception as e:
+        logger.debug("Earnings info skipped for %s: %s", symbol, e)
+
     # 12. VIX data from regime
     vix_val = regime_result.vix.vix
     vix_slope = regime_result.vix.term_structure_slope
@@ -580,6 +690,16 @@ def build_market_state(
         put_wall=put_wall,
         max_pain=max_pain,
         put_call_ratio=pc_ratio,
+        vrp_curve=vrp_curve_data,
+        vrp_overall=vrp_overall,
+        vrp_richest_bucket=vrp_richest,
+        term_structure=ts_data,
+        term_structure_slope=ts_slope,
+        calendar_signal=cal_signal,
+        earnings_days=earn_days,
+        earnings_iv_inflation=earn_iv_inflation,
+        expected_move_pct=earn_exp_move,
+        in_earnings_window=earn_in_window,
         event_active=regime_result.event_active,
         event_type=regime_result.event_type,
         event_days=regime_result.event_days,

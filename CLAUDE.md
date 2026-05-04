@@ -80,6 +80,7 @@ src/scanner/providers/cached_provider.py
 5. Conviction weights live in `src/config.py` `CHAIN_SCANNER_CONFIG.scoring_weights`.
 6. All strategies are defined-risk. No naked exposure.
 7. `./start.sh` is the single entry point. `./start.sh test` runs the suite.
+8. **Persist all computed signals to SQLite for backtesting.** Every edge signal, regime classification, bias score, dealer state, VRP, term structure, skew, and earnings data must be stored in `data/chain_snapshots.db` (or a dedicated signals table) at collection time. The backtester must be able to replay historical signals from the DB — never rely solely on live computation. Data is the moat; without historical signal snapshots, backtests are simulations, not validations.
 
 ## Current status
 

@@ -49,3 +49,25 @@ CHAIN_SCANNER_CONFIG = {
         "greeks": 0.05,
     },
 }
+
+# ── Swing scanner defaults (14-60 DTE) ──────────────────────────────────
+SWING_SCANNER_CONFIG = {
+    "filter": {
+        "min_dte": 14,
+        "max_dte": 60,
+        "min_delta": 0.10,
+        "max_delta": 0.50,
+        "min_open_interest": 200,
+        "max_spread_pct": 12.0,
+        "moneyness_range": [0.85, 1.15],
+    },
+    "scoring_weights": {
+        "vrp": 0.25,
+        "term_structure": 0.20,
+        "vol_regime": 0.15,
+        "garch_edge": 0.15,
+        "directional": 0.10,
+        "dealer_regime": 0.10,
+        "liquidity": 0.05,
+    },
+}

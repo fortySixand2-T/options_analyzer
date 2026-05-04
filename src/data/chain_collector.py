@@ -166,6 +166,15 @@ def _store_iv_from_chain(
     if atm_iv_avg is None:
         return
 
+    # Compute 25-delta put skew (put_25d_iv - atm_iv)
+    skew_25d = None
+    if puts and atm_iv_avg:
+        put_target = spot * 0.95
+        nearest_otm_put = min(puts, key=lambda c: abs(c.strike - put_target))
+        put_otm_iv = nearest_otm_put.implied_volatility
+        if put_otm_iv and not math.isnan(put_otm_iv):
+            skew_25d = put_otm_iv - atm_iv_avg
+
     # Get realized vol from history
     rv_30d = None
     rv_60d = None
@@ -190,6 +199,7 @@ def _store_iv_from_chain(
         realized_vol_60d=rv_60d,
         spot=spot,
         label=label,
+        skew_25d=skew_25d,
     )
     logger.info(
         "  %s IV: call=%.3f put=%.3f avg=%.3f rv30=%.3f spot=%.2f",

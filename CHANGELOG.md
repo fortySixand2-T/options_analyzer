@@ -1,5 +1,33 @@
 # Changelog
 
+- [2026-05-03] Created: src/edge/__init__.py — Edge measurement modules package
+- [2026-05-03] Created: src/edge/vrp.py — Variance Risk Premium (VRP) measurement across DTE term structure buckets
+- [2026-05-03] Created: src/edge/term_structure.py — IV term structure analysis, kink detection, calendar trade signal
+- [2026-05-03] Created: src/edge/earnings.py — Earnings calendar, IV inflation scoring, expected move calculation
+- [2026-05-03] Modified: src/market_state.py — Added VRP curve, term structure, earnings, skew z-score fields to MarketState and VolSurface
+- [2026-05-03] Modified: src/data/chain_store.py — Added skew_25d column to iv_snapshots table (safe migration)
+- [2026-05-03] Modified: src/data/chain_collector.py — Compute and store 25-delta put skew during daily collection
+- [2026-05-03] Created: tests/test_edge.py — 29 tests for VRP, term structure, earnings, and skew z-score modules
+- [2026-05-03] Modified: CLAUDE.md — Added dev rule #8: persist all computed signals to SQLite for backtesting
+- [2026-05-03] Created: src/swing/__init__.py — Swing-timeframe signal architecture package
+- [2026-05-03] Created: src/swing/bias.py — Swing bias detector (SMA 20/50/200, golden cross, weekly RSI, momentum)
+- [2026-05-03] Modified: src/strategies/_deferred/calendar_spread.py — Fixed regime enums to HIGH_IV/MODERATE_IV, fixed import path
+- [2026-05-03] Modified: src/strategies/_deferred/diagonal_spread.py — Fixed regime enums to HIGH_IV/MODERATE_IV, fixed import path
+- [2026-05-03] Modified: src/strategies/_deferred/short_strangle.py — Converted to IronButterfly (defined risk), 4-leg structure
+- [2026-05-03] Modified: src/strategies/_deferred/long_straddle.py — Fixed regime enums to LOW_IV/SPIKE, fixed import path
+- [2026-05-03] Modified: src/strategies/_deferred/naked_put_1dte.py — Fixed regime enum to LOW_IV, added undefined-risk warning
+- [2026-05-03] Created: src/swing/decision_matrix.py — 5-input swing strategy mapper (regime, bias, dealer, VRP, term structure)
+- [2026-05-03] Modified: src/config.py — Added SWING_SCANNER_CONFIG with 14-60 DTE filters and VRP-weighted scoring
+- [2026-05-03] Modified: src/strategies/registry.py — Added SWING_REGISTRY (4 strategies) and for_swing_regime()
+- [2026-05-03] Modified: src/data/chain_store.py — Added swing_signals table and store/get functions for backtester replay
+- [2026-05-03] Created: tests/test_swing.py — 39 tests for swing bias, decision matrix, registry, config, persistence
+- [2026-05-03] Created: src/swing/scanner.py — Swing-timeframe strategy scanner (regime → bias → VRP → term structure → decision matrix)
+- [2026-05-03] Modified: src/ui/app.py — Added 5 swing API endpoints (scan, market-state, trade-candidates, backtest, signals history)
+- [2026-05-03] Created: frontend/src/components/SwingScanner.jsx — Swing tab with VRP bars, term structure chart, earnings panel, strategy cards
+- [2026-05-03] Modified: frontend/src/App.jsx — Added Swing tab to navigation
+- [2026-05-03] Modified: frontend/src/components/Dashboard.css — Added VRP bars, term structure bars, grid-3 layout styles
+- [2026-05-03] Modified: src/backtest/local_backtest.py — Added iron butterfly pricing, swing bias replay, swing exit rules, swing DTE ranges
+
 - [2026-04-27] Created: src/data/__init__.py — Data storage layer package
 - [2026-04-27] Created: src/data/chain_store.py — SQLite storage for daily chain snapshots (3 tables: chain_snapshots, chain_contracts, iv_snapshots)
 - [2026-04-27] Created: src/data/chain_collector.py — Daily collection pipeline using YFinanceProvider with IV extraction
@@ -236,3 +264,5 @@
 - [2026-04-26] Modified: frontend/src/components/Dashboard.css — Added order placement button and preview panel styles
 - [2026-04-26] Modified: TRADING_SYSTEM_ARCHITECTURE.md — Marked execution bridge (Priority 2) as done
 - [2026-04-26] Created: docs/historical_data_options.md — QuantConnect vs ThetaData analysis for historical options chain data
+- [2026-04-28] Modified: scripts/daily_collect.sh — Use docker-compose with explicit PATH for cron compatibility
+- [2026-04-28] Modified: scripts/daily_collect_shortdte.sh — Use docker-compose with explicit PATH for cron compatibility

@@ -1005,6 +1005,185 @@ def streamer_status():
     }
 
 
+# ── Swing Scanner ──────────────────────────────────────────────────────────
+
+@app.get("/api/swing/scan")
+def swing_scan(
+    symbols: str = Query("SPY", description="Comma-separated symbols"),
+    top: int = Query(20, description="Max results"),
+):
+    """Run swing-timeframe strategy scanner (14-60 DTE)."""
+    tickers = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not tickers:
+        raise HTTPException(status_code=400, detail="No symbols provided")
+
+    try:
+        from swing.scanner import scan_swing_strategies
+        result = scan_swing_strategies(tickers=tickers, top=top)
+
+        regime = result["regime"]
+        dealer = result.get("dealer")
+
+        return {
+            "regime": {
+                "regime": regime.regime.value,
+                "rationale": regime.rationale,
+            },
+            "swing_bias": result["swing_bias"],
+            "dealer": {
+                "regime": dealer.dealer_regime,
+                "net_gex": dealer.net_gex,
+                "gamma_flip": dealer.gamma_flip,
+                "call_wall": dealer.call_wall,
+                "put_wall": dealer.put_wall,
+                "max_pain": dealer.max_pain,
+                "put_call_ratio": dealer.put_call_ratio,
+                "source": dealer.source,
+            } if dealer else None,
+            "vrp": result["vrp"],
+            "term_structure": result["term_structure"],
+            "earnings": result["earnings"],
+            "decision": result["decision"],
+            "strategies": [_serialize_strategy(s) for s in result["strategies"]],
+            "signals_count": result["signals_count"],
+        }
+    except Exception as e:
+        logger.exception("Swing scan failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/swing/market-state")
+def swing_market_state(symbol: str = Query("SPY", description="Symbol")):
+    """Market state enriched with VRP, term structure, and earnings data."""
+    try:
+        from market_state import build_market_state
+        state = build_market_state(symbol.upper())
+        base = state.to_dict()
+
+        from swing.bias import detect_swing_bias
+        from scanner.providers import create_provider
+        import pandas as pd
+
+        provider = create_provider()
+        try:
+            history = provider.get_history(symbol.upper(), days=300)
+            if hasattr(history, 'closes') and len(history.closes) >= 50:
+                df = pd.DataFrame({
+                    "Close": history.closes,
+                    "High": history.highs if hasattr(history, 'highs') else history.closes * 1.005,
+                    "Low": history.lows if hasattr(history, 'lows') else history.closes * 0.995,
+                    "Open": history.opens if hasattr(history, 'opens') else history.closes,
+                    "Volume": history.volumes if hasattr(history, 'volumes') else [1_000_000] * len(history.closes),
+                })
+                swing_bias = detect_swing_bias(df)
+                base["swing_bias"] = {
+                    "label": swing_bias.label,
+                    "score": swing_bias.score,
+                    "atr_percentile": swing_bias.atr_percentile,
+                    "detail": swing_bias.detail,
+                }
+            else:
+                base["swing_bias"] = None
+        except Exception:
+            base["swing_bias"] = None
+
+        return base
+    except Exception as e:
+        logger.exception("Swing market state failed for %s", symbol)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/swing/trade-candidates")
+def swing_trade_candidates(
+    symbol: str = Query("SPY", description="Symbol"),
+    portfolio_value: float = Query(100_000, description="Portfolio value for sizing"),
+):
+    """Swing L1→L2→L3 pipeline: market state → swing decision → sizing."""
+    try:
+        from swing.scanner import scan_swing_strategies
+
+        result = scan_swing_strategies(tickers=[symbol.upper()], top=10)
+
+        regime = result["regime"]
+        strategies = result["strategies"]
+
+        candidates = []
+        for strat_result in strategies:
+            candidates.append(_serialize_strategy(strat_result))
+
+        return {
+            "symbol": symbol.upper(),
+            "regime": regime.regime.value,
+            "swing_bias": result["swing_bias"],
+            "vrp": result["vrp"],
+            "term_structure": result["term_structure"],
+            "earnings": result["earnings"],
+            "decision": result["decision"],
+            "candidates": candidates,
+            "count": len(candidates),
+        }
+    except Exception as e:
+        logger.exception("Swing trade candidates failed for %s", symbol)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/backtest/swing/{strategy}")
+def swing_backtest(
+    strategy: str,
+    symbol: str = Query("SPY"),
+    start: str = Query("2022-01-01"),
+    end: Optional[str] = Query(None),
+    regime_filter: bool = Query(False),
+    bias_filter: bool = Query(False),
+    edge_threshold: float = Query(0.0),
+    exit_rule: str = Query("strategy"),
+    slippage_pct: float = Query(3.0),
+):
+    """Run backtest for a swing strategy (14-60 DTE)."""
+    from backtest.models import BacktestRequest
+    from backtest.local_backtest import run_local_backtest
+
+    end_date = date.fromisoformat(end) if end else date.today()
+    start_date = date.fromisoformat(start)
+
+    swing_strategies = {"calendar_spread", "diagonal_spread", "iron_butterfly", "long_straddle"}
+    if strategy not in swing_strategies:
+        raise HTTPException(status_code=400, detail=f"Not a swing strategy: {strategy}")
+
+    req = BacktestRequest(
+        strategy=strategy,
+        symbol=symbol.upper(),
+        start_date=start_date,
+        end_date=end_date,
+        entry_dte_min=21,
+        entry_dte_max=45,
+        regime_filter=regime_filter,
+        bias_filter=bias_filter,
+        edge_threshold=edge_threshold,
+        exit_rule=exit_rule,
+        slippage_pct=slippage_pct,
+    )
+
+    try:
+        result = run_local_backtest(req)
+        return _serialize_backtest(result, strategy, symbol, start_date, end_date)
+    except Exception as e:
+        logger.exception("Swing backtest failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/swing/signals/{symbol}")
+def swing_signal_history(
+    symbol: str,
+    start: str = Query("", description="Start date"),
+    end: str = Query("", description="End date"),
+):
+    """Historical swing signals from SQLite for backtester review."""
+    from data.chain_store import get_swing_signals
+    signals = get_swing_signals(symbol.upper(), start_date=start, end_date=end)
+    return {"symbol": symbol.upper(), "signals": signals, "count": len(signals)}
+
+
 # ── Static Files (React build) ──────────────────────────────────────────────
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")

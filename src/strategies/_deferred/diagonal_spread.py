@@ -1,9 +1,15 @@
-"""Diagonal spread — sell front-month, buy back-month at different strike."""
+"""Diagonal spread — sell front-month, buy back-month at different strike.
+
+Combines calendar (term structure) edge with directional bias.
+Similar to calendar but with strike offset for directional lean.
+Best in HIGH_IV or MODERATE_IV with directional swing bias.
+DTE: 21-60 for the back month.
+"""
 
 from typing import Dict, List, Tuple
 
 from regime.detector import MarketRegime
-from .base import SignalCheck, StrategyDefinition
+from ..base import SignalCheck, StrategyDefinition
 
 
 def _strike_inc(spot: float) -> float:
@@ -25,7 +31,7 @@ class DiagonalSpread(StrategyDefinition):
 
     @property
     def ideal_regimes(self) -> List[MarketRegime]:
-        return [MarketRegime.LOW_VOL_RANGING, MarketRegime.HIGH_VOL_TRENDING]
+        return [MarketRegime.HIGH_IV, MarketRegime.MODERATE_IV]
 
     @property
     def dte_range(self) -> Tuple[int, int]:
@@ -33,7 +39,7 @@ class DiagonalSpread(StrategyDefinition):
 
     @property
     def iv_range(self) -> Tuple[float, float]:
-        return (35.0, 100.0)
+        return (30.0, 100.0)
 
     def build_checklist(self, signal, regime_result) -> List[SignalCheck]:
         vix = regime_result.vix
@@ -46,20 +52,23 @@ class DiagonalSpread(StrategyDefinition):
                         signal.direction, weight=1.5),
             SignalCheck("Delta 0.20-0.45", 0.20 <= abs(signal.delta) <= 0.45,
                         f"{signal.delta:+.3f}", weight=1.0),
-            SignalCheck("DTE > 25", signal.dte > 25,
+            SignalCheck("DTE 25-50", 25 <= signal.dte <= 50,
                         f"{signal.dte}d", weight=1.0),
         ]
 
     def build_legs(self, signal, spot: float) -> List[Dict]:
         w = _strike_inc(spot)
         opt_type = signal.option_type
-        # Sell near-term at signal strike, buy longer-term one strike further OTM
         if opt_type == "call":
             return [
-                {"action": "sell", "option_type": "call", "strike": signal.strike},
-                {"action": "buy", "option_type": "call", "strike": signal.strike + w},
+                {"action": "sell", "option_type": "call", "strike": signal.strike,
+                 "note": "front_month"},
+                {"action": "buy", "option_type": "call", "strike": signal.strike + w,
+                 "note": "back_month"},
             ]
         return [
-            {"action": "sell", "option_type": "put", "strike": signal.strike},
-            {"action": "buy", "option_type": "put", "strike": signal.strike - w},
+            {"action": "sell", "option_type": "put", "strike": signal.strike,
+             "note": "front_month"},
+            {"action": "buy", "option_type": "put", "strike": signal.strike - w,
+             "note": "back_month"},
         ]

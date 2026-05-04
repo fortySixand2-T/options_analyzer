@@ -1,9 +1,13 @@
-"""Naked Put 0-1 DTE — sell OTM put for theta decay on expiration day."""
+"""Naked Put 0-1 DTE — sell OTM put for theta decay on expiration day.
+
+WARNING: Undefined risk. Stays deferred — violates defined-risk rule.
+Kept for reference only. Not registered in any scanner.
+"""
 
 from typing import Dict, List, Tuple
 
 from regime.detector import MarketRegime
-from .base import SignalCheck, StrategyDefinition
+from ..base import SignalCheck, StrategyDefinition
 
 
 class NakedPut1DTE(StrategyDefinition):
@@ -17,7 +21,7 @@ class NakedPut1DTE(StrategyDefinition):
 
     @property
     def ideal_regimes(self) -> List[MarketRegime]:
-        return [MarketRegime.LOW_VOL_RANGING]
+        return [MarketRegime.LOW_IV]
 
     @property
     def dte_range(self) -> Tuple[int, int]:
