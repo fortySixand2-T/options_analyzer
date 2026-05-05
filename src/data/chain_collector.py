@@ -23,7 +23,7 @@ from typing import List, Optional
 
 from scanner.providers.base import ChainSnapshot
 from scanner.providers.yfinance_provider import YFinanceProvider
-from data.chain_store import store_snapshot, store_iv_snapshot
+from data.chain_store import store_snapshot, store_iv_snapshot, store_iv_by_expiry
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +90,9 @@ def collect_daily_snapshots(
 
             # Extract and store IV summary (like Trading-copilot's _store_iv_snapshots)
             _store_iv_from_chain(ticker, today, chain, provider, label=label)
+
+            # Store per-expiry IV for term structure replay
+            _store_per_expiry_iv(ticker, today, chain)
 
             results["tickers_success"] += 1
             results["total_contracts"] += len(chain.contracts)
@@ -210,3 +213,52 @@ def _store_iv_from_chain(
         rv_30d or 0,
         spot,
     )
+
+
+def _store_per_expiry_iv(
+    ticker: str,
+    snapshot_date: str,
+    chain: ChainSnapshot,
+):
+    """Group contracts by expiry, compute ATM IV and mean spread per expiry."""
+    from datetime import datetime as dt
+
+    spot = chain.spot
+    if not spot or math.isnan(spot) or spot <= 0:
+        return
+
+    by_expiry: dict = {}
+    for c in chain.contracts:
+        by_expiry.setdefault(c.expiry, []).append(c)
+
+    today = dt.strptime(snapshot_date, "%Y-%m-%d")
+    rows = []
+
+    for expiry_str, contracts in by_expiry.items():
+        try:
+            exp_dt = dt.strptime(expiry_str, "%Y-%m-%d")
+            dte = (exp_dt - today).days
+        except ValueError:
+            continue
+
+        atm = min(contracts, key=lambda c: abs(c.strike - spot))
+        iv = atm.implied_volatility
+        if not iv or math.isnan(iv):
+            continue
+
+        spreads = []
+        for c in contracts:
+            if c.mid and c.mid > 0:
+                spreads.append((c.ask - c.bid) / c.mid * 100)
+
+        rows.append({
+            "expiry_date": expiry_str,
+            "dte": dte,
+            "atm_iv": round(iv, 6),
+            "mean_spread_pct": round(sum(spreads) / len(spreads), 2) if spreads else None,
+            "sample_size": len(contracts),
+        })
+
+    if rows:
+        store_iv_by_expiry(ticker, snapshot_date, rows)
+        logger.info("  %s: stored %d per-expiry IV rows", ticker, len(rows))

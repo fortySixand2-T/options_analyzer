@@ -23,6 +23,19 @@ logger = logging.getLogger(__name__)
 FLASHALPHA_BASE_URL = "https://api.flashalpha.com/v1"
 
 
+def _safe_float(val, default=0.0) -> float:
+    """Convert to float, returning default for None/NaN/Inf."""
+    if val is None:
+        return default
+    try:
+        f = float(val)
+        if f != f or f == float('inf') or f == float('-inf'):
+            return default
+        return f
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass
 class GexLevel:
     """A single GEX strike level."""
@@ -122,15 +135,13 @@ def _parse_gex_response(symbol: str, data: dict) -> DealerData:
         if call_wall and put_wall:
             break
 
-    gamma_flip = float(gex_data.get("gamma_flip", 0))
-    spot = float(gex_data.get("spot", 0))
-    net_gex = float(gex_data.get("net_gex", 0))
-    max_pain = gex_data.get("max_pain")
-    if max_pain is not None:
-        max_pain = float(max_pain)
-    put_call_ratio = gex_data.get("put_call_ratio")
-    if put_call_ratio is not None:
-        put_call_ratio = float(put_call_ratio)
+    gamma_flip = _safe_float(gex_data.get("gamma_flip"))
+    spot = _safe_float(gex_data.get("spot"))
+    net_gex = _safe_float(gex_data.get("net_gex"))
+    max_pain_raw = gex_data.get("max_pain")
+    max_pain = _safe_float(max_pain_raw) if max_pain_raw is not None else None
+    pc_raw = gex_data.get("put_call_ratio")
+    put_call_ratio = _safe_float(pc_raw) if pc_raw is not None else None
 
     # F7: Dealer regime — LONG_GAMMA (range-bound) or SHORT_GAMMA (trending)
     if net_gex > 0 and spot >= gamma_flip:

@@ -1,5 +1,14 @@
 # Changelog
 
+- [2026-05-03] Modified: tests/test_trade_generator.py — Fixed hardcoded Saturday dates (2026-04-25→2026-04-24) causing weekend test failures
+- [2026-05-03] Modified: tests/test_streaming.py — Fixed hardcoded expired dates in LiveScoreEngine tests; use dynamic future dates
+- [2026-05-03] Modified: src/scanner/providers/flashalpha_client.py — Added _safe_float() to prevent NaN/Inf in API response parsing
+- [2026-05-03] Modified: src/market_state.py — Added _safe_round() for NaN-safe serialization in dealer fields
+- [2026-05-05] Modified: src/data/chain_store.py — Added iv_by_expiry table, store_iv_by_expiry(), get_iv_by_expiry() for term structure replay
+- [2026-05-05] Modified: src/data/chain_collector.py — Added _store_per_expiry_iv() to populate per-expiry IV during daily collection
+- [2026-05-05] Modified: src/edge/vrp.py — Added compute_vrp_by_dte() with per-bucket realized vol matching and _realized_vol() helper
+- [2026-05-05] Created: tests/test_data_pipeline.py — Tests for iv_by_expiry storage, _safe_float, _safe_round
+- [2026-05-05] Modified: tests/test_edge.py — Added tests for compute_vrp_by_dte and _realized_vol
 - [2026-05-04] Modified: tests/test_execution.py — Updated test_all_strategies_present to include swing strategies
 - [2026-05-04] Modified: tests/test_swing.py — Updated weight assertion from VRP to vol_regime after calibration
 - [2026-05-04] Modified: src/sizing.py — Calibrated swing strategy stats from Phase 5 backtests; iron_butterfly marked non-tradeable (negative Kelly)

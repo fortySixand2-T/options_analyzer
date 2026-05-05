@@ -78,8 +78,14 @@ class TestComputeDte:
 # ── Live Score Engine ────────────────────────────────────────────────────────
 
 class TestLiveScoreEngine:
-    def _make_update(self, symbol=".SPY260501C590", bid=2.0, ask=2.5,
+    def _future_symbol(self, underlying="SPY", opt_type="C", strike=590):
+        future = date.today() + timedelta(days=30)
+        return f".{underlying}{future.strftime('%y%m%d')}{opt_type}{strike}"
+
+    def _make_update(self, symbol=None, bid=2.0, ask=2.5,
                      iv=0.20, volume=500, underlying=590.0):
+        if symbol is None:
+            symbol = self._future_symbol()
         return QuoteUpdate(
             symbol=symbol, bid=bid, ask=ask, mid=(bid + ask) / 2,
             last=2.2, volume=volume, iv=iv,
@@ -94,7 +100,7 @@ class TestLiveScoreEngine:
         assert score is not None
         assert isinstance(score, LiveScore)
         assert score.conviction > 0
-        assert score.symbol == ".SPY260501C590"
+        assert score.symbol == self._future_symbol()
 
     def test_score_zero_mid_skipped(self):
         engine = LiveScoreEngine()
@@ -110,10 +116,9 @@ class TestLiveScoreEngine:
 
     def test_get_top(self):
         engine = LiveScoreEngine()
-        # Add multiple scores
         for i in range(5):
             update = self._make_update(
-                symbol=f".SPY260501C{590 + i}",
+                symbol=self._future_symbol(strike=590 + i),
                 iv=0.20 + i * 0.05,
                 volume=100 + i * 200,
             )
@@ -132,7 +137,7 @@ class TestLiveScoreEngine:
     def test_update_count(self):
         engine = LiveScoreEngine()
         engine.on_quote_update(self._make_update())
-        engine.on_quote_update(self._make_update(symbol=".QQQ260501P450"))
+        engine.on_quote_update(self._make_update(symbol=self._future_symbol("QQQ", "P", 450)))
         assert engine.update_count == 2
 
 

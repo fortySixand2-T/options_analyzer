@@ -144,6 +144,21 @@ def _init_schema(conn: sqlite3.Connection):
 
         CREATE INDEX IF NOT EXISTS idx_swing_signals_ticker_date
             ON swing_signals(ticker, snapshot_date);
+
+        CREATE TABLE IF NOT EXISTS iv_by_expiry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            snapshot_date TEXT NOT NULL,
+            expiry_date TEXT NOT NULL,
+            dte INTEGER,
+            atm_iv REAL,
+            mean_spread_pct REAL,
+            sample_size INTEGER DEFAULT 0,
+            UNIQUE(ticker, snapshot_date, expiry_date)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_iv_by_expiry_ticker_date
+            ON iv_by_expiry(ticker, snapshot_date);
     """)
     # Add skew column if not present (safe migration for existing DBs)
     try:
@@ -374,6 +389,63 @@ def get_swing_signals(
             sql += " AND snapshot_date <= ?"
             params.append(end_date)
         sql += " ORDER BY snapshot_date"
+        rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def store_iv_by_expiry(
+    ticker: str,
+    snapshot_date: str,
+    expiry_rows: List[dict],
+):
+    """Store per-expiry IV summaries for term structure replay.
+
+    Each row in expiry_rows should have:
+        expiry_date, dte, atm_iv, mean_spread_pct, sample_size
+    """
+    conn = _get_conn()
+    try:
+        for row in expiry_rows:
+            conn.execute("""
+                INSERT INTO iv_by_expiry
+                    (ticker, snapshot_date, expiry_date, dte, atm_iv,
+                     mean_spread_pct, sample_size)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ticker, snapshot_date, expiry_date) DO UPDATE SET
+                    dte = excluded.dte,
+                    atm_iv = excluded.atm_iv,
+                    mean_spread_pct = excluded.mean_spread_pct,
+                    sample_size = excluded.sample_size
+            """, (
+                ticker, snapshot_date,
+                row["expiry_date"], row.get("dte"), row.get("atm_iv"),
+                row.get("mean_spread_pct"), row.get("sample_size", 0),
+            ))
+        conn.commit()
+        logger.info("Stored %d iv_by_expiry rows: %s %s", len(expiry_rows), ticker, snapshot_date)
+    except Exception as e:
+        logger.error("Failed to store iv_by_expiry for %s: %s", ticker, e)
+    finally:
+        conn.close()
+
+
+def get_iv_by_expiry(
+    ticker: str, start_date: str = "", end_date: str = "",
+) -> List[dict]:
+    """Retrieve per-expiry IV history for term structure replay."""
+    conn = _get_conn()
+    try:
+        sql = "SELECT * FROM iv_by_expiry WHERE ticker = ?"
+        params: list = [ticker]
+        if start_date:
+            sql += " AND snapshot_date >= ?"
+            params.append(start_date)
+        if end_date:
+            sql += " AND snapshot_date <= ?"
+            params.append(end_date)
+        sql += " ORDER BY snapshot_date, expiry_date"
         rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
     finally:

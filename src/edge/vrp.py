@@ -136,6 +136,78 @@ def compute_vrp_simple(chain_iv: float, realized_vol: float) -> dict:
     }
 
 
+def _realized_vol(prices: np.ndarray, window: int) -> Optional[float]:
+    """Compute annualized realized vol from a price array over a given window."""
+    if len(prices) < window + 1:
+        return None
+    tail = prices[-(window + 1):]
+    returns = np.diff(np.log(tail))
+    return float(np.std(returns, ddof=1) * np.sqrt(252))
+
+
+# Matched windows: each DTE bucket maps to a realized vol lookback
+_DTE_TO_RV_WINDOW = {
+    "0-7": 5,
+    "7-14": 10,
+    "14-30": 20,
+    "30-60": 30,
+}
+
+
+def compute_vrp_by_dte(
+    chain_iv_by_dte: Dict[int, List[float]],
+    price_history: np.ndarray,
+) -> VRPCurve:
+    """Compute VRP with per-bucket realized vol matched to the DTE horizon.
+
+    Unlike compute_vrp_curve() which uses a single realized_vol for all
+    buckets, this matches each bucket to a realized vol window:
+        0-7 DTE  → 5-day realized vol
+        7-14 DTE → 10-day realized vol
+        14-30 DTE → 20-day realized vol
+        30-60 DTE → 30-day realized vol
+    """
+    buckets: List[VRPBucket] = []
+
+    for label, min_dte, max_dte in DTE_BUCKETS:
+        ivs = []
+        for dte, iv_list in chain_iv_by_dte.items():
+            if min_dte <= dte < max_dte:
+                ivs.extend(iv_list)
+
+        if not ivs:
+            continue
+
+        window = _DTE_TO_RV_WINDOW.get(label, 20)
+        rv = _realized_vol(price_history, window)
+        if rv is None:
+            continue
+
+        avg_iv = float(np.mean(ivs))
+        vrp = avg_iv - rv
+        vrp_pct = (vrp / avg_iv * 100) if avg_iv > 0 else 0.0
+
+        buckets.append(VRPBucket(
+            label=label, min_dte=min_dte, max_dte=max_dte,
+            implied_vol=avg_iv, realized_vol=rv,
+            vrp=vrp, vrp_pct=vrp_pct, contract_count=len(ivs),
+        ))
+
+    if not buckets:
+        return VRPCurve()
+
+    total_contracts = sum(b.contract_count for b in buckets)
+    overall_vrp = sum(b.vrp * b.contract_count for b in buckets) / total_contracts
+    overall_iv = sum(b.implied_vol * b.contract_count for b in buckets) / total_contracts
+    overall_vrp_pct = (overall_vrp / overall_iv * 100) if overall_iv > 0 else 0.0
+    richest = max(buckets, key=lambda b: b.vrp_pct)
+
+    return VRPCurve(
+        buckets=buckets, overall_vrp=overall_vrp,
+        overall_vrp_pct=overall_vrp_pct, richest_bucket=richest.label,
+    )
+
+
 def extract_chain_iv_by_dte(chain_snapshot) -> Dict[int, List[float]]:
     """Extract IV grouped by DTE from a ChainSnapshot.
 

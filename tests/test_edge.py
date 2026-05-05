@@ -118,6 +118,48 @@ class TestVRP:
         result = compute_vrp_curve(chain_iv_by_dte, 0.18)
         assert len(result.buckets) == 4
 
+    def test_compute_vrp_by_dte_basic(self):
+        from edge.vrp import compute_vrp_by_dte
+
+        prices = np.array([100 * (1 + 0.001 * np.sin(i / 5)) for i in range(60)])
+        chain_iv_by_dte = {
+            3: [0.25, 0.26],
+            10: [0.24, 0.25],
+            25: [0.23, 0.24],
+            40: [0.22, 0.23],
+        }
+        result = compute_vrp_by_dte(chain_iv_by_dte, prices)
+        assert len(result.buckets) >= 2
+        assert result.overall_vrp != 0
+
+    def test_compute_vrp_by_dte_different_rv_per_bucket(self):
+        from edge.vrp import compute_vrp_by_dte
+
+        np.random.seed(42)
+        prices = 100 + np.cumsum(np.random.randn(60) * 0.5)
+        chain_iv_by_dte = {3: [0.30], 40: [0.30]}
+        result = compute_vrp_by_dte(chain_iv_by_dte, prices)
+        if len(result.buckets) == 2:
+            assert result.buckets[0].realized_vol != result.buckets[1].realized_vol
+
+    def test_compute_vrp_by_dte_insufficient_history(self):
+        from edge.vrp import compute_vrp_by_dte
+
+        prices = np.array([100.0, 101.0, 102.0])
+        chain_iv_by_dte = {3: [0.25], 40: [0.28]}
+        result = compute_vrp_by_dte(chain_iv_by_dte, prices)
+        assert len(result.buckets) == 0
+
+    def test_realized_vol_helper(self):
+        from edge.vrp import _realized_vol
+
+        prices = np.array([100 + i * 0.5 for i in range(30)])
+        rv = _realized_vol(prices, 20)
+        assert rv is not None
+        assert rv > 0
+
+        assert _realized_vol(np.array([100.0]), 5) is None
+
 
 # ── Term Structure Tests ──────────────────────────────────────────────────────
 

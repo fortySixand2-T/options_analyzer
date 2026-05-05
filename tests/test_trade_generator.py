@@ -32,7 +32,7 @@ from trade_generator import (
 def _make_state(**overrides) -> MarketState:
     """Build a MarketState with sensible defaults for testing."""
     defaults = dict(
-        symbol="SPY", spot=587.0, timestamp=datetime(2026, 4, 25, 10, 30),
+        symbol="SPY", spot=587.0, timestamp=datetime(2026, 4, 24, 10, 30),
         regime="HIGH_IV", regime_rationale="test",
         iv_rank=65.0, vix=22.0, vix_term_slope=5.0,
         chain_iv=0.25, garch_vol=0.18, iv_rv_spread=0.07,
@@ -158,15 +158,15 @@ class TestSkewSubScore:
 
 class TestTimingSubScore:
     def test_credit_optimal_window(self):
-        state = _make_state(timestamp=datetime(2026, 4, 25, 10, 30))
+        state = _make_state(timestamp=datetime(2026, 4, 24, 10, 30))
         assert _timing_sub_score(state, "iron_condor") == 1.0
 
     def test_debit_optimal_window(self):
-        state = _make_state(timestamp=datetime(2026, 4, 25, 15, 15))
+        state = _make_state(timestamp=datetime(2026, 4, 24, 15, 15))
         assert _timing_sub_score(state, "long_call_spread") == 1.0
 
     def test_credit_late_day_penalty(self):
-        state = _make_state(timestamp=datetime(2026, 4, 25, 15, 30))
+        state = _make_state(timestamp=datetime(2026, 4, 24, 15, 30))
         score = _timing_sub_score(state, "iron_condor")
         assert score < 0.5
 
@@ -189,7 +189,7 @@ class TestConfluenceScore:
         state = _make_state(
             regime="HIGH_IV", iv_rv_edge_pct=20.0, iv_rv_spread=0.07,
             dealer_regime="LONG_GAMMA", bias_score=0, bias_label="NEUTRAL",
-            timestamp=datetime(2026, 4, 25, 10, 30),
+            timestamp=datetime(2026, 4, 24, 10, 30),
         )
         score, _ = compute_confluence_score(state, "iron_condor")
         assert score >= 75
@@ -322,7 +322,7 @@ class TestGenerateTrades:
             regime="HIGH_IV", bias_label="NEUTRAL", bias_score=0,
             dealer_regime="LONG_GAMMA",
             iv_rv_spread=0.07, iv_rv_edge_pct=28.0,
-            timestamp=datetime(2026, 4, 25, 10, 30),
+            timestamp=datetime(2026, 4, 24, 10, 30),
         )
         trades = generate_trades(state)
         strategies = [t.strategy for t in trades]
@@ -346,7 +346,7 @@ class TestGenerateTrades:
             regime="HIGH_IV", bias_label="LEAN_BULLISH", bias_score=3,
             dealer_regime="LONG_GAMMA",
             iv_rv_spread=0.07, iv_rv_edge_pct=28.0,
-            timestamp=datetime(2026, 4, 25, 10, 30),
+            timestamp=datetime(2026, 4, 24, 10, 30),
         )
         trades = generate_trades(state)
         if len(trades) > 1:
@@ -371,7 +371,7 @@ class TestGenerateTrades:
             iv_rv_spread=-0.08, iv_rv_edge_pct=-40.0,
             chain_iv=0.20, garch_vol=0.28,
             iv_rank=20.0,
-            timestamp=datetime(2026, 4, 25, 15, 15),
+            timestamp=datetime(2026, 4, 24, 15, 15),
         )
         trades = generate_trades(state)
         strategies = [t.strategy for t in trades]
@@ -382,7 +382,7 @@ class TestGenerateTrades:
             regime="HIGH_IV", bias_label="NEUTRAL", bias_score=0,
             dealer_regime="LONG_GAMMA",
             iv_rv_spread=0.07, iv_rv_edge_pct=28.0,
-            timestamp=datetime(2026, 4, 25, 10, 30),
+            timestamp=datetime(2026, 4, 24, 10, 30),
         )
         trades = generate_trades(state)
         if trades:
@@ -395,7 +395,7 @@ class TestGenerateTrades:
             regime="HIGH_IV", bias_label="NEUTRAL", bias_score=0,
             dealer_regime="LONG_GAMMA",
             iv_rv_spread=0.07, iv_rv_edge_pct=28.0,
-            timestamp=datetime(2026, 4, 25, 10, 30),
+            timestamp=datetime(2026, 4, 24, 10, 30),
         )
         trades = generate_trades(state)
         if trades:
@@ -411,7 +411,7 @@ class TestGenerateTrades:
             regime="HIGH_IV", bias_label="NEUTRAL", bias_score=0,
             dealer_regime="LONG_GAMMA",
             iv_rv_spread=0.07, iv_rv_edge_pct=28.0,
-            timestamp=datetime(2026, 4, 25, 10, 30),
+            timestamp=datetime(2026, 4, 24, 10, 30),
         )
         trades = generate_trades(state)
         if trades:

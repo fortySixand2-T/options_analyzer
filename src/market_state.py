@@ -27,6 +27,13 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_round(val, digits=2):
+    """Round a float, returning 0.0 for NaN/Inf."""
+    if val is None or (isinstance(val, float) and (math.isnan(val) or math.isinf(val))):
+        return 0.0
+    return round(val, digits)
+
 # Credit strategies: positive IV-RV spread = edge
 CREDIT_STRATEGIES = {"iron_condor", "short_put_spread", "short_call_spread"}
 # Debit strategies: negative IV-RV spread = edge
@@ -235,13 +242,13 @@ class MarketState:
             },
             "dealer": {
                 "regime": self.dealer_regime,
-                "net_gex": round(self.net_gex, 4),
-                "gamma_flip": round(self.gamma_flip, 2),
-                "gamma_flip_distance_pct": round(self.gamma_flip_distance_pct, 2),
+                "net_gex": _safe_round(self.net_gex, 4),
+                "gamma_flip": _safe_round(self.gamma_flip, 2),
+                "gamma_flip_distance_pct": _safe_round(self.gamma_flip_distance_pct, 2),
                 "call_wall": self.call_wall,
                 "put_wall": self.put_wall,
                 "max_pain": self.max_pain,
-                "put_call_ratio": round(self.put_call_ratio, 3) if self.put_call_ratio else None,
+                "put_call_ratio": _safe_round(self.put_call_ratio, 3) if self.put_call_ratio else None,
             },
             "event": {
                 "active": self.event_active,
