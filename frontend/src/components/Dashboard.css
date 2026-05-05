@@ -228,6 +228,10 @@
 .order-result.red { background: var(--red-dim); }
 
 /* Grid layouts */
+.grid-2 {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 12px; margin-bottom: 16px;
+}
 .grid-3 {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 12px; margin-bottom: 16px;

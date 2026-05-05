@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useApi } from '../hooks/useApi';
 import './Dashboard.css';
 
@@ -104,6 +105,11 @@ function VRPPanel({ vrp }) {
     );
   }
 
+  const chartData = vrp.buckets.map(b => ({
+    name: b.label,
+    vrp_pct: parseFloat(b.vrp_pct?.toFixed(1)),
+  }));
+
   return (
     <div className="panel">
       <h4>Variance Risk Premium</h4>
@@ -115,20 +121,23 @@ function VRPPanel({ vrp }) {
           <span className="muted"> (richest: {vrp.richest_bucket})</span>
         )}
       </div>
-      <div className="vrp-bars">
-        {vrp.buckets.map((b, i) => (
-          <div key={i} className="vrp-bar-row">
-            <span className="vrp-label">{b.label}</span>
-            <div className="vrp-bar-container">
-              <div
-                className={`vrp-bar ${b.vrp_pct > 0 ? 'positive' : 'negative'}`}
-                style={{ width: `${Math.min(Math.abs(b.vrp_pct) * 2, 100)}%` }}
-              />
-            </div>
-            <span className="mono vrp-value">{b.vrp_pct?.toFixed(1)}%</span>
-          </div>
-        ))}
-      </div>
+      <ResponsiveContainer width="100%" height={140}>
+        <BarChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+          <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
+          <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={v => `${v}%`} />
+          <Tooltip
+            contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 6 }}
+            labelStyle={{ color: '#d1d5db' }}
+            formatter={v => [`${v}%`, 'VRP']}
+          />
+          <ReferenceLine y={0} stroke="#4b5563" />
+          <Bar dataKey="vrp_pct" radius={[4, 4, 0, 0]}>
+            {chartData.map((entry, i) => (
+              <Cell key={i} fill={entry.vrp_pct >= 0 ? '#22c55e' : '#ef4444'} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -144,6 +153,12 @@ function TermStructurePanel({ ts }) {
     );
   }
 
+  const chartData = ts.expiries.slice(0, 8).map(e => ({
+    name: `${e.dte}d`,
+    iv: parseFloat((e.atm_iv * 100).toFixed(1)),
+    isKink: ts.kink_expiry === e.expiry,
+  }));
+
   return (
     <div className="panel">
       <h4>IV Term Structure</h4>
@@ -157,24 +172,31 @@ function TermStructurePanel({ ts }) {
         )}
       </div>
       {ts.kink_expiry && (
-        <div className="kink-alert" style={{ color: 'var(--yellow)', fontSize: '0.85rem' }}>
+        <div className="kink-alert" style={{ color: 'var(--yellow)', fontSize: '0.85rem', marginBottom: 4 }}>
           Kink at {ts.kink_expiry} ({ts.kink_magnitude?.toFixed(1)} stdev)
         </div>
       )}
-      <div className="ts-chart">
-        {ts.expiries.slice(0, 8).map((e, i) => (
-          <div key={i} className="ts-bar-row">
-            <span className="ts-label">{e.dte}d</span>
-            <div className="ts-bar-container">
-              <div
-                className="ts-bar"
-                style={{ width: `${Math.min(e.atm_iv * 400, 100)}%` }}
-              />
-            </div>
-            <span className="mono ts-value">{(e.atm_iv * 100)?.toFixed(1)}%</span>
-          </div>
-        ))}
-      </div>
+      <ResponsiveContainer width="100%" height={140}>
+        <LineChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+          <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
+          <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={v => `${v}%`} domain={['auto', 'auto']} />
+          <Tooltip
+            contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 6 }}
+            labelStyle={{ color: '#d1d5db' }}
+            formatter={v => [`${v}%`, 'IV']}
+          />
+          <Line
+            type="monotone" dataKey="iv" stroke="#60a5fa" strokeWidth={2}
+            dot={(props) => {
+              const { cx, cy, payload } = props;
+              if (payload.isKink) {
+                return <circle cx={cx} cy={cy} r={5} fill="#ef4444" stroke="#ef4444" />;
+              }
+              return <circle cx={cx} cy={cy} r={3} fill="#60a5fa" stroke="#60a5fa" />;
+            }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }

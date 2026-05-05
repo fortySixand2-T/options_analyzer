@@ -5,6 +5,7 @@ import SwingScanner from './components/SwingScanner';
 import TradingView from './components/TradingView';
 import GreeksExplorer from './components/GreeksExplorer';
 import Backtest from './components/Backtest';
+import Portfolio from './components/Portfolio';
 import Journal from './components/Journal';
 import './App.css';
 
@@ -12,6 +13,7 @@ const TABS = [
   { id: 'regime', label: 'Regime' },
   { id: 'scanner', label: 'Scanner' },
   { id: 'swing', label: 'Swing' },
+  { id: 'portfolio', label: 'Portfolio' },
   { id: 'trades', label: 'Trades' },
   { id: 'greeks', label: 'Greeks' },
   { id: 'backtest', label: 'Backtest' },
@@ -41,6 +43,7 @@ function App() {
         {tab === 'regime' && <RegimeDashboard />}
         {tab === 'scanner' && <Scanner />}
         {tab === 'swing' && <SwingScanner />}
+        {tab === 'portfolio' && <Portfolio />}
         {tab === 'trades' && <TradingView />}
         {tab === 'greeks' && <GreeksExplorer />}
         {tab === 'backtest' && <Backtest />}
