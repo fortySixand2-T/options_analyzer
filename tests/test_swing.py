@@ -318,10 +318,10 @@ class TestSwingConfig:
         weights = SWING_SCANNER_CONFIG["scoring_weights"]
         assert abs(sum(weights.values()) - 1.0) < 0.01
 
-    def test_vrp_is_highest_weight(self):
+    def test_vol_regime_is_highest_weight(self):
         from config import SWING_SCANNER_CONFIG
         weights = SWING_SCANNER_CONFIG["scoring_weights"]
-        assert weights["vrp"] == max(weights.values())
+        assert weights["vol_regime"] == max(weights.values())
 
 
 # ── Signal Persistence Tests ─────────────────────────────────────────────────

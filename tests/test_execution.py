@@ -228,9 +228,11 @@ class TestAssessExecution:
 # ── Test strategy stats consistency ───────────────────────────────────────────
 
 class TestStrategyStats:
-    def test_all_five_strategies_present(self):
-        expected = {"iron_condor", "short_put_spread", "short_call_spread",
-                    "long_call_spread", "long_put_spread", "butterfly"}
+    def test_all_strategies_present(self):
+        short_dte = {"iron_condor", "short_put_spread", "short_call_spread",
+                     "long_call_spread", "long_put_spread", "butterfly"}
+        swing = {"calendar_spread", "diagonal_spread", "iron_butterfly", "long_straddle"}
+        expected = short_dte | swing
         assert set(STRATEGY_STATS.keys()) == expected
 
     def test_positive_kelly_matches_tradeable(self):
