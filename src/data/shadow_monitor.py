@@ -48,15 +48,16 @@ def _signal_handler(signum, frame):
 
 
 def is_market_hours() -> bool:
-    """Check if US market is currently open (rough check, ET-based)."""
-    now = datetime.now()
-    if now.weekday() >= 5:
+    """Check if US market is currently open (ET-based)."""
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
+
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    if now_et.weekday() >= 5:
         return False
-    # Convert local time to approximate ET
-    # This is imperfect but sufficient — the monitor will just
-    # do a no-op check outside hours
-    hour_et = now.hour + 3  # PDT → ET rough offset
-    t = dtime(hour_et % 24, now.minute)
+    t = dtime(now_et.hour, now_et.minute)
     return MARKET_OPEN <= t <= MARKET_CLOSE
 
 

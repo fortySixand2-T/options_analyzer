@@ -132,6 +132,10 @@ def main():
         help="List open shadow trades",
     )
     parser.add_argument(
+        "--check", action="store_true",
+        help="Run exit check (normally handled by shadow-monitor)",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Check exits without persisting changes",
     )
@@ -183,29 +187,32 @@ def main():
             for e in result["errors"]:
                 print(f"    - {e}")
 
-    # Daily check mode (default, also runs after scan-and-log)
-    from data.shadow_checker import run_daily_check
-    print(f"\nRunning daily exit check (dry_run={args.dry_run})...")
-    summary = run_daily_check(dry_run=args.dry_run)
+    # Exit check mode — only runs if explicitly requested (no --scan-and-log)
+    # or with --check flag. The shadow-monitor service handles live exit
+    # checking every 5 min; this is a manual fallback.
+    if not args.scan_and_log or args.check:
+        from data.shadow_checker import run_daily_check
+        print(f"\nRunning exit check (dry_run={args.dry_run})...")
+        summary = run_daily_check(dry_run=args.dry_run)
 
-    print(f"\n{'='*50}")
-    print(f"Daily Check Summary — {summary['date']}")
-    print(f"{'='*50}")
-    print(f"  Trades checked: {summary['trades_checked']}")
-    print(f"  Trades closed:  {summary['trades_closed']}")
-    print(f"  Trades marked:  {summary['trades_marked']}")
+        print(f"\n{'='*50}")
+        print(f"Exit Check Summary — {summary['date']}")
+        print(f"{'='*50}")
+        print(f"  Trades checked: {summary['trades_checked']}")
+        print(f"  Trades closed:  {summary['trades_closed']}")
+        print(f"  Trades marked:  {summary['trades_marked']}")
 
-    if summary["closures"]:
-        print(f"\n  Closures:")
-        for c in summary["closures"]:
-            dr = " (DRY RUN)" if c.get("dry_run") else ""
-            print(f"    #{c['trade_id']} {c['symbol']} {c['strategy']}: "
-                  f"{c['reason']}, P&L=${c['pnl']:.2f}{dr}")
+        if summary["closures"]:
+            print(f"\n  Closures:")
+            for c in summary["closures"]:
+                dr = " (DRY RUN)" if c.get("dry_run") else ""
+                print(f"    #{c['trade_id']} {c['symbol']} {c['strategy']}: "
+                      f"{c['reason']}, P&L=${c['pnl']:.2f}{dr}")
 
-    if summary["errors"]:
-        print(f"\n  Errors:")
-        for e in summary["errors"]:
-            print(f"    - {e}")
+        if summary["errors"]:
+            print(f"\n  Errors:")
+            for e in summary["errors"]:
+                print(f"    - {e}")
 
 
 if __name__ == "__main__":

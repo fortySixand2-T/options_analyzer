@@ -24,6 +24,7 @@ if ! docker info &>/dev/null 2>&1; then
     exit 1
 fi
 
+# Only scan and log — exit checking is handled by the shadow-monitor service
 $COMPOSE run --rm collect python scripts/shadow_check.py --scan-and-log "$TICKERS"
 
 echo "Shadow check finished at $(date '+%H:%M:%S')"
