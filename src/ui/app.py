@@ -1208,6 +1208,126 @@ def swing_signal_history(
     return {"symbol": symbol.upper(), "signals": signals, "count": len(signals)}
 
 
+# ── Shadow Paper Trading ────────────────────────────────────────────────────
+
+
+@app.get("/api/shadow-trades")
+def list_shadow_trades(
+    status: Optional[str] = Query(None, description="Filter: open, closed, all"),
+    symbol: Optional[str] = Query(None),
+    strategy: Optional[str] = Query(None),
+    limit: int = Query(100),
+):
+    """List shadow paper trades with optional filters."""
+    from data.shadow_store import get_trades
+    trades = get_trades(
+        status=status if status != "all" else None,
+        symbol=symbol.upper() if symbol else None,
+        strategy=strategy,
+        limit=limit,
+    )
+    import json as _json
+    for t in trades:
+        t["legs"] = _json.loads(t["legs_json"]) if t.get("legs_json") else []
+        t["entry_leg_prices"] = _json.loads(t["entry_leg_prices_json"]) if t.get("entry_leg_prices_json") else []
+        if t.get("exit_leg_prices_json"):
+            t["exit_leg_prices"] = _json.loads(t["exit_leg_prices_json"])
+    return {"trades": trades, "count": len(trades)}
+
+
+@app.get("/api/shadow-trades/stats")
+def shadow_trade_stats():
+    """Aggregate shadow trading statistics."""
+    from data.shadow_store import get_stats
+    return get_stats()
+
+
+@app.post("/api/shadow-trades/scan-and-log")
+def shadow_scan_and_log(
+    symbols: str = Query("SPY,QQQ,IWM", description="Comma-separated tickers"),
+):
+    """Scan tickers and log qualifying trades as shadow trades."""
+    from market_state import build_market_state
+    from trade_generator import generate_trades, DTE_RANGES
+    from data.shadow_store import log_shadow_trade
+    from scanner.providers.yfinance_provider import YFinanceProvider
+    from datetime import timedelta
+
+    tickers = [t.strip().upper() for t in symbols.split(",") if t.strip()]
+    results = {"scanned": 0, "candidates": 0, "logged": 0, "trades": [], "errors": []}
+    provider = YFinanceProvider(delay=0.5)
+
+    for ticker in tickers:
+        results["scanned"] += 1
+        try:
+            state = build_market_state(ticker)
+            candidates = generate_trades(state)
+
+            if not candidates:
+                continue
+
+            min_dte, max_dte = DTE_RANGES.get(candidates[0].strategy, (3, 14))
+            chain = provider.get_chain(ticker, min_dte=0, max_dte=max_dte + 5)
+
+            for tc in candidates:
+                results["candidates"] += 1
+                entry_legs = []
+                target_dte = tc.suggested_dte
+
+                for leg in tc.legs:
+                    mid = bid = ask = expiry = None
+                    best_dte_diff = 999
+                    for c in chain.contracts:
+                        if c.strike == leg["strike"] and c.option_type == leg["option_type"]:
+                            if c.mid and c.mid > 0:
+                                try:
+                                    from datetime import datetime as dt
+                                    exp_dt = dt.strptime(c.expiry, "%Y-%m-%d")
+                                    dte_diff = abs((exp_dt - dt.now()).days - target_dte)
+                                    if dte_diff < best_dte_diff:
+                                        best_dte_diff = dte_diff
+                                        mid, bid, ask, expiry = c.mid, c.bid, c.ask, c.expiry
+                                except ValueError:
+                                    continue
+                    entry_legs.append({
+                        "strike": leg["strike"],
+                        "expiry": tc.expiry or expiry,
+                        "option_type": leg["option_type"],
+                        "action": leg["action"],
+                        "mid": mid, "bid": bid, "ask": ask,
+                    })
+
+                if all(lp.get("mid") for lp in entry_legs):
+                    trade_id = log_shadow_trade(tc, entry_legs, state.spot)
+                    if trade_id:
+                        results["logged"] += 1
+                        results["trades"].append({
+                            "id": trade_id,
+                            "symbol": tc.symbol,
+                            "strategy": tc.strategy_label,
+                            "score": tc.confluence_score,
+                        })
+        except Exception as e:
+            results["errors"].append(f"{ticker}: {str(e)}")
+
+    return results
+
+
+@app.post("/api/shadow-trades/check")
+def shadow_check_exits(dry_run: bool = Query(False)):
+    """Run exit rule check on all open shadow trades."""
+    from data.shadow_checker import run_daily_check
+    return run_daily_check(dry_run=dry_run)
+
+
+@app.get("/api/shadow-trades/{trade_id}/marks")
+def shadow_trade_marks(trade_id: int):
+    """Get mark-to-market history for a shadow trade."""
+    from data.shadow_store import get_trade_marks
+    marks = get_trade_marks(trade_id)
+    return {"trade_id": trade_id, "marks": marks}
+
+
 # ── Static Files (React build) ──────────────────────────────────────────────
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")

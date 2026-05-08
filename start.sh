@@ -205,6 +205,20 @@ case "$CMD" in
         $COMPOSE run --rm collect python scripts/collect_chains.py --stats
         ;;
 
+    shadow)
+        setup_env
+        shift || true
+        ARGS="${*:---scan-and-log SPY,QQQ,IWM}"
+        echo -e "${GREEN}Shadow paper trading:${NC} $ARGS"
+        $COMPOSE run --rm collect python scripts/shadow_check.py $ARGS
+        ;;
+
+    shadow-stats)
+        setup_env
+        echo -e "${GREEN}Shadow trading stats:${NC}"
+        $COMPOSE run --rm collect python scripts/shadow_check.py --stats
+        ;;
+
     test)
         echo -e "${GREEN}Running test suite...${NC}"
         $COMPOSE run --rm test

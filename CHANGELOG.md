@@ -1,5 +1,15 @@
 # Changelog
 
+- [2026-05-07] Created: src/data/shadow_store.py — Shadow trade SQLite store (schema, CRUD, stats)
+- [2026-05-07] Created: src/data/shadow_pricer.py — Option price lookup from chain snapshots with interpolation and live fallback
+- [2026-05-07] Created: src/data/shadow_checker.py — Daily exit rule checker for open shadow trades
+- [2026-05-07] Created: scripts/shadow_check.py — CLI for shadow paper trading (scan-and-log, check exits, stats)
+- [2026-05-07] Created: scripts/shadow_check.sh — Cron wrapper for shadow trade checker
+- [2026-05-07] Created: scripts/daily_collect_midday.sh — Midday chain snapshot collector (all 10 tickers, 0-14 DTE)
+- [2026-05-07] Created: frontend/src/components/ShadowTrades.jsx — Shadow paper trading dashboard tab
+- [2026-05-07] Modified: src/ui/app.py — Added shadow trade API endpoints (list, stats, scan-and-log, check, marks)
+- [2026-05-07] Modified: frontend/src/App.jsx — Added Shadow tab to navigation
+- [2026-05-07] Modified: start.sh — Added shadow and shadow-stats commands
 - [2026-05-03] Modified: tests/test_trade_generator.py — Fixed hardcoded Saturday dates (2026-04-25→2026-04-24) causing weekend test failures
 - [2026-05-03] Modified: tests/test_streaming.py — Fixed hardcoded expired dates in LiveScoreEngine tests; use dynamic future dates
 - [2026-05-03] Modified: src/scanner/providers/flashalpha_client.py — Added _safe_float() to prevent NaN/Inf in API response parsing
@@ -294,3 +304,4 @@
 - [2026-04-26] Created: docs/historical_data_options.md — QuantConnect vs ThetaData analysis for historical options chain data
 - [2026-04-28] Modified: scripts/daily_collect.sh — Use docker-compose with explicit PATH for cron compatibility
 - [2026-04-28] Modified: scripts/daily_collect_shortdte.sh — Use docker-compose with explicit PATH for cron compatibility
+- [2026-05-05] Created: scripts/daily_collect_midday.sh — Midday chain snapshot collector (all 10 tickers, 0-14 DTE, runs 12:23 PM PDT weekdays)

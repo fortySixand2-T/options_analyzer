@@ -7,6 +7,7 @@ import GreeksExplorer from './components/GreeksExplorer';
 import Backtest from './components/Backtest';
 import Portfolio from './components/Portfolio';
 import Journal from './components/Journal';
+import ShadowTrades from './components/ShadowTrades';
 import './App.css';
 
 const TABS = [
@@ -18,6 +19,7 @@ const TABS = [
   { id: 'greeks', label: 'Greeks' },
   { id: 'backtest', label: 'Backtest' },
   { id: 'journal', label: 'Journal' },
+  { id: 'shadow', label: 'Shadow' },
 ];
 
 function App() {
@@ -48,6 +50,7 @@ function App() {
         {tab === 'greeks' && <GreeksExplorer />}
         {tab === 'backtest' && <Backtest />}
         {tab === 'journal' && <Journal />}
+        {tab === 'shadow' && <ShadowTrades />}
       </main>
     </div>
   );
