@@ -219,6 +219,19 @@ case "$CMD" in
         $COMPOSE run --rm collect python scripts/shadow_check.py --stats
         ;;
 
+    shadow-monitor)
+        setup_env
+        echo -e "${GREEN}Starting shadow trade monitor (5-min checks)...${NC}"
+        $COMPOSE up -d shadow-monitor
+        echo -e "  Monitor running in background. Use ${YELLOW}./start.sh logs shadow-monitor${NC} to watch."
+        ;;
+
+    shadow-monitor-stop)
+        setup_env
+        echo -e "${GREEN}Stopping shadow trade monitor...${NC}"
+        $COMPOSE stop shadow-monitor
+        ;;
+
     test)
         echo -e "${GREEN}Running test suite...${NC}"
         $COMPOSE run --rm test

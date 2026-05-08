@@ -63,6 +63,17 @@ services:
       - ./data:/app/data
     command: python scripts/collect_chains.py SPY,QQQ,^SPX,^NDX,IWM,META,AAPL,AMZN,NFLX,GOOG --max-dte 60
 
+  # Shadow trade monitor — checks exits every 5 min during market hours
+  shadow-monitor:
+    build:
+      context: .
+      target: prod
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    command: python scripts/shadow_monitor.py
+
   # Interactive shell with full dev environment
   shell:
     build:

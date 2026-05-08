@@ -1,5 +1,9 @@
 # Changelog
 
+- [2026-05-07] Created: src/data/shadow_monitor.py — Live shadow trade monitor (5-min checks during market hours)
+- [2026-05-07] Created: scripts/shadow_monitor.py — CLI entry point for shadow monitor
+- [2026-05-07] Modified: docker-compose.yml — Added shadow-monitor service (long-running, restart: unless-stopped)
+- [2026-05-07] Modified: start.sh — Added shadow-monitor and shadow-monitor-stop commands
 - [2026-05-07] Created: src/data/shadow_store.py — Shadow trade SQLite store (schema, CRUD, stats)
 - [2026-05-07] Created: src/data/shadow_pricer.py — Option price lookup from chain snapshots with interpolation and live fallback
 - [2026-05-07] Created: src/data/shadow_checker.py — Daily exit rule checker for open shadow trades
