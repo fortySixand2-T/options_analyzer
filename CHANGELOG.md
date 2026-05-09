@@ -318,3 +318,4 @@
 - [2026-05-08] Modified: src/data/shadow_checker.py — Guard json.loads with error handling
 - [2026-05-08] Modified: src/ui/app.py — Add security headers middleware (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy)
 - [2026-05-08] Modified: tests/test_ui.py — Add 17 security tests: path traversal, API key auth, input validation, security headers, error sanitization
+- [2026-05-08] Modified: .env.example, .env — Add Alpaca API key placeholders (APCA_API_KEY_ID, APCA_API_SECRET_KEY)
