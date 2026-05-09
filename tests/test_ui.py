@@ -96,3 +96,132 @@ class TestHealthEndpoints:
     def test_journal_endpoint_exists(self):
         resp = client.get("/api/journal")
         assert resp.status_code == 200
+
+
+class TestPathTraversal:
+    """Verify static file serving rejects path traversal attempts.
+
+    In test env, frontend/dist may not exist so SPA route isn't registered.
+    Either way, traversal must not return sensitive file contents.
+    """
+
+    def test_traversal_no_sensitive_content(self):
+        resp = client.get("/../../etc/passwd")
+        assert "root:" not in resp.text
+
+    def test_dot_dot_slash_no_leak(self):
+        resp = client.get("/../../../etc/shadow")
+        assert "root:" not in resp.text
+
+    def test_encoded_traversal_no_leak(self):
+        resp = client.get("/%2e%2e/%2e%2e/etc/passwd")
+        assert "root:" not in resp.text
+
+
+class TestApiKeyAuth:
+    """Verify API key enforcement on mutating endpoints."""
+
+    def test_order_no_key_when_key_set(self, monkeypatch):
+        monkeypatch.setattr("ui.app._API_KEY", "test-secret-key-123")
+        resp = client.post("/api/order", json={
+            "underlying": "SPY", "strategy": "iron_condor", "legs": [],
+        })
+        assert resp.status_code == 401
+
+    def test_order_wrong_key(self, monkeypatch):
+        monkeypatch.setattr("ui.app._API_KEY", "test-secret-key-123")
+        resp = client.post(
+            "/api/order",
+            json={"underlying": "SPY", "strategy": "iron_condor", "legs": []},
+            headers={"X-API-Key": "wrong-key"},
+        )
+        assert resp.status_code == 401
+
+    def test_order_correct_key(self, monkeypatch):
+        monkeypatch.setattr("ui.app._API_KEY", "test-secret-key-123")
+        resp = client.post(
+            "/api/order",
+            json={"underlying": "SPY", "strategy": "iron_condor", "legs": []},
+            headers={"X-API-Key": "test-secret-key-123"},
+        )
+        # Should pass auth (may fail on Tastytrade connect, but not 401)
+        assert resp.status_code != 401
+
+    def test_journal_no_key_when_key_set(self, monkeypatch):
+        monkeypatch.setattr("ui.app._API_KEY", "test-secret-key-123")
+        resp = client.post("/api/journal", json={
+            "strategy": "test", "symbol": "SPY",
+            "entry_date": "2026-01-01", "entry_price": 1.0,
+        })
+        assert resp.status_code == 401
+
+    def test_read_endpoints_no_auth(self, monkeypatch):
+        monkeypatch.setattr("ui.app._API_KEY", "test-secret-key-123")
+        resp = client.get("/api/journal")
+        assert resp.status_code == 200
+        resp = client.post("/api/greeks", json={
+            "spot": 100, "strike": 100, "dte": 30, "iv": 0.25,
+        })
+        assert resp.status_code == 200
+
+    def test_no_key_configured_allows_all(self, monkeypatch):
+        monkeypatch.setattr("ui.app._API_KEY", "")
+        resp = client.post("/api/journal", json={
+            "strategy": "test", "symbol": "SPY",
+            "entry_date": "2026-01-01", "entry_price": 1.0,
+        })
+        assert resp.status_code == 200
+
+
+class TestInputValidation:
+    """Verify query param bounds are enforced."""
+
+    def test_top_too_large(self):
+        resp = client.get("/api/scan?top=999")
+        assert resp.status_code == 422
+
+    def test_max_dte_negative(self):
+        resp = client.get("/api/scan?max_dte=-1")
+        assert resp.status_code == 422
+
+    def test_limit_too_large(self):
+        resp = client.get("/api/journal?limit=9999")
+        assert resp.status_code == 422
+
+    def test_limit_zero(self):
+        resp = client.get("/api/journal?limit=0")
+        assert resp.status_code == 422
+
+    def test_valid_bounds_accepted(self):
+        resp = client.get("/api/journal?limit=10")
+        assert resp.status_code == 200
+
+
+class TestSecurityHeaders:
+    """Verify security headers are present on responses."""
+
+    def test_headers_on_api(self):
+        resp = client.post("/api/greeks", json={
+            "spot": 100, "strike": 100, "dte": 30, "iv": 0.25,
+        })
+        assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+        assert resp.headers.get("X-Frame-Options") == "DENY"
+        assert "Referrer-Policy" in resp.headers
+
+    def test_headers_on_journal(self):
+        resp = client.get("/api/journal")
+        assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+
+
+class TestErrorSanitization:
+    """Verify 500 errors don't leak implementation details."""
+
+    def test_greeks_invalid_doesnt_leak(self):
+        resp = client.post("/api/greeks", json={
+            "spot": -1, "strike": -1, "dte": 0, "iv": -1, "option_type": "call",
+        })
+        if resp.status_code == 500:
+            detail = resp.json().get("detail", "")
+            assert "Traceback" not in detail
+            assert "/app/" not in detail
+            assert "File " not in detail
