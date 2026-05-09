@@ -316,3 +316,4 @@
 - [2026-05-08] Modified: src/ui/app.py — Fix journal DB connection leak, add timeout
 - [2026-05-08] Modified: src/data/shadow_monitor.py — Guard json.loads, safe float casting
 - [2026-05-08] Modified: src/data/shadow_checker.py — Guard json.loads with error handling
+- [2026-05-08] Modified: src/ui/app.py — Add security headers middleware (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy)

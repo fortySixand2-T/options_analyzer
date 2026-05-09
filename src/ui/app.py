@@ -44,6 +44,26 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-API-Key"],
 )
 
+# ── Security Headers ────────────────────────────────────────────────────────
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import Response as StarletteResponse
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response: StarletteResponse = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+
 # ── API Key Authentication ──────────────────────────────────────────────────
 
 _API_KEY = os.getenv("API_SECRET_KEY", "")
