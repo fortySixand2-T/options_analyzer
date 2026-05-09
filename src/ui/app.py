@@ -18,8 +18,11 @@ import os
 from datetime import date
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+import secrets
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -37,9 +40,22 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key"],
 )
+
+# ── API Key Authentication ──────────────────────────────────────────────────
+
+_API_KEY = os.getenv("API_SECRET_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def require_api_key(api_key: str = Security(_api_key_header)):
+    """Dependency that enforces API key auth on mutating endpoints."""
+    if not _API_KEY:
+        return
+    if not api_key or not secrets.compare_digest(api_key, _API_KEY):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 # ── Request/Response Models ──────────────────────────────────────────────────
@@ -599,7 +615,7 @@ def list_journal(limit: int = Query(50)):
     return {"entries": entries, "count": len(entries)}
 
 
-@app.post("/api/journal")
+@app.post("/api/journal", dependencies=[Depends(require_api_key)])
 def add_journal(entry: JournalEntry):
     """Log a trade to the journal."""
     conn = _get_journal_db()
@@ -701,7 +717,7 @@ class CandidateOrderRequest(BaseModel):
     dry_run: bool = True  # default to dry run for safety
 
 
-@app.post("/api/order/from-candidate")
+@app.post("/api/order/from-candidate", dependencies=[Depends(require_api_key)])
 def order_from_candidate(req: CandidateOrderRequest):
     """Execution bridge: scan → pick candidate → build order → submit.
 
@@ -831,7 +847,7 @@ class PlaceOrderRequest(BaseModel):
     dry_run: bool = True  # default to dry run for safety
 
 
-@app.post("/api/order")
+@app.post("/api/order", dependencies=[Depends(require_api_key)])
 def place_order(req: PlaceOrderRequest):
     """Place an order via Tastytrade (paper by default)."""
     from execution.order_manager import OrderManager, OrderRequest, OrderLeg
@@ -871,7 +887,7 @@ def place_order(req: PlaceOrderRequest):
 
 # ── Chain Snapshots ──────────────────────────────────────────────────────────
 
-@app.post("/api/chain-snapshots/collect")
+@app.post("/api/chain-snapshots/collect", dependencies=[Depends(require_api_key)])
 def collect_chain_snapshots(
     symbols: str = Query("SPY,QQQ,IWM", description="Comma-separated symbols"),
     max_dte: int = Query(60, description="Max DTE to collect"),
@@ -1242,7 +1258,7 @@ def shadow_trade_stats():
     return get_stats()
 
 
-@app.post("/api/shadow-trades/scan-and-log")
+@app.post("/api/shadow-trades/scan-and-log", dependencies=[Depends(require_api_key)])
 def shadow_scan_and_log(
     symbols: str = Query("SPY,QQQ,IWM", description="Comma-separated tickers"),
 ):
@@ -1313,7 +1329,7 @@ def shadow_scan_and_log(
     return results
 
 
-@app.post("/api/shadow-trades/check")
+@app.post("/api/shadow-trades/check", dependencies=[Depends(require_api_key)])
 def shadow_check_exits(dry_run: bool = Query(False)):
     """Run exit rule check on all open shadow trades."""
     from data.shadow_checker import run_daily_check
@@ -1334,10 +1350,14 @@ _STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "d
 if os.path.isdir(_STATIC_DIR):
     app.mount("/assets", StaticFiles(directory=os.path.join(_STATIC_DIR, "assets")), name="assets")
 
+    _STATIC_DIR_REAL = os.path.realpath(_STATIC_DIR)
+
     @app.get("/{path:path}")
     def serve_spa(path: str):
         """Serve React SPA — all non-API routes serve index.html."""
-        file_path = os.path.join(_STATIC_DIR, path)
+        file_path = os.path.realpath(os.path.join(_STATIC_DIR, path))
+        if not file_path.startswith(_STATIC_DIR_REAL):
+            return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
         if os.path.isfile(file_path):
             return FileResponse(file_path)
         return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
