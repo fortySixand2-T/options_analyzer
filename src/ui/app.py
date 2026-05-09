@@ -145,7 +145,7 @@ def get_regime(symbol: str = Query("SPY", description="Symbol for dealer data"))
         return response
     except Exception as e:
         logger.exception("Failed to detect regime")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ── Market State ──────────────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ def get_market_state(symbol: str = Query("SPY", description="Symbol")):
         return state.to_dict()
     except Exception as e:
         logger.exception("Failed to build market state for %s", symbol)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/trade-candidates")
@@ -200,7 +200,7 @@ def get_trade_candidates(
         }
     except Exception as e:
         logger.exception("Failed to generate trade candidates for %s", symbol)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # In-memory portfolio singleton (persists across requests within a session)
@@ -222,7 +222,7 @@ def get_portfolio():
         return pf.to_dict()
     except Exception as e:
         logger.exception("Failed to get portfolio")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/portfolio/allocation")
@@ -246,7 +246,7 @@ def get_allocation(
         return result
     except Exception as e:
         logger.exception("Failed to compute allocation")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ── Scanner ────────────────���─────────────────────────────────────────────────
@@ -254,10 +254,10 @@ def get_allocation(
 @app.get("/api/scan")
 def scan(
     symbols: str = Query("SPY", description="Comma-separated symbols"),
-    max_dte: int = Query(14, description="Max DTE filter"),
-    min_dte: int = Query(0, description="Min DTE filter"),
+    max_dte: int = Query(14, ge=0, le=365, description="Max DTE filter"),
+    min_dte: int = Query(0, ge=0, le=365, description="Min DTE filter"),
     strategies: bool = Query(False, description="Include strategy evaluation"),
-    top: int = Query(20, description="Max results"),
+    top: int = Query(20, ge=1, le=100, description="Max results"),
 ):
     """Scan for options signals, optionally with strategy evaluation."""
     tickers = [s.strip().upper() for s in symbols.split(",") if s.strip()]
@@ -313,7 +313,7 @@ def scan(
             }
     except Exception as e:
         logger.exception("Scan failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def _serialize_signal(s) -> Dict:
@@ -371,8 +371,8 @@ def _serialize_strategy(s) -> Dict:
 @app.get("/api/chain/{symbol}")
 def get_chain(
     symbol: str,
-    max_dte: int = Query(14, description="Max DTE"),
-    min_dte: int = Query(0, description="Min DTE"),
+    max_dte: int = Query(14, ge=0, le=365, description="Max DTE"),
+    min_dte: int = Query(0, ge=0, le=365, description="Min DTE"),
 ):
     """Full options chain with Greeks for a symbol."""
     try:
@@ -401,7 +401,7 @@ def get_chain(
         }
     except Exception as e:
         logger.exception("Chain fetch failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ── Greeks Calculator ─────────────────────────────────────���──────────────────
@@ -495,16 +495,19 @@ def get_backtest(
     regime_filter: bool = Query(False),
     bias_filter: bool = Query(False),
     dealer_filter: bool = Query(False),
-    edge_threshold: float = Query(0.0),
+    edge_threshold: float = Query(0.0, ge=0.0, le=100.0),
     exit_rule: str = Query("50pct"),
-    slippage_pct: float = Query(0.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
+    slippage_pct: float = Query(0.0, ge=0.0, le=1.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
 ):
     """Run or retrieve cached backtest results with optional signal filters."""
     from backtest.models import BacktestRequest
     from backtest.local_backtest import run_local_backtest
 
-    end_date = date.fromisoformat(end) if end else date.today()
-    start_date = date.fromisoformat(start)
+    try:
+        end_date = date.fromisoformat(end) if end else date.today()
+        start_date = date.fromisoformat(start)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
 
     req = BacktestRequest(
         strategy=strategy,
@@ -524,7 +527,7 @@ def get_backtest(
         return _serialize_backtest(result, strategy, symbol, start_date, end_date)
     except Exception as e:
         logger.exception("Backtest failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/backtest/compare")
@@ -536,16 +539,19 @@ def compare_backtests(
     regime_filter: bool = Query(False),
     bias_filter: bool = Query(False),
     dealer_filter: bool = Query(False),
-    edge_threshold: float = Query(0.0),
+    edge_threshold: float = Query(0.0, ge=0.0, le=100.0),
     exit_rule: str = Query("50pct"),
-    slippage_pct: float = Query(0.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
+    slippage_pct: float = Query(0.0, ge=0.0, le=1.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
 ):
     """Compare backtests across multiple strategies."""
     from backtest.models import BacktestRequest
     from backtest.local_backtest import run_local_backtest
 
-    end_date = date.fromisoformat(end) if end else date.today()
-    start_date = date.fromisoformat(start)
+    try:
+        end_date = date.fromisoformat(end) if end else date.today()
+        start_date = date.fromisoformat(start)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
     strategy_list = [s.strip() for s in strategies.split(",") if s.strip()]
 
     results = {}
@@ -602,7 +608,7 @@ def _get_journal_db():
 
 
 @app.get("/api/journal")
-def list_journal(limit: int = Query(50)):
+def list_journal(limit: int = Query(50, ge=1, le=500)):
     """List trade journal entries."""
     conn = _get_journal_db()
     rows = conn.execute(
@@ -890,7 +896,7 @@ def place_order(req: PlaceOrderRequest):
 @app.post("/api/chain-snapshots/collect", dependencies=[Depends(require_api_key)])
 def collect_chain_snapshots(
     symbols: str = Query("SPY,QQQ,IWM", description="Comma-separated symbols"),
-    max_dte: int = Query(60, description="Max DTE to collect"),
+    max_dte: int = Query(60, ge=0, le=365, description="Max DTE to collect"),
 ):
     """Trigger daily chain snapshot collection for the given tickers."""
     from data.chain_collector import collect_daily_snapshots
@@ -904,7 +910,7 @@ def collect_chain_snapshots(
         return result
     except Exception as e:
         logger.exception("Chain snapshot collection failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/chain-snapshots/stats")
@@ -1021,7 +1027,7 @@ def get_intraday_backtest(
         return result.model_dump()
     except Exception as e:
         logger.error("Intraday backtest failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/positions")
@@ -1050,7 +1056,7 @@ def streamer_status():
 @app.get("/api/swing/scan")
 def swing_scan(
     symbols: str = Query("SPY", description="Comma-separated symbols"),
-    top: int = Query(20, description="Max results"),
+    top: int = Query(20, ge=1, le=100, description="Max results"),
 ):
     """Run swing-timeframe strategy scanner (14-60 DTE)."""
     tickers = [s.strip().upper() for s in symbols.split(",") if s.strip()]
@@ -1089,7 +1095,7 @@ def swing_scan(
         }
     except Exception as e:
         logger.exception("Swing scan failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/swing/market-state")
@@ -1130,7 +1136,7 @@ def swing_market_state(symbol: str = Query("SPY", description="Symbol")):
         return base
     except Exception as e:
         logger.exception("Swing market state failed for %s", symbol)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/swing/trade-candidates")
@@ -1164,7 +1170,7 @@ def swing_trade_candidates(
         }
     except Exception as e:
         logger.exception("Swing trade candidates failed for %s", symbol)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/backtest/swing/{strategy}")
@@ -1175,16 +1181,19 @@ def swing_backtest(
     end: Optional[str] = Query(None),
     regime_filter: bool = Query(False),
     bias_filter: bool = Query(False),
-    edge_threshold: float = Query(0.0),
+    edge_threshold: float = Query(0.0, ge=0.0, le=100.0),
     exit_rule: str = Query("strategy"),
-    slippage_pct: float = Query(3.0),
+    slippage_pct: float = Query(3.0, ge=0.0, le=100.0),
 ):
     """Run backtest for a swing strategy (14-60 DTE)."""
     from backtest.models import BacktestRequest
     from backtest.local_backtest import run_local_backtest
 
-    end_date = date.fromisoformat(end) if end else date.today()
-    start_date = date.fromisoformat(start)
+    try:
+        end_date = date.fromisoformat(end) if end else date.today()
+        start_date = date.fromisoformat(start)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
 
     swing_strategies = {"calendar_spread", "diagonal_spread", "iron_butterfly", "long_straddle"}
     if strategy not in swing_strategies:
@@ -1209,7 +1218,7 @@ def swing_backtest(
         return _serialize_backtest(result, strategy, symbol, start_date, end_date)
     except Exception as e:
         logger.exception("Swing backtest failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/swing/signals/{symbol}")
@@ -1232,7 +1241,7 @@ def list_shadow_trades(
     status: Optional[str] = Query(None, description="Filter: open, closed, all"),
     symbol: Optional[str] = Query(None),
     strategy: Optional[str] = Query(None),
-    limit: int = Query(100),
+    limit: int = Query(100, ge=1, le=500),
 ):
     """List shadow paper trades with optional filters."""
     from data.shadow_store import get_trades

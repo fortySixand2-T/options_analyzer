@@ -310,3 +310,4 @@
 - [2026-04-28] Modified: scripts/daily_collect_shortdte.sh — Use docker-compose with explicit PATH for cron compatibility
 - [2026-05-05] Created: scripts/daily_collect_midday.sh — Midday chain snapshot collector (all 10 tickers, 0-14 DTE, runs 12:23 PM PDT weekdays)
 - [2026-05-08] Modified: data/shadow_trades.db — Marked 4 false stop-loss trades as error status
+- [2026-05-08] Modified: src/ui/app.py — Sanitize error responses, add input validation bounds on query params
