@@ -205,6 +205,20 @@ case "$CMD" in
         $COMPOSE run --rm collect python scripts/collect_chains.py --stats
         ;;
 
+    backfill)
+        setup_env
+        shift || true
+        ARGS="${*:-SPY --start 2025-04-01 --end 2025-05-01}"
+        echo -e "${GREEN}Alpaca historical backfill:${NC} $ARGS"
+        $COMPOSE run --rm backfill python scripts/backfill_chains.py $ARGS
+        ;;
+
+    backfill-status)
+        setup_env
+        echo -e "${GREEN}Backfill status:${NC}"
+        $COMPOSE run --rm backfill python scripts/backfill_chains.py --status
+        ;;
+
     shadow)
         setup_env
         shift || true

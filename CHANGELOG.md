@@ -320,3 +320,7 @@
 - [2026-05-08] Modified: tests/test_ui.py — Add 17 security tests: path traversal, API key auth, input validation, security headers, error sanitization
 - [2026-05-08] Modified: .env.example, .env — Add Alpaca API key placeholders (APCA_API_KEY_ID, APCA_API_SECRET_KEY)
 - [2026-05-08] Created: src/data/alpaca_client.py — Alpaca REST client for historical option bars with pagination, rate limiting, OCC symbol construction
+- [2026-05-08] Created: src/data/backfill_pipeline.py — Orchestrator: fetch bars, enrich IV/Greeks, store as ChainSnapshot
+- [2026-05-08] Created: scripts/backfill_chains.py — CLI for Alpaca historical backfill with dry-run, resume, status
+- [2026-05-08] Modified: docker-compose.yml — Add backfill service
+- [2026-05-08] Modified: start.sh — Add backfill and backfill-status commands
