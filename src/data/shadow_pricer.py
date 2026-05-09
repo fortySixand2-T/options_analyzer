@@ -25,7 +25,7 @@ _CHAIN_DB_PATH = os.path.join(
 
 def _get_chain_conn() -> sqlite3.Connection:
     path = os.getenv("CHAIN_SNAPSHOTS_DB", _CHAIN_DB_PATH)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
     return conn
 

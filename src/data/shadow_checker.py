@@ -96,7 +96,11 @@ def _compute_dte(expiry: str) -> int:
 
 def _settle_at_expiry(trade: Dict, spot: float) -> List[Dict]:
     """Compute settlement prices at expiry using intrinsic values."""
-    legs = json.loads(trade["legs_json"])
+    try:
+        legs = json.loads(trade["legs_json"])
+    except (json.JSONDecodeError, TypeError):
+        logger.error("Malformed legs_json for trade #%d", trade.get("id", -1))
+        return []
     settled = []
     for leg in legs:
         iv = compute_intrinsic_value(spot, leg["strike"], leg["option_type"])
@@ -153,7 +157,12 @@ def run_daily_check(dry_run: bool = False) -> Dict:
                 continue
 
             # Get current leg prices
-            legs = json.loads(trade["legs_json"])
+            try:
+                legs = json.loads(trade["legs_json"])
+            except (json.JSONDecodeError, TypeError):
+                logger.error("Malformed legs_json for trade #%d", trade_id)
+                summary["errors"].append(f"#{trade_id}: malformed legs_json")
+                continue
 
             if dte <= 0:
                 # Past expiry — settle at intrinsic value

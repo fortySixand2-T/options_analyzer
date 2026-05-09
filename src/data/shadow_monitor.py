@@ -103,9 +103,12 @@ def fetch_contract_prices(
 
             if not row.empty:
                 r = row.iloc[0]
-                bid = float(r.get("bid", 0) or 0)
-                ask = float(r.get("ask", 0) or 0)
-                mid = (bid + ask) / 2 if bid > 0 and ask > 0 else float(r.get("lastPrice", 0) or 0)
+                try:
+                    bid = float(r.get("bid", 0) or 0)
+                    ask = float(r.get("ask", 0) or 0)
+                    mid = (bid + ask) / 2 if bid > 0 and ask > 0 else float(r.get("lastPrice", 0) or 0)
+                except (ValueError, TypeError):
+                    continue
                 if mid > 0:
                     prices[(strike, opt_type)] = {
                         "mid": round(mid, 4),
@@ -132,7 +135,11 @@ def check_trade_group(
     # Collect all needed contracts across trades in this group
     needed = []
     for trade in trades:
-        legs = json.loads(trade["legs_json"])
+        try:
+            legs = json.loads(trade["legs_json"])
+        except (json.JSONDecodeError, TypeError):
+            logger.error("Malformed legs_json for trade #%d, skipping", trade["id"])
+            continue
         for leg in legs:
             needed.append({
                 "strike": leg["strike"],
@@ -153,7 +160,12 @@ def check_trade_group(
 
     for trade in trades:
         trade_id = trade["id"]
-        legs = json.loads(trade["legs_json"])
+        try:
+            legs = json.loads(trade["legs_json"])
+        except (json.JSONDecodeError, TypeError):
+            logger.error("Malformed legs_json for trade #%d, skipping", trade_id)
+            result["errors"] += 1
+            continue
         result["checked"] += 1
 
         # Build current leg prices

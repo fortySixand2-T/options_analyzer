@@ -312,3 +312,7 @@
 - [2026-05-08] Modified: data/shadow_trades.db — Marked 4 false stop-loss trades as error status
 - [2026-05-08] Modified: src/ui/app.py — Sanitize error responses, add input validation bounds on query params
 - [2026-05-08] Modified: Dockerfile — Run containers as non-root user (appuser uid 1000)
+- [2026-05-08] Modified: src/data/chain_store.py, shadow_store.py, intraday_store.py, shadow_pricer.py — Add SQLite connection timeout=10
+- [2026-05-08] Modified: src/ui/app.py — Fix journal DB connection leak, add timeout
+- [2026-05-08] Modified: src/data/shadow_monitor.py — Guard json.loads, safe float casting
+- [2026-05-08] Modified: src/data/shadow_checker.py — Guard json.loads with error handling

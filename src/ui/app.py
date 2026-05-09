@@ -587,7 +587,7 @@ _JOURNAL_DB = os.getenv("JOURNAL_DB", "data/journal.db")
 def _get_journal_db():
     import sqlite3
     os.makedirs(os.path.dirname(_JOURNAL_DB) if os.path.dirname(_JOURNAL_DB) else ".", exist_ok=True)
-    conn = sqlite3.connect(_JOURNAL_DB)
+    conn = sqlite3.connect(_JOURNAL_DB, timeout=10)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS journal (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -625,15 +625,17 @@ def list_journal(limit: int = Query(50, ge=1, le=500)):
 def add_journal(entry: JournalEntry):
     """Log a trade to the journal."""
     conn = _get_journal_db()
-    conn.execute(
-        """INSERT INTO journal (strategy, symbol, entry_date, entry_price,
-           exit_date, exit_price, contracts, pnl, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (entry.strategy, entry.symbol, entry.entry_date, entry.entry_price,
-         entry.exit_date, entry.exit_price, entry.contracts, entry.pnl, entry.notes),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            """INSERT INTO journal (strategy, symbol, entry_date, entry_price,
+               exit_date, exit_price, contracts, pnl, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (entry.strategy, entry.symbol, entry.entry_date, entry.entry_price,
+             entry.exit_date, entry.exit_price, entry.contracts, entry.pnl, entry.notes),
+        )
+        conn.commit()
+    finally:
+        conn.close()
     return {"status": "ok"}
 
 
