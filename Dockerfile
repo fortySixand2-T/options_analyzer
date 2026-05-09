@@ -38,8 +38,12 @@ COPY scripts/   ./scripts/
 # Copy React build output
 COPY --from=frontend /frontend/dist ./frontend/dist
 
-# Output directories
-RUN mkdir -p analysis_results mc_results exports data
+# Output directories + non-root user
+RUN useradd -m -u 1000 appuser \
+ && mkdir -p analysis_results mc_results exports data \
+ && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8000
 
@@ -56,6 +60,10 @@ COPY config/    ./config/
 COPY scripts/   ./scripts/
 COPY tests/     ./tests/
 
-RUN mkdir -p analysis_results mc_results exports data
+RUN useradd -m -u 1000 appuser \
+ && mkdir -p analysis_results mc_results exports data \
+ && chown -R appuser:appuser /app
+
+USER appuser
 
 CMD ["python", "-m", "pytest", "tests/", "-v"]
