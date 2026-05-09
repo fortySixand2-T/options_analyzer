@@ -246,6 +246,22 @@ case "$CMD" in
         $COMPOSE stop shadow-monitor
         ;;
 
+    orchestrator)
+        setup_env
+        shift || true
+        ARGS="$*"
+        echo -e "${GREEN}Multi-agent orchestrator:${NC} $ARGS"
+        $COMPOSE run --rm orchestrator python scripts/run_orchestrator.py $ARGS
+        ;;
+
+    orchestrator-stats)
+        setup_env
+        shift || true
+        ARGS="$*"
+        echo -e "${GREEN}Multi-agent stats:${NC}"
+        $COMPOSE run --rm orchestrator python scripts/run_orchestrator.py --stats $ARGS
+        ;;
+
     test)
         echo -e "${GREEN}Running test suite...${NC}"
         $COMPOSE run --rm test
@@ -306,6 +322,8 @@ case "$CMD" in
         echo "  collect       Collect daily chain snapshots (pass tickers after)"
         echo "  collect-stats Show chain snapshot database statistics"
         echo "  intraday-backtest  Run 0 DTE intraday backtest (pass args)"
+        echo "  orchestrator  Run multi-agent paper trading cycle"
+        echo "  orchestrator-stats  Show per-agent performance stats"
         echo "  test          Run the test suite"
         echo "  shell         Interactive dev shell"
         echo "  build         Rebuild Docker images (no cache)"

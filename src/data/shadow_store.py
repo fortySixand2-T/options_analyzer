@@ -38,7 +38,18 @@ def _get_conn() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     _init_schema(conn)
+    _migrate_agent_id(conn)
     return conn
+
+
+def _migrate_agent_id(conn: sqlite3.Connection):
+    """Add agent_id column to existing shadow_trades tables."""
+    try:
+        conn.execute("SELECT agent_id FROM shadow_trades LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE shadow_trades ADD COLUMN agent_id TEXT NOT NULL DEFAULT 'legacy'")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_shadow_agent ON shadow_trades(agent_id, status)")
+        conn.commit()
 
 
 def _init_schema(conn: sqlite3.Connection):
@@ -79,11 +90,13 @@ def _init_schema(conn: sqlite3.Connection):
             dealer_regime TEXT,
             iv_rv_edge_pct REAL,
             rationale TEXT,
+            -- Agent orchestrator
+            agent_id TEXT NOT NULL DEFAULT 'legacy',
             -- Status: open, closed, expired, error
             status TEXT NOT NULL DEFAULT 'open',
             created_at TEXT DEFAULT (datetime('now')),
             updated_at TEXT DEFAULT (datetime('now')),
-            UNIQUE(symbol, strategy, entry_date, legs_json)
+            UNIQUE(symbol, strategy, entry_date, legs_json, agent_id)
         );
 
         CREATE INDEX IF NOT EXISTS idx_shadow_status
@@ -92,6 +105,8 @@ def _init_schema(conn: sqlite3.Connection):
             ON shadow_trades(symbol, status);
         CREATE INDEX IF NOT EXISTS idx_shadow_date
             ON shadow_trades(entry_date);
+        CREATE INDEX IF NOT EXISTS idx_shadow_agent
+            ON shadow_trades(agent_id, status);
 
         CREATE TABLE IF NOT EXISTS shadow_trade_marks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,6 +132,7 @@ def log_shadow_trade(
     entry_leg_prices: List[Dict],
     spot: float,
     contracts: int = 1,
+    agent_id: str = "legacy",
 ) -> Optional[int]:
     """Log a TradeCandidate as a shadow trade.
 
@@ -159,8 +175,8 @@ def log_shadow_trade(
                 entry_spot, expiry,
                 profit_target_pct, stop_loss_pct, time_exit_dte,
                 confluence_score, regime, bias_label, dealer_regime,
-                iv_rv_edge_pct, rationale, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')""",
+                iv_rv_edge_pct, rationale, agent_id, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')""",
             (
                 trade_candidate.symbol,
                 trade_candidate.strategy,
@@ -183,6 +199,7 @@ def log_shadow_trade(
                 trade_candidate.dealer_regime,
                 trade_candidate.iv_rv_edge_pct,
                 trade_candidate.rationale,
+                agent_id,
             ),
         )
         conn.commit()
@@ -202,13 +219,19 @@ def log_shadow_trade(
         conn.close()
 
 
-def get_open_trades() -> List[Dict]:
-    """Return all open shadow trades."""
+def get_open_trades(agent_id: Optional[str] = None) -> List[Dict]:
+    """Return open shadow trades, optionally filtered by agent."""
     conn = _get_conn()
     try:
-        rows = conn.execute(
-            "SELECT * FROM shadow_trades WHERE status = 'open' ORDER BY entry_date"
-        ).fetchall()
+        if agent_id:
+            rows = conn.execute(
+                "SELECT * FROM shadow_trades WHERE status = 'open' AND agent_id = ? ORDER BY entry_date",
+                (agent_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM shadow_trades WHERE status = 'open' ORDER BY entry_date"
+            ).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
@@ -218,6 +241,7 @@ def get_trades(
     status: Optional[str] = None,
     symbol: Optional[str] = None,
     strategy: Optional[str] = None,
+    agent_id: Optional[str] = None,
     limit: int = 100,
 ) -> List[Dict]:
     """Return shadow trades with optional filters."""
@@ -232,6 +256,9 @@ def get_trades(
     if strategy:
         clauses.append("strategy = ?")
         params.append(strategy)
+    if agent_id:
+        clauses.append("agent_id = ?")
+        params.append(agent_id)
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     sql = f"SELECT * FROM shadow_trades {where} ORDER BY entry_date DESC LIMIT ?"
@@ -441,5 +468,129 @@ def get_trade_marks(trade_id: int) -> List[Dict]:
             (trade_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_agent_positions(agent_id: str) -> List[Dict]:
+    """Return open trades for a specific agent with ticker and direction info."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM shadow_trades WHERE agent_id = ? AND status = 'open' ORDER BY entry_date",
+            (agent_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_daily_pnl(agent_id: Optional[str] = None, date: Optional[str] = None) -> float:
+    """Compute realized P&L for closed trades on a given date."""
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+
+    conn = _get_conn()
+    try:
+        if agent_id:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(pnl_total), 0) FROM shadow_trades "
+                "WHERE agent_id = ? AND status = 'closed' AND exit_date = ?",
+                (agent_id, date),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(pnl_total), 0) FROM shadow_trades "
+                "WHERE status = 'closed' AND exit_date = ?",
+                (date,),
+            ).fetchone()
+        return float(row[0])
+    finally:
+        conn.close()
+
+
+def get_cumulative_pnl(agent_id: Optional[str] = None) -> float:
+    """Compute total realized P&L across all closed trades."""
+    conn = _get_conn()
+    try:
+        if agent_id:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(pnl_total), 0) FROM shadow_trades "
+                "WHERE agent_id = ? AND status = 'closed'",
+                (agent_id,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(pnl_total), 0) FROM shadow_trades "
+                "WHERE status = 'closed'",
+            ).fetchone()
+        return float(row[0])
+    finally:
+        conn.close()
+
+
+def get_agent_stats(agent_id: str) -> Dict[str, Any]:
+    """Compute per-agent trading statistics."""
+    conn = _get_conn()
+    try:
+        closed = conn.execute(
+            "SELECT * FROM shadow_trades WHERE agent_id = ? AND status = 'closed'",
+            (agent_id,),
+        ).fetchall()
+
+        open_count = conn.execute(
+            "SELECT COUNT(*) FROM shadow_trades WHERE agent_id = ? AND status = 'open'",
+            (agent_id,),
+        ).fetchone()[0]
+
+        total_closed = len(closed)
+        if total_closed == 0:
+            return {
+                "agent_id": agent_id,
+                "open_trades": open_count,
+                "closed_trades": 0,
+                "wins": 0, "losses": 0, "win_rate": 0.0,
+                "total_pnl": 0.0, "avg_pnl": 0.0,
+                "max_drawdown": 0.0,
+                "by_strategy": {},
+            }
+
+        pnls = [r["pnl_total"] for r in closed]
+        wins = sum(1 for p in pnls if p > 0)
+
+        # Max drawdown from cumulative P&L curve
+        cumulative = 0.0
+        peak = 0.0
+        max_dd = 0.0
+        for r in sorted(closed, key=lambda x: x["exit_date"] or ""):
+            cumulative += r["pnl_total"]
+            if cumulative > peak:
+                peak = cumulative
+            dd = peak - cumulative
+            if dd > max_dd:
+                max_dd = dd
+
+        by_strategy: Dict[str, Dict] = {}
+        for r in closed:
+            s = r["strategy"]
+            if s not in by_strategy:
+                by_strategy[s] = {"trades": 0, "wins": 0, "pnl": 0.0}
+            by_strategy[s]["trades"] += 1
+            by_strategy[s]["pnl"] += r["pnl_total"]
+            if r["pnl_total"] > 0:
+                by_strategy[s]["wins"] += 1
+
+        return {
+            "agent_id": agent_id,
+            "open_trades": open_count,
+            "closed_trades": total_closed,
+            "wins": wins,
+            "losses": total_closed - wins,
+            "win_rate": round(wins / total_closed * 100, 1),
+            "total_pnl": round(sum(pnls), 2),
+            "avg_pnl": round(sum(pnls) / total_closed, 2),
+            "max_drawdown": round(max_dd, 2),
+            "by_strategy": by_strategy,
+        }
     finally:
         conn.close()

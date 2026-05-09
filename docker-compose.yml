@@ -84,6 +84,17 @@ services:
     restart: unless-stopped
     command: python scripts/shadow_monitor.py
 
+  # Multi-agent paper trading orchestrator
+  orchestrator:
+    build:
+      context: .
+      target: prod
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./config/agents.yaml:/app/config/agents.yaml:ro
+    command: python scripts/run_orchestrator.py
+
   # Interactive shell with full dev environment
   shell:
     build:

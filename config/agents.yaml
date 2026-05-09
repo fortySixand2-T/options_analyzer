@@ -1,0 +1,68 @@
+# Multi-Agent Paper Trading Configuration
+#
+# Each agent is a filter profile applied to the same L1→L2 pipeline output.
+# The orchestrator builds MarketState once per ticker, generates candidates
+# once, then filters per-agent. Agents share a portfolio risk budget
+# enforced by the orchestrator's guardrails.
+#
+# To add an agent: add a new entry under `agents:` with desired parameters.
+# To pause an agent: set `enabled: false` or use CLI `--pause <agent_id>`.
+# To remove: delete the entry. Open trades continue to be monitored.
+
+orchestrator:
+  portfolio_value: 100000
+  tickers: [SPY, QQQ, IWM]
+
+  # Portfolio-level guardrails
+  guardrails:
+    max_total_positions: 12
+    max_positions_per_ticker: 4
+    max_notional_exposure_pct: 0.15
+    daily_drawdown_limit_pct: 0.03
+    weekly_drawdown_limit_pct: 0.05
+    max_same_direction_exposure: 3
+    portfolio_kill_switch_pct: 0.08
+
+agents:
+  conservative:
+    enabled: true
+    capital_pct: 0.35
+    min_confluence: 80
+    allowed_strategies: [butterfly, short_put_spread]
+    max_positions: 3
+    max_daily_loss_pct: 0.01
+    drawdown_pause_pct: 0.04
+    description: "High-conviction credit + butterfly"
+
+  momentum:
+    enabled: true
+    capital_pct: 0.25
+    min_confluence: 70
+    allowed_strategies: [long_call_spread, long_put_spread]
+    required_bias_strength: 3
+    max_positions: 3
+    max_daily_loss_pct: 0.015
+    drawdown_pause_pct: 0.05
+    description: "Directional plays on strong bias signals"
+
+  vol_harvester:
+    enabled: true
+    capital_pct: 0.25
+    min_confluence: 70
+    allowed_strategies: [short_put_spread, butterfly]
+    required_regimes: [HIGH_IV]
+    min_iv_rv_edge_pct: 5.0
+    max_positions: 3
+    max_daily_loss_pct: 0.015
+    drawdown_pause_pct: 0.05
+    description: "Credit selling in HIGH_IV with edge"
+
+  opportunistic:
+    enabled: true
+    capital_pct: 0.15
+    min_confluence: 65
+    allowed_strategies: [butterfly, long_call_spread, long_put_spread, short_put_spread]
+    max_positions: 3
+    max_daily_loss_pct: 0.01
+    drawdown_pause_pct: 0.03
+    description: "Broader strategy set, smallest allocation"

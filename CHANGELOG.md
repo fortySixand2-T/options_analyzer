@@ -1,5 +1,14 @@
 # Changelog
 
+- [2026-05-08] Created: config/agents.yaml — Multi-agent orchestrator configuration (4 default agents + guardrails)
+- [2026-05-08] Created: src/agents/__init__.py — Agents package init
+- [2026-05-08] Created: src/agents/agent_config.py — Pydantic v2 models for agent/orchestrator config
+- [2026-05-08] Created: src/agents/risk_ledger.py — Per-agent and portfolio risk tracking with auto-pause
+- [2026-05-08] Created: src/agents/orchestrator.py — Multi-agent orchestrator (entry coordination, guardrails, conflict resolution)
+- [2026-05-08] Created: scripts/run_orchestrator.py — CLI for orchestrator (--dry-run, --stats, --pause, --enable)
+- [2026-05-08] Modified: src/data/shadow_store.py — Added agent_id column, migration, per-agent queries (get_agent_stats, get_daily_pnl, get_cumulative_pnl)
+- [2026-05-08] Modified: docker-compose.yml — Added orchestrator service
+- [2026-05-08] Modified: start.sh — Added orchestrator and orchestrator-stats commands
 - [2026-05-07] Created: src/data/shadow_monitor.py — Live shadow trade monitor (5-min checks during market hours)
 - [2026-05-07] Created: scripts/shadow_monitor.py — CLI entry point for shadow monitor
 - [2026-05-07] Modified: docker-compose.yml — Added shadow-monitor service (long-running, restart: unless-stopped)
