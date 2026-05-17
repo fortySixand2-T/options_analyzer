@@ -1,5 +1,6 @@
 # Changelog
 
+- [2026-05-17] Created: docs/dolt-backtest-report.md — Multi-year agent backtest report (2020-2024) with per-ticker results and 10 action items
 - [2026-05-17] Created: src/data/dolt_provider.py — Adapter to read DoltHub options data as ChainSnapshot objects
 - [2026-05-17] Created: scripts/import_dolt.py — Import DoltHub options data into chain_snapshots.db for backtesting
 - [2026-05-17] Modified: src/backtest/agent_backtest.py — Add --source dolt support for DoltHub data backtesting
