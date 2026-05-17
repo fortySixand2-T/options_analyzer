@@ -1,5 +1,12 @@
 # Changelog
 
+- [2026-05-17] Modified: docker-compose.yml — Consolidate to 2 shared images (options_analyzer:prod + :dev), remove per-service build blocks
+- [2026-05-17] Modified: start.sh — Add ensure_prod/ensure_dev auto-build, update build command for shared images
+- [2026-05-17] Modified: CLAUDE.md — Add Docker image reuse instruction
+- [2026-05-17] Modified: .claude/rules/docker.md — Add image reuse rules and rebuild guidance
+- [2026-05-17] Created: docs/docker-image-report.md — Report on when separate Docker images would be needed
+- [2026-05-17] Created: scripts/daily_orchestrator.sh — Cron wrapper for daily orchestrator runs
+- [2026-05-17] Modified: PLAN.md — All phases complete, monitoring week 1 of paper trading
 - [2026-05-11] Modified: PLAN.md — Completed Phases 2-6, resolved open questions based on full-year backtest
 - [2026-05-11] Modified: src/agents/orchestrator.py — Fixed SizeResult.tradeable AttributeError: use size_result.contracts > 0 instead
 - [2026-05-11] Modified: config/agents.yaml — Tuned agents: conservative restricted to HIGH_IV only, opportunistic restricted to HIGH_IV+LOW_IV with min_confluence 70

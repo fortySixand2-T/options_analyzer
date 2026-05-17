@@ -71,6 +71,20 @@ src/scanner/providers/base.py
 src/scanner/providers/cached_provider.py
 ```
 
+## Important: Docker image reuse
+
+**Only two Docker images exist: `options_analyzer:prod` and `options_analyzer:dev`.**
+All services share one of these. Never add a `build:` block to new docker-compose services — use `image: options_analyzer:prod` (or `:dev`) instead. Only the `app` service (prod) and `test` service (dev) have `build:` blocks; they are the canonical builders.
+
+When to rebuild (`./start.sh build` or `docker-compose build --no-cache app test`):
+- After changing `requirements.txt`, `Dockerfile`, or `frontend/` source
+- After changing Python source in `src/` or `scripts/` (Docker copies these at build time)
+
+When rebuild is NOT needed:
+- Changing `config/agents.yaml` (bind-mounted at runtime)
+- Changing data in `./data/` (bind-mounted volume)
+- Changing `.env` (read at container start)
+
 ## Dev rules
 
 1. Read `SIGNALS.md` before implementing any signal logic.

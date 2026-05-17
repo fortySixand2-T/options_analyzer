@@ -113,6 +113,18 @@ wait_for_healthy() {
     echo -e "  ${YELLOW}Server may still be starting — check: ./start.sh logs${NC}"
 }
 
+ensure_image() {
+    local tag="$1"
+    local service="$2"
+    if ! docker image inspect "options_analyzer:${tag}" &>/dev/null; then
+        echo -e "${YELLOW}Building options_analyzer:${tag} image...${NC}"
+        $COMPOSE build "$service"
+    fi
+}
+
+ensure_prod() { ensure_image prod app; }
+ensure_dev()  { ensure_image dev test; }
+
 check_docker
 
 case "$CMD" in
@@ -159,6 +171,7 @@ case "$CMD" in
 
     scan)
         setup_env
+        ensure_prod
         shift || true
         ARGS="${*:-SPY,QQQ,IWM --strategies --top 10}"
         echo -e "${GREEN}Running scan: ${NC}$ARGS"
@@ -167,6 +180,7 @@ case "$CMD" in
 
     backtest)
         setup_env
+        ensure_prod
         shift || true
         ARGS="${*:---strategy iron_condor --symbol SPY}"
         echo -e "${GREEN}Running backtest: ${NC}$ARGS"
@@ -175,6 +189,7 @@ case "$CMD" in
 
     collect-intraday)
         setup_env
+        ensure_prod
         shift || true
         MODE="${1:-bars}"
         shift || true
@@ -185,6 +200,7 @@ case "$CMD" in
 
     intraday-backtest)
         setup_env
+        ensure_prod
         shift || true
         ARGS="${*:---strategy 0dte_iron_condor --symbol SPY}"
         echo -e "${GREEN}Running 0 DTE intraday backtest: ${NC}$ARGS"
@@ -193,6 +209,7 @@ case "$CMD" in
 
     collect)
         setup_env
+        ensure_prod
         shift || true
         ARGS="${*:-SPY,QQQ,IWM}"
         echo -e "${GREEN}Collecting chain snapshots: ${NC}$ARGS"
@@ -201,12 +218,14 @@ case "$CMD" in
 
     collect-stats)
         setup_env
+        ensure_prod
         echo -e "${GREEN}Chain snapshot database stats:${NC}"
         $COMPOSE run --rm collect python scripts/collect_chains.py --stats
         ;;
 
     backfill)
         setup_env
+        ensure_prod
         shift || true
         ARGS="${*:-SPY --start 2025-04-01 --end 2025-05-01}"
         echo -e "${GREEN}Alpaca historical backfill:${NC} $ARGS"
@@ -215,12 +234,14 @@ case "$CMD" in
 
     backfill-status)
         setup_env
+        ensure_prod
         echo -e "${GREEN}Backfill status:${NC}"
         $COMPOSE run --rm backfill python scripts/backfill_chains.py --status
         ;;
 
     shadow)
         setup_env
+        ensure_prod
         shift || true
         ARGS="${*:---scan-and-log SPY,QQQ,IWM}"
         echo -e "${GREEN}Shadow paper trading:${NC} $ARGS"
@@ -229,12 +250,14 @@ case "$CMD" in
 
     shadow-stats)
         setup_env
+        ensure_prod
         echo -e "${GREEN}Shadow trading stats:${NC}"
         $COMPOSE run --rm collect python scripts/shadow_check.py --stats
         ;;
 
     shadow-monitor)
         setup_env
+        ensure_prod
         echo -e "${GREEN}Starting shadow trade monitor (5-min checks)...${NC}"
         $COMPOSE up -d shadow-monitor
         echo -e "  Monitor running in background. Use ${YELLOW}./start.sh logs shadow-monitor${NC} to watch."
@@ -248,6 +271,7 @@ case "$CMD" in
 
     agent-backtest)
         setup_env
+        ensure_prod
         shift || true
         ARGS="${*:---tickers SPY,QQQ,IWM}"
         echo -e "${GREEN}Agent backtest:${NC} $ARGS"
@@ -256,6 +280,7 @@ case "$CMD" in
 
     orchestrator)
         setup_env
+        ensure_prod
         shift || true
         ARGS="$*"
         echo -e "${GREEN}Multi-agent orchestrator:${NC} $ARGS"
@@ -264,6 +289,7 @@ case "$CMD" in
 
     orchestrator-stats)
         setup_env
+        ensure_prod
         shift || true
         ARGS="$*"
         echo -e "${GREEN}Multi-agent stats:${NC}"
@@ -271,12 +297,14 @@ case "$CMD" in
         ;;
 
     test)
+        ensure_dev
         echo -e "${GREEN}Running test suite...${NC}"
         $COMPOSE run --rm test
         ;;
 
     shell)
         setup_env
+        ensure_dev
         echo -e "${GREEN}Starting dev shell...${NC}"
         echo -e "  PYTHONPATH is set to /app/src"
         echo -e "  Try: python scripts/scan.py SPY --top 5"
@@ -286,8 +314,9 @@ case "$CMD" in
 
     build)
         echo -e "${GREEN}Building Docker images (no cache)...${NC}"
-        $COMPOSE build --no-cache
-        echo -e "${GREEN}Build complete. Run ./start.sh to launch.${NC}"
+        $COMPOSE build --no-cache app test
+        echo -e "${GREEN}Build complete (options_analyzer:prod + options_analyzer:dev).${NC}"
+        echo -e "Run ${YELLOW}./start.sh${NC} to launch."
         ;;
 
     restart)

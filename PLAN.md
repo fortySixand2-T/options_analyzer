@@ -1,6 +1,6 @@
 # Agent Trading Go-Live Plan
 
-Status: **Phase 6 complete, Phase 7 next (requires your decision)**
+Status: **All phases complete. Monitoring week 1 of paper trading.**
 Last updated: 2026-05-10
 
 ## Current State
@@ -105,6 +105,8 @@ Set up recurring orchestrator runs.
 2. Verify shadow_monitor is running (exit checks every 5 min)
 3. Monitor for 1 week in paper trading mode
 4. Review per-agent stats after first week
+
+**Status:** DONE — Cron job added (7:00 AM PDT Mon-Fri), shadow-monitor running. Logs at `data/orchestrator.log`. Review stats after 2026-05-24 with `./start.sh orchestrator-stats`.
 
 ## Open Questions (Updated after Phase 3 full-year backtest)
 

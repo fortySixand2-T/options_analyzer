@@ -12,14 +12,24 @@
 ./start.sh clean        # Stop + remove containers/images
 ```
 
+## Image reuse — IMPORTANT
+Only two images: `options_analyzer:prod` and `options_analyzer:dev`.
+All services reference one of these via `image:`. Only `app` (prod) and
+`test` (dev) have `build:` blocks. Never add `build:` to new services.
+
 ## Rebuild after code changes
 ```bash
 docker compose down
-docker compose build --no-cache app
+docker compose build --no-cache app   # rebuilds options_analyzer:prod
 docker compose up app
 ```
 The `--no-cache` is important when provider code changes — Docker layer
 caching can serve stale Python files.
+
+## When rebuild is NOT needed
+- `config/agents.yaml` — bind-mounted at runtime
+- `./data/` — bind-mounted volume
+- `.env` — read at container start
 
 ## Environment
 - `.env` file at project root (created from .env.example on first run)
