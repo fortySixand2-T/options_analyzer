@@ -35,6 +35,9 @@ def parse_args(argv=None):
                    help="End date YYYY-MM-DD (default: latest available)")
     p.add_argument("--agent", type=str, default=None,
                    help="Run only this agent (default: all enabled)")
+    p.add_argument("--source", type=str, default="chain_store",
+                   choices=["chain_store", "dolt"],
+                   help="Data source: chain_store (local snapshots) or dolt (DoltHub options DB)")
     p.add_argument("--label", type=str, default="backfill",
                    help="Chain store snapshot label (default: backfill)")
     p.add_argument("--slippage", type=float, default=3.0,
@@ -48,16 +51,25 @@ def parse_args(argv=None):
     return p.parse_args(argv)
 
 
-def show_status(tickers, label):
-    from data.chain_store import get_available_dates
-
-    print("\n=== Backfill Data Status ===\n")
-    for ticker in tickers:
-        dates = get_available_dates(ticker, label=label)
-        if dates:
-            print(f"  {ticker}: {len(dates)} dates ({dates[0]} to {dates[-1]})")
-        else:
-            print(f"  {ticker}: no data")
+def show_status(tickers, label, source="chain_store"):
+    if source == "dolt":
+        from data.dolt_provider import get_available_dates
+        print("\n=== Dolt Options Data Status ===\n")
+        for ticker in tickers:
+            dates = get_available_dates(ticker)
+            if dates:
+                print(f"  {ticker}: {len(dates)} dates ({dates[0]} to {dates[-1]})")
+            else:
+                print(f"  {ticker}: no data")
+    else:
+        from data.chain_store import get_available_dates
+        print("\n=== Backfill Data Status ===\n")
+        for ticker in tickers:
+            dates = get_available_dates(ticker, label=label)
+            if dates:
+                print(f"  {ticker}: {len(dates)} dates ({dates[0]} to {dates[-1]})")
+            else:
+                print(f"  {ticker}: no data")
     print()
 
 
@@ -122,20 +134,29 @@ def main(argv=None):
     tickers = [t.strip().upper() for t in args.tickers.split(",")]
 
     if args.status:
-        show_status(tickers, args.label)
+        show_status(tickers, args.label, source=args.source)
         return
-
-    from data.chain_store import get_available_dates
 
     if not args.start or not args.end:
         all_dates = set()
-        for ticker in tickers:
-            dates = get_available_dates(ticker, label=args.label)
-            all_dates.update(dates)
+        if args.source == "dolt":
+            from data.dolt_provider import get_available_dates as dolt_dates
+            for ticker in tickers:
+                dates = dolt_dates(ticker)
+                all_dates.update(dates)
+        else:
+            from data.chain_store import get_available_dates
+            for ticker in tickers:
+                dates = get_available_dates(ticker, label=args.label)
+                all_dates.update(dates)
 
         if not all_dates:
-            print(f"\nNo backfill data found for {tickers} with label '{args.label}'.")
-            print("Run: ./start.sh backfill SPY,QQQ,IWM --start 2025-05-01 --end 2026-05-01")
+            if args.source == "dolt":
+                print(f"\nNo Dolt data found for {tickers}.")
+                print("Clone the DB: cd data && dolt clone post-no-preference/options dolt_options")
+            else:
+                print(f"\nNo backfill data found for {tickers} with label '{args.label}'.")
+                print("Run: ./start.sh backfill SPY,QQQ,IWM --start 2025-05-01 --end 2026-05-01")
             return
 
         sorted_dates = sorted(all_dates)
@@ -161,7 +182,9 @@ def main(argv=None):
     print(f"  Tickers: {', '.join(tickers)}")
     print(f"  Date range: {start_date} to {end_date}")
     print(f"  Slippage: {args.slippage}%")
-    print(f"  Label: {args.label}")
+    print(f"  Source: {args.source}")
+    if args.source != "dolt":
+        print(f"  Label: {args.label}")
     enabled = [n for n, c in config.agents.items() if c.enabled]
     print(f"  Agents: {', '.join(enabled)}")
     print(f"{'=' * 60}")
@@ -175,6 +198,7 @@ def main(argv=None):
         config=config,
         label=args.label,
         slippage_pct=args.slippage,
+        source=args.source,
     )
 
     if args.json:

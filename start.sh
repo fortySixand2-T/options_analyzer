@@ -232,6 +232,20 @@ case "$CMD" in
         $COMPOSE run --rm backfill python scripts/backfill_chains.py $ARGS
         ;;
 
+    dolt-import)
+        setup_env
+        shift || true
+        ARGS="$*"
+        echo -e "${GREEN}Importing DoltHub options data:${NC} $ARGS"
+        python3 scripts/import_dolt.py $ARGS
+        ;;
+
+    dolt-status)
+        setup_env
+        echo -e "${GREEN}DoltHub options data status:${NC}"
+        python3 scripts/import_dolt.py --status
+        ;;
+
     backfill-status)
         setup_env
         ensure_prod
@@ -360,6 +374,8 @@ case "$CMD" in
         echo "  collect-stats Show chain snapshot database statistics"
         echo "  intraday-backtest  Run 0 DTE intraday backtest (pass args)"
         echo "  agent-backtest Backtest agents against historical chain data"
+        echo "  dolt-import   Import DoltHub options data into chain_snapshots.db"
+        echo "  dolt-status   Show DoltHub data availability and import status"
         echo "  orchestrator  Run multi-agent paper trading cycle"
         echo "  orchestrator-stats  Show per-agent performance stats"
         echo "  test          Run the test suite"

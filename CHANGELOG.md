@@ -1,5 +1,10 @@
 # Changelog
 
+- [2026-05-17] Created: src/data/dolt_provider.py — Adapter to read DoltHub options data as ChainSnapshot objects
+- [2026-05-17] Created: scripts/import_dolt.py — Import DoltHub options data into chain_snapshots.db for backtesting
+- [2026-05-17] Modified: src/backtest/agent_backtest.py — Add --source dolt support for DoltHub data backtesting
+- [2026-05-17] Modified: scripts/backtest_agents.py — Add --source flag (chain_store or dolt)
+- [2026-05-17] Modified: start.sh — Add dolt-import and dolt-status commands
 - [2026-05-17] Modified: docker-compose.yml — Consolidate to 2 shared images (options_analyzer:prod + :dev), remove per-service build blocks
 - [2026-05-17] Modified: start.sh — Add ensure_prod/ensure_dev auto-build, update build command for shared images
 - [2026-05-17] Modified: CLAUDE.md — Add Docker image reuse instruction

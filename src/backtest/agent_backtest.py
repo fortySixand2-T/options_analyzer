@@ -170,6 +170,7 @@ def run_agent_backtest(
     config: Optional[OrchestratorConfig] = None,
     label: str = "backfill",
     slippage_pct: float = 3.0,
+    source: str = "chain_store",
 ) -> AgentBacktestSummary:
     """Replay historical chain snapshots through all agent filters.
 
@@ -180,11 +181,20 @@ def run_agent_backtest(
         config: Orchestrator config (loaded from agents.yaml if None).
         label: chain_store snapshot label to use.
         slippage_pct: Slippage as % of premium.
+        source: Data source — "chain_store" (local snapshots) or "dolt" (DoltHub options DB).
 
     Returns:
         AgentBacktestSummary with per-agent results.
     """
-    from data.chain_store import get_available_dates, get_snapshot
+    if source == "dolt":
+        from data.dolt_provider import get_available_dates as _dolt_dates
+        from data.dolt_provider import get_snapshot as _dolt_snap
+        _get_dates = lambda t: _dolt_dates(t, start_date, end_date)
+        _get_snap = lambda t, d: _dolt_snap(t, d)
+    else:
+        from data.chain_store import get_available_dates, get_snapshot
+        _get_dates = lambda t: get_available_dates(t, label=label)
+        _get_snap = lambda t, d: get_snapshot(t, d, label=label)
 
     if config is None:
         config = load_config()
@@ -204,7 +214,7 @@ def run_agent_backtest(
     all_dates = set()
 
     for ticker in tickers:
-        available = get_available_dates(ticker, label=label)
+        available = _get_dates(ticker)
         ticker_dates = [d for d in available if start_date <= d <= end_date]
         all_dates.update(ticker_dates)
 
@@ -216,7 +226,7 @@ def run_agent_backtest(
         )
 
         for date_str in ticker_dates:
-            snapshot = get_snapshot(ticker, date_str, label=label)
+            snapshot = _get_snap(ticker, date_str)
             if not snapshot or not snapshot.contracts:
                 continue
 
