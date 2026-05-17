@@ -378,7 +378,7 @@ class Orchestrator:
             max_loss_per_contract=max_loss,
             confluence_score=tc.confluence_score,
         )
-        contracts = max(1, size_result.contracts) if size_result.tradeable else 1
+        contracts = max(1, size_result.contracts) if size_result.contracts > 0 else 1
 
         trade_id = log_shadow_trade(
             tc, entry_legs, state.spot,

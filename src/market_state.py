@@ -334,7 +334,7 @@ def compute_vol_surface(chain_snapshot, spot: float) -> VolSurface:
     if calls:
         atm_call = min(calls, key=lambda c: abs(c.strike - spot))
         iv = atm_call.implied_volatility
-        if iv == iv and iv > 0:  # not NaN
+        if iv is not None and iv == iv and iv > 0:  # not None/NaN
             atm_iv = iv
 
     # Find 25-delta strikes using BS greeks
@@ -343,7 +343,7 @@ def compute_vol_surface(chain_snapshot, spot: float) -> VolSurface:
 
     for c in puts:
         iv = c.implied_volatility
-        if iv != iv or iv <= 0:
+        if iv is None or iv != iv or iv <= 0:
             continue
         try:
             greeks = calculate_greeks(
@@ -362,7 +362,7 @@ def compute_vol_surface(chain_snapshot, spot: float) -> VolSurface:
 
     for c in calls:
         iv = c.implied_volatility
-        if iv != iv or iv <= 0:
+        if iv is None or iv != iv or iv <= 0:
             continue
         try:
             greeks = calculate_greeks(
@@ -387,7 +387,7 @@ def compute_vol_surface(chain_snapshot, spot: float) -> VolSurface:
     iv_by_strike = {}
     for c in target_contracts:
         iv = c.implied_volatility
-        if iv == iv and iv > 0:
+        if iv is not None and iv == iv and iv > 0:
             iv_by_strike[c.strike] = iv
 
     # Skew z-score from historical iv_snapshots
@@ -472,7 +472,13 @@ def compute_chain_quality(chain_snapshot, spot: float) -> ChainQuality:
     spread_score = max(0, 1.0 - avg_spread / 10.0)  # 0% spread = 1.0, 10% = 0
     oi_score = min(1.0, avg_oi / 500.0)              # 500 avg OI = 1.0
     liquid_score = min(1.0, liquid_count / 10.0)      # 10 liquid strikes = 1.0
-    quality_score = 0.4 * spread_score + 0.3 * oi_score + 0.3 * liquid_score
+
+    # Backfilled data lacks OI — score on spread only when OI is universally zero
+    if total_oi == 0 and n_strikes > 5:
+        spread_score_backfill = max(0, 1.0 - avg_spread / 50.0)
+        quality_score = max(0.5, spread_score_backfill)
+    else:
+        quality_score = 0.4 * spread_score + 0.3 * oi_score + 0.3 * liquid_score
 
     return ChainQuality(
         avg_spread_pct=avg_spread,

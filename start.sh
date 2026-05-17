@@ -246,6 +246,14 @@ case "$CMD" in
         $COMPOSE stop shadow-monitor
         ;;
 
+    agent-backtest)
+        setup_env
+        shift || true
+        ARGS="${*:---tickers SPY,QQQ,IWM}"
+        echo -e "${GREEN}Agent backtest:${NC} $ARGS"
+        $COMPOSE run --rm agent-backtest python scripts/backtest_agents.py $ARGS
+        ;;
+
     orchestrator)
         setup_env
         shift || true
@@ -322,6 +330,7 @@ case "$CMD" in
         echo "  collect       Collect daily chain snapshots (pass tickers after)"
         echo "  collect-stats Show chain snapshot database statistics"
         echo "  intraday-backtest  Run 0 DTE intraday backtest (pass args)"
+        echo "  agent-backtest Backtest agents against historical chain data"
         echo "  orchestrator  Run multi-agent paper trading cycle"
         echo "  orchestrator-stats  Show per-agent performance stats"
         echo "  test          Run the test suite"

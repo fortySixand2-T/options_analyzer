@@ -1,5 +1,12 @@
 # Changelog
 
+- [2026-05-11] Modified: PLAN.md — Completed Phases 2-6, resolved open questions based on full-year backtest
+- [2026-05-11] Modified: src/agents/orchestrator.py — Fixed SizeResult.tradeable AttributeError: use size_result.contracts > 0 instead
+- [2026-05-11] Modified: config/agents.yaml — Tuned agents: conservative restricted to HIGH_IV only, opportunistic restricted to HIGH_IV+LOW_IV with min_confluence 70
+- [2026-05-11] Modified: PLAN.md — Marked Phase 3 (full backtest analysis) complete with tuning results
+- [2026-05-10] Modified: src/data/shadow_store.py — Fixed migration ordering: run _migrate_agent_id before _init_schema to prevent agent_id index error on existing databases
+- [2026-05-10] Modified: PLAN.md — Marked Phase 2 (DB migration verification) complete
+
 - [2026-05-08] Created: config/agents.yaml — Multi-agent orchestrator configuration (4 default agents + guardrails)
 - [2026-05-08] Created: src/agents/__init__.py — Agents package init
 - [2026-05-08] Created: src/agents/agent_config.py — Pydantic v2 models for agent/orchestrator config
@@ -333,3 +340,11 @@
 - [2026-05-08] Created: scripts/backfill_chains.py — CLI for Alpaca historical backfill with dry-run, resume, status
 - [2026-05-08] Modified: docker-compose.yml — Add backfill service
 - [2026-05-08] Modified: start.sh — Add backfill and backfill-status commands
+- [2026-05-09] Modified: README.md — Complete rewrite to reflect current project: multi-agent orchestrator, signal pipeline, all commands, project structure, security
+- [2026-05-10] Created: src/backtest/agent_backtest.py — Agent backtest replay engine: chain snapshot replay through agent filters with BS repricing
+- [2026-05-10] Created: scripts/backtest_agents.py — CLI for agent backtesting (--tickers, --agent, --status, --json)
+- [2026-05-10] Modified: docker-compose.yml — Added agent-backtest service
+- [2026-05-10] Modified: start.sh — Added agent-backtest command
+- [2026-05-10] Modified: src/market_state.py — Guard None IV comparisons in compute_vol_surface; handle missing OI in quality score for backfilled data
+- [2026-05-10] Created: tests/test_agents.py — 50 integration tests for agent config, filtering, guardrails, conflict resolution, risk ledger, shadow_store migration
+- [2026-05-10] Created: PLAN.md — Agent trading go-live plan (7 phases: tests, migration, backtest, dry-run, live cycle, kill switch, scheduled ops)

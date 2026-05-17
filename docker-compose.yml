@@ -95,6 +95,17 @@ services:
       - ./config/agents.yaml:/app/config/agents.yaml:ro
     command: python scripts/run_orchestrator.py
 
+  # Agent backtester — replay historical chains through agent filters
+  agent-backtest:
+    build:
+      context: .
+      target: prod
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./config/agents.yaml:/app/config/agents.yaml:ro
+    command: python scripts/backtest_agents.py --tickers SPY,QQQ,IWM
+
   # Interactive shell with full dev environment
   shell:
     build:

@@ -37,18 +37,23 @@ def _get_conn() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
-    _init_schema(conn)
     _migrate_agent_id(conn)
+    _init_schema(conn)
     return conn
 
 
 def _migrate_agent_id(conn: sqlite3.Connection):
     """Add agent_id column to existing shadow_trades tables."""
     try:
+        conn.execute("SELECT 1 FROM shadow_trades LIMIT 1")
+    except sqlite3.OperationalError:
+        return
+    try:
         conn.execute("SELECT agent_id FROM shadow_trades LIMIT 1")
     except sqlite3.OperationalError:
         conn.execute("ALTER TABLE shadow_trades ADD COLUMN agent_id TEXT NOT NULL DEFAULT 'legacy'")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_shadow_agent ON shadow_trades(agent_id, status)")
+        logger.info("Migrated shadow_trades: added agent_id column, existing trades marked 'legacy'")
         conn.commit()
 
 

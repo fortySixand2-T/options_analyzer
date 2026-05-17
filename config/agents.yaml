@@ -29,10 +29,11 @@ agents:
     capital_pct: 0.35
     min_confluence: 80
     allowed_strategies: [butterfly, short_put_spread]
+    required_regimes: [HIGH_IV]
     max_positions: 3
     max_daily_loss_pct: 0.01
     drawdown_pause_pct: 0.04
-    description: "High-conviction credit + butterfly"
+    description: "High-conviction credit + butterfly, HIGH_IV only"
 
   momentum:
     enabled: true
@@ -60,9 +61,10 @@ agents:
   opportunistic:
     enabled: true
     capital_pct: 0.15
-    min_confluence: 65
+    min_confluence: 70
     allowed_strategies: [butterfly, long_call_spread, long_put_spread, short_put_spread]
+    required_regimes: [HIGH_IV, LOW_IV]
     max_positions: 3
     max_daily_loss_pct: 0.01
     drawdown_pause_pct: 0.03
-    description: "Broader strategy set, smallest allocation"
+    description: "Broader strategy set, skip MODERATE_IV"

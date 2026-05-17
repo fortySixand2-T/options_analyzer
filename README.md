@@ -1,350 +1,234 @@
-# Modular Options Pricing System
+# Index Options Scanner
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+0-14 DTE defined-risk options scanner with multi-agent paper trading orchestrator.
+Three-layer signal architecture. Docker deployment. FastAPI + React on `localhost:8000`.
 
-A comprehensive, modular Python system for options pricing and analysis using the Black-Scholes model. Designed for traders, analysts, and researchers who need robust options analytics with clean, extensible code.
+## What It Does
 
-## 🚀 Features
+Scans SPY, QQQ, IWM (configurable) for short-term options trades using a three-layer signal pipeline, then paper-trades them through independent agent profiles with portfolio-level risk guardrails.
 
-### Core Pricing Engine
-- **Black-Scholes Model**: Accurate European option pricing for calls and puts
-- **Complete Greeks Suite**: Delta, Gamma, Theta, Vega, and Rho calculations
-- **Modular Architecture**: Clean separation of pricing, analytics, and utilities
+**Signal layers:**
+1. **Vol regime** — IV rank, VIX level, term structure → HIGH_IV / MODERATE_IV / LOW_IV / SPIKE
+2. **Directional bias** — EMA 9/21, RSI, MACD, momentum → STRONG_BULLISH to STRONG_BEARISH
+3. **Dealer positioning** — GEX, max pain, P/C ratio → LONG_GAMMA / SHORT_GAMMA
 
-### Advanced Analytics
-- **Time Decay Analysis**: Track option value evolution from purchase to expiration
-- **Price Scenario Modeling**: Analyze P&L across different underlying prices
-- **Volatility Sensitivity**: Study option behavior under various IV conditions
-- **Strategy Comparison**: Compare multiple options strategies side-by-side
+**Pipeline:** MarketState (L1) → TradeGenerator (L2) → Sizing (L3) → shadow_store
 
-### Visualization & Export
-- **Professional Charts**: matplotlib-based visualizations for all analyses
-- **Multi-format Export**: CSV, Excel, JSON export capabilities
-- **Summary Reports**: Comprehensive analysis reports with key metrics
+## Strategies (defined-risk only)
 
-### User-Friendly Interface
-- **High-level API**: Simple `OptionsAnalyzer` class for complete analysis
-- **Configuration Management**: JSON/YAML-based option configurations
-- **Extensive Examples**: Usage examples from basic to advanced strategies
+| Strategy | Regime | DTE |
+|---|---|---|
+| Iron condor | HIGH_IV + LONG_GAMMA | 7-14 |
+| Short put spread | HIGH_IV + bullish | 3-10 |
+| Short call spread | HIGH_IV + bearish | 3-10 |
+| Long call/put spread | LOW/MODERATE_IV + directional | 3-14 |
+| Butterfly | MODERATE/LOW_IV, pin at max pain | 0-7 |
 
-## 📁 Project Structure
+No naked options, calendars, diagonals, strangles, or straddles.
 
-```
-options/
-├── src/                          # Core source code
-│   ├── models/                   # Pricing models
-│   │   ├── black_scholes.py     # Black-Scholes implementation
-│   │   └── __init__.py
-│   ├── analytics/               # Analysis and simulation
-│   │   ├── simulations.py       # Scenario simulations
-│   │   ├── visualization.py     # Plotting functions
-│   │   └── __init__.py
-│   ├── utils/                   # Utilities
-│   │   ├── config.py           # Configuration management
-│   │   ├── data_export.py      # Data export functions
-│   │   └── __init__.py
-│   ├── options_analyzer.py      # High-level interface
-│   └── __init__.py             # Main package
-├── config/                      # Configuration files
-│   └── option_configs.json     # Example configurations
-├── examples/                    # Usage examples
-│   ├── basic_usage.py          # Basic examples
-│   └── advanced_strategies.py  # Complex strategies
-├── tests/                       # Unit tests
-├── requirements.txt            # Dependencies
-└── README.md                   # This file
-```
+## Multi-Agent Orchestrator
 
-## 🛠 Installation
+Four independent agent profiles compete for a shared risk budget. Each agent applies different filters to the same pipeline output. A central orchestrator enforces portfolio-level safety limits.
 
-### Prerequisites
-- Python 3.8 or higher
-- pip package manager
+### Agent Profiles (`config/agents.yaml`)
 
-### Install Dependencies
+| Agent | Allocation | Min Score | Strategies | Filter |
+|---|---|---|---|---|
+| conservative | 35% | 80 | butterfly, short_put_spread | High conviction only |
+| momentum | 25% | 70 | long_call/put_spread | Bias strength >= 3 |
+| vol_harvester | 25% | 70 | short_put_spread, butterfly | HIGH_IV, IV-RV edge >= 5% |
+| opportunistic | 15% | 65 | all 4 | Broadest, smallest allocation |
+
+### Portfolio Guardrails
+
+| Parameter | Value | Purpose |
+|---|---|---|
+| max_total_positions | 12 | Hard cap across all agents |
+| max_positions_per_ticker | 4 | Diversification per underlying |
+| daily_drawdown_limit | 3% | Pause all new entries |
+| portfolio_kill_switch | 8% | Full stop on cumulative drawdown |
+| max_same_direction | 3 | Limits correlated directional bets |
+
+### Agent-Level Safety
+
+- **Daily loss pause**: Agent auto-pauses if daily loss exceeds its `max_daily_loss_pct`
+- **Drawdown pause**: Agent auto-pauses at cumulative drawdown threshold
+- **Position cap**: Each agent limited to `max_positions` open trades
+- **Conflict resolution**: Opposing directions on same ticker → higher confluence score wins
+
+## Quick Start
 
 ```bash
-# Navigate to the options directory
-cd /path/to/options
+# First run — creates .env, builds Docker images
+./start.sh
 
-# Install required packages
-pip install -r requirements.txt
+# Run the multi-agent orchestrator (one cycle)
+./start.sh orchestrator
+
+# Preview trades without logging
+./start.sh orchestrator --dry-run
+
+# Per-agent performance stats
+./start.sh orchestrator-stats
+
+# Pause/enable an agent
+./start.sh orchestrator --pause momentum
+./start.sh orchestrator --enable momentum
 ```
 
-### Optional: Create Virtual Environment
+## All Commands
 
 ```bash
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# On macOS/Linux:
-source venv/bin/activate
-# On Windows:
-venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+./start.sh                    # Launch app (detached, localhost:8000)
+./start.sh dev                # Foreground with hot-reload
+./start.sh test               # Run test suite
+./start.sh scan               # CLI scan: SPY, QQQ, IWM
+./start.sh backtest           # Run backtest
+./start.sh orchestrator       # Multi-agent paper trading cycle
+./start.sh orchestrator-stats # Per-agent performance breakdown
+./start.sh shadow             # Shadow trade scan (single-agent legacy)
+./start.sh shadow-stats       # Shadow trade statistics
+./start.sh shadow-monitor     # Start exit monitor (5-min loop)
+./start.sh collect            # Collect daily chain snapshots
+./start.sh collect-stats      # Snapshot DB statistics
+./start.sh backfill SPY ...   # Alpaca historical options backfill
+./start.sh shell              # Interactive dev shell
+./start.sh logs               # Tail app logs
+./start.sh stop               # Stop everything
+./start.sh clean              # Stop + remove containers/images
 ```
 
-## 🎯 Quick Start
+## Project Structure
 
-### Basic Option Pricing
-
-```python
-from src.options_analyzer import OptionsAnalyzer
-
-# Define your option
-config = {
-    'ticker': 'AAPL',
-    'current_price': 175.0,
-    'strike_price': 180.0,
-    'expiration_date': '2025-12-20',
-    'option_type': 'call',
-    'implied_volatility': 0.25
-}
-
-# Create analyzer
-analyzer = OptionsAnalyzer(config)
-
-# Get current price and Greeks
-print(f"Option Price: ${analyzer.get_current_price():.2f}")
-print(f"Greeks: {analyzer.get_greeks()}")
-
-# Print comprehensive summary
-analyzer.print_summary()
+```
+├── config/
+│   └── agents.yaml              # Agent profiles + guardrails (user-editable)
+├── scripts/
+│   ├── run_orchestrator.py      # Orchestrator CLI entry point
+│   ├── shadow_check.py          # Shadow trade scanner
+│   ├── backfill_chains.py       # Alpaca historical backfill CLI
+│   ├── daily_collect.sh         # Cron: daily chain snapshots
+│   └── daily_collect_midday.sh  # Cron: midday chain snapshots
+├── src/
+│   ├── agents/                  # Multi-agent orchestrator
+│   │   ├── agent_config.py      # Pydantic v2 config models
+│   │   ├── orchestrator.py      # Core loop: build → filter → guardrails → log
+│   │   └── risk_ledger.py       # Per-agent + portfolio risk tracking
+│   ├── backtest/                # Backtesting engine
+│   │   ├── local_backtest.py    # Backtest runner with signal replay
+│   │   ├── analyzer.py          # Results analysis
+│   │   └── models.py            # Backtest data models
+│   ├── data/                    # Data layer
+│   │   ├── shadow_store.py      # SQLite shadow trade persistence
+│   │   ├── shadow_monitor.py    # Exit monitor (5-min loop)
+│   │   ├── chain_store.py       # Chain snapshot storage
+│   │   ├── alpaca_client.py     # Alpaca REST client for historical data
+│   │   └── backfill_pipeline.py # Historical backfill orchestrator
+│   ├── execution/               # Order management (Alpaca paper)
+│   │   └── order_manager.py     # Order bridge: candidate → order
+│   ├── regime/                  # Vol regime detection
+│   │   └── detector.py          # IV rank, VIX, term structure
+│   ├── scanner/                 # Chain scanning + scoring
+│   │   ├── scanner.py           # Scan orchestration
+│   │   ├── scorer.py            # Conviction scoring
+│   │   ├── strategy_mapper.py   # Decision matrix
+│   │   └── strategy_pricer.py   # Strike placement
+│   ├── strategies/              # Strategy implementations
+│   │   ├── butterfly.py
+│   │   ├── credit_spread.py
+│   │   ├── debit_spread.py
+│   │   ├── iron_condor.py
+│   │   └── _deferred/          # Future swing strategies (14-60 DTE)
+│   ├── swing/                   # Swing trading module
+│   ├── ui/
+│   │   └── app.py               # FastAPI backend (40+ endpoints)
+│   ├── market_state.py          # L1: signal aggregation
+│   ├── trade_generator.py       # L2: candidate generation + scoring
+│   ├── sizing.py                # L3: Kelly criterion sizing
+│   ├── bias_detector.py         # Directional bias signals
+│   ├── portfolio.py             # Portfolio engine
+│   └── config.py                # Conviction weights + config
+├── frontend/src/
+│   ├── App.jsx                  # React app with tab navigation
+│   └── components/
+│       ├── Scanner.jsx          # Options scanner view
+│       ├── Backtest.jsx         # Backtesting UI with compare mode
+│       ├── TradingView.jsx      # L1→L2→L3 pipeline + order placement
+│       ├── RegimeDashboard.jsx  # Vol regime visualization
+│       ├── ShadowTrades.jsx     # Paper trade tracker
+│       ├── Portfolio.jsx        # Portfolio + charts (Recharts)
+│       ├── Journal.jsx          # Trade journal
+│       ├── SwingScanner.jsx     # Swing trade scanner
+│       └── GreeksExplorer.jsx   # Interactive Greeks calculator
+├── data/                        # SQLite databases (Docker volume)
+├── docker-compose.yml
+├── Dockerfile
+├── start.sh                     # Single entry point for everything
+└── SIGNALS.md                   # Signal definitions (read first)
 ```
 
-### Complete Analysis with Export
+## Architecture
 
-```python
-# Run full analysis with visualizations and data export
-results = analyzer.run_full_analysis(export_results=True)
-
-# This creates:
-# - Time decay analysis
-# - Price scenario analysis  
-# - Volatility sensitivity analysis
-# - Professional charts
-# - Excel summary report
-# - CSV data exports
+```
+Watchlist → ChainProvider → [Vol Regime → Bias → Dealer] → Decision Matrix → Strategy + Score
+                                                                                    │
+                                                        ┌───────────────────────────┘
+                                                        ▼
+                                                  agents.yaml
+                                                        │
+                                                  Orchestrator
+                                                        │
+                            ┌──────────┬────────────────┼────────────────┐
+                            ▼          ▼                ▼                ▼
+                       conservative  momentum      vol_harvester   opportunistic
+                            │          │                │                │
+                            └──────────┴────────────────┴────────────────┘
+                                                        │
+                                              Portfolio Guardrails
+                                                        │
+                                              shadow_store (SQLite)
+                                                        │
+                                              shadow_monitor (exits)
 ```
 
-## 📊 Usage Examples
+## Security
 
-### 1. Time Decay Analysis
+- Containers run as non-root user
+- API key authentication on all endpoints
+- Input validation bounds on query parameters
+- Security headers (X-Content-Type-Options, X-Frame-Options, etc.)
+- Path traversal protection
+- Error response sanitization
 
-Study how your option loses value as expiration approaches:
+## Stack
 
-```python
-# Analyze time decay over 20 time points
-time_df = analyzer.analyze_time_decay(time_points=20)
+- Python 3.11+, FastAPI, Pydantic v2
+- React + Vite frontend
+- Docker Compose
+- SQLite for all persistence
+- yfinance for chain data
+- Alpaca for paper trading + historical backfill
+- ruff for linting, pytest for tests (570+ tests)
 
-# View key columns
-print(time_df[['Days_to_Expiration', 'Option_Price', 'Theta']])
+## Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+```
+TT_USERNAME=         # Tastytrade (optional)
+TT_PASSWORD=
+FLASHALPHA_API_KEY=  # FlashAlpha dealer data (optional, chain fallback works)
+APCA_API_KEY_ID=     # Alpaca paper trading
+APCA_API_SECRET_KEY=
+API_KEY=             # API authentication key
 ```
 
-### 2. Price Scenario Modeling
+## Key Documentation
 
-Understand P&L at different stock prices:
-
-```python
-# Analyze across price range
-price_df = analyzer.analyze_price_scenarios(
-    price_range=(150, 200),
-    num_prices=25
-)
-
-# Find break-even point
-break_even = config['strike_price'] + price_df.iloc[0]['Option_Price']
-print(f"Break-even: ${break_even:.2f}")
-```
-
-### 3. Advanced Strategies
-
-Analyze complex multi-leg strategies:
-
-```python
-from src.utils.config import create_strategy_configs
-
-# Create Iron Condor configuration
-configs = create_strategy_configs(base_config, 'iron_condor')
-
-# Analyze each leg
-for config in configs:
-    leg_analyzer = OptionsAnalyzer(config)
-    print(f"{config['name']}: ${leg_analyzer.get_current_price():.2f}")
-```
-
-## 🔧 Modular Components
-
-### Models Package (`src/models/`)
-
-**Pure pricing functions** - no side effects, easy to test:
-
-```python
-from src.models import black_scholes_price, calculate_greeks
-
-price = black_scholes_price(S=100, K=105, T=0.25, r=0.05, sigma=0.20)
-greeks = calculate_greeks(S=100, K=105, T=0.25, r=0.05, sigma=0.20)
-```
-
-### Analytics Package (`src/analytics/`)
-
-**Simulation and visualization functions**:
-
-```python
-from src.analytics import simulate_price_over_time, plot_price_evolution
-
-# Run simulation
-results = simulate_price_over_time(config, time_points=30)
-
-# Create visualization
-fig = plot_price_evolution(results)
-fig.savefig('time_decay.png')
-```
-
-### Utils Package (`src/utils/`)
-
-**Configuration and data management**:
-
-```python
-from src.utils import load_config_from_json, export_to_csv
-
-# Load configuration
-config = load_config_from_json('config/my_options.json')
-
-# Export results
-export_to_csv(results_df, 'analysis_results.csv')
-```
-
-## 📈 Supported Strategies
-
-- **Single Options**: Calls, Puts, ATM, ITM, OTM analysis
-- **Spreads**: Bull/Bear call spreads, put spreads
-- **Straddles/Strangles**: Long/short volatility plays
-- **Iron Condors**: Limited risk/reward strategies
-- **Custom Combinations**: Any multi-leg strategy
-
-## 🎨 Visualization Capabilities
-
-- **Price Evolution Charts**: Time decay visualization
-- **P&L Diagrams**: Profit/loss across price ranges
-- **Greeks Surface Plots**: Multi-dimensional risk analysis
-- **Strategy Comparisons**: Side-by-side analysis
-- **Volatility Surfaces**: IV sensitivity analysis
-
-## 📋 Configuration Format
-
-### JSON Configuration
-```json
-{
-  "ticker": "AAPL",
-  "current_price": 175.0,
-  "strike_price": 180.0,
-  "expiration_date": "2025-12-20",
-  "option_type": "call",
-  "implied_volatility": 0.25,
-  "risk_free_rate": 0.045
-}
-```
-
-### Required Fields
-- `current_price`: Current stock price
-- `strike_price`: Option strike price  
-- `expiration_date`: Expiration date (YYYY-MM-DD)
-- `option_type`: "call" or "put"
-- `implied_volatility`: Annual volatility (decimal)
-
-### Optional Fields
-- `ticker`: Stock symbol
-- `risk_free_rate`: Annual risk-free rate (default: 4.5%)
-- `name`: Configuration name for identification
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-python -m pytest tests/
-
-# Run with coverage
-python -m pytest tests/ --cov=src/
-
-# Run specific test file
-python -m pytest tests/test_black_scholes.py -v
-```
-
-## 🚀 Running Examples
-
-```bash
-# Basic usage examples
-cd examples
-python basic_usage.py
-
-# Advanced strategies
-python advanced_strategies.py
-```
-
-## 📚 Greeks Explained
-
-| Greek | Description | Use Case |
-|-------|-------------|----------|
-| **Delta** | Price sensitivity to underlying move | Hedge ratios, directional exposure |
-| **Gamma** | Rate of Delta change | Risk management, position sizing |
-| **Theta** | Time decay (per day) | Income strategies, time management |
-| **Vega** | Volatility sensitivity | Volatility trading, earnings plays |
-| **Rho** | Interest rate sensitivity | Long-term options, rate environment |
-
-## 🔄 Migration from Old System
-
-To migrate from the previous monolithic system:
-
-1. **Replace imports**:
-   ```python
-   # Old
-   from analysis import OptionsPricingPipeline
-   
-   # New  
-   from src.options_analyzer import OptionsAnalyzer
-   ```
-
-2. **Update instantiation**:
-   ```python
-   # Old
-   pipeline = OptionsPricingPipeline()
-   
-   # New
-   analyzer = OptionsAnalyzer(config)
-   ```
-
-3. **Use new methods**:
-   ```python
-   # Old
-   price = pipeline.black_scholes_price(S, K, T, r, sigma)
-   
-   # New
-   price = analyzer.get_current_price()
-   ```
-
-## 🤝 Contributing
-
-1. Follow PEP 8 style guidelines
-2. Add unit tests for new features
-3. Update documentation for changes
-4. Use meaningful commit messages
-
-## 📄 License
-
-MIT License - see LICENSE file for details.
-
-## 🆘 Support
-
-For questions or issues:
-1. Check the examples directory
-2. Review the docstrings in source code
-3. Create an issue with detailed description
-
----
-
-**Built for traders who demand precision and developers who value clean code.**
+| File | Contents |
+|---|---|
+| `SIGNALS.md` | Signal definitions, decision matrix, conviction weights |
+| `CLAUDE.md` | Development rules and frozen files |
+| `VALIDATION_RESULTS.md` | Backtest results from 6 validation runs |
+| `HOWTO.md` | User guide |
+| `config/agents.yaml` | Agent profiles and guardrails |
