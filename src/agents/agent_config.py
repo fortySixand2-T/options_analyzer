@@ -28,6 +28,7 @@ class AgentConfig(BaseModel):
     max_positions: int = Field(default=3, ge=1, le=20)
     max_daily_loss_pct: float = Field(default=0.015, ge=0, le=1.0)
     drawdown_pause_pct: float = Field(default=0.05, ge=0, le=1.0)
+    dte_tier: str = Field(default="short_term", pattern=r"^(short_term|swing|medium_term|long_term)$")
     description: str = ""
 
 

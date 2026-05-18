@@ -133,35 +133,42 @@ class Orchestrator:
             logger.info("No active agents, skipping cycle")
             return result
 
-        # Scan each ticker
+        # Group agents by DTE tier to avoid redundant scans
+        agents_by_tier: Dict[str, Dict[str, AgentConfig]] = {}
+        for name, cfg in active_agents.items():
+            tier = cfg.dte_tier
+            agents_by_tier.setdefault(tier, {})[name] = cfg
+
+        # Scan each ticker, once per DTE tier
         all_proposals: List[AgentProposal] = []
 
         for ticker in tickers:
             result.tickers_scanned += 1
 
-            try:
-                state, candidates = self._build_candidates(ticker)
-            except Exception as e:
-                result.errors.append(f"{ticker}: {e}")
-                logger.error("Failed to build candidates for %s: %s", ticker, e)
-                continue
+            for tier, tier_agents in agents_by_tier.items():
+                try:
+                    state, candidates = self._build_candidates(ticker, dte_tier=tier)
+                except Exception as e:
+                    result.errors.append(f"{ticker}/{tier}: {e}")
+                    logger.error("Failed to build candidates for %s/%s: %s", ticker, tier, e)
+                    continue
 
-            result.candidates_generated += len(candidates)
+                result.candidates_generated += len(candidates)
 
-            for name, cfg in active_agents.items():
-                risk = agent_risks[name]
-                filtered = self._filter_for_agent(name, cfg, risk, candidates, state)
+                for name, cfg in tier_agents.items():
+                    risk = agent_risks[name]
+                    filtered = self._filter_for_agent(name, cfg, risk, candidates, state)
 
-                for tc in filtered:
-                    direction = self._classify_direction(tc.strategy)
-                    proposal = AgentProposal(
-                        agent_id=name,
-                        trade_candidate=tc,
-                        market_state=state,
-                        direction=direction,
-                    )
-                    all_proposals.append(proposal)
-                    result.proposals_created += 1
+                    for tc in filtered:
+                        direction = self._classify_direction(tc.strategy)
+                        proposal = AgentProposal(
+                            agent_id=name,
+                            trade_candidate=tc,
+                            market_state=state,
+                            direction=direction,
+                        )
+                        all_proposals.append(proposal)
+                        result.proposals_created += 1
 
         # Apply portfolio guardrails
         approved = self._apply_guardrails(all_proposals, portfolio_risk)
@@ -190,14 +197,29 @@ class Orchestrator:
 
         return result
 
-    def _build_candidates(self, ticker: str) -> Tuple[object, list]:
-        """Build MarketState and generate candidates for a ticker."""
-        from market_state import build_market_state
-        from trade_generator import generate_trades
+    def _build_candidates(self, ticker: str, dte_tier: str = "short_term") -> Tuple[object, list]:
+        """Build MarketState and generate candidates for a ticker.
 
-        state = build_market_state(ticker)
-        candidates = generate_trades(state)
-        return state, candidates
+        Routes to the correct scanner based on DTE tier.
+        """
+        if dte_tier == "medium_term":
+            from swing.scanner import scan_medium_term
+            result = scan_medium_term([ticker])
+            return result, result.get("strategies", [])
+        elif dte_tier == "long_term":
+            from swing.scanner import scan_long_term
+            result = scan_long_term([ticker])
+            return result, result.get("strategies", [])
+        elif dte_tier == "swing":
+            from swing.scanner import scan_swing_strategies
+            result = scan_swing_strategies([ticker])
+            return result, result.get("strategies", [])
+        else:
+            from market_state import build_market_state
+            from trade_generator import generate_trades
+            state = build_market_state(ticker)
+            candidates = generate_trades(state)
+            return state, candidates
 
     def _filter_for_agent(
         self,
@@ -372,11 +394,17 @@ class Orchestrator:
         # Estimate max loss from entry legs
         max_loss = self._estimate_max_loss(tc, entry_legs)
 
+        vvix_factor = 1.0
+        if isinstance(proposal.market_state, dict):
+            cross = proposal.market_state.get("cross_asset", {})
+            vvix_factor = cross.get("position_size_factor", 1.0) if cross else 1.0
+
         size_result = compute_position_size(
             strategy=tc.strategy,
             portfolio_value=agent_capital,
             max_loss_per_contract=max_loss,
             confluence_score=tc.confluence_score,
+            vvix_size_factor=vvix_factor,
         )
         contracts = max(1, size_result.contracts) if size_result.contracts > 0 else 1
 

@@ -89,6 +89,36 @@ STRATEGY_STATS: Dict[str, StrategyStats] = {
         win_rate=0.536, avg_win=1008, avg_loss=729,
         kelly=0.20, tradeable=True,   # requires LOW_IV regime filter
     ),
+    # Medium-term strategies — initial estimates, recalibrate after Phase 8 backtest
+    "mt_calendar_spread": StrategyStats(
+        win_rate=0.700, avg_win=450, avg_loss=500,
+        kelly=0.37, tradeable=True,
+    ),
+    "mt_diagonal_spread": StrategyStats(
+        win_rate=0.700, avg_win=450, avg_loss=500,
+        kelly=0.37, tradeable=True,
+    ),
+    "mt_iron_butterfly": StrategyStats(
+        win_rate=0.550, avg_win=400, avg_loss=500,
+        kelly=0.01, tradeable=True,   # marginal — needs VRP regime filter
+    ),
+    "mt_long_straddle": StrategyStats(
+        win_rate=0.500, avg_win=900, avg_loss=600,
+        kelly=0.25, tradeable=True,
+    ),
+    # Long-term strategies (90-180 DTE) — initial estimates, recalibrate after Phase 8
+    "lt_calendar_spread": StrategyStats(
+        win_rate=0.680, avg_win=500, avg_loss=550,
+        kelly=0.30, tradeable=True,
+    ),
+    "lt_diagonal_spread": StrategyStats(
+        win_rate=0.680, avg_win=500, avg_loss=550,
+        kelly=0.30, tradeable=True,
+    ),
+    "lt_long_straddle": StrategyStats(
+        win_rate=0.480, avg_win=1100, avg_loss=650,
+        kelly=0.21, tradeable=True,
+    ),
 }
 
 
@@ -120,6 +150,7 @@ def compute_position_size(
     max_loss_per_contract: float,
     confluence_score: float = 70.0,
     max_risk_pct: float = 0.02,
+    vvix_size_factor: float = 1.0,
 ) -> "SizeResult":
     """Compute position size using half-Kelly, capped at max risk.
 
@@ -135,6 +166,8 @@ def compute_position_size(
         L2 confluence score (0-100). Scales sizing linearly.
     max_risk_pct : float
         Hard cap on portfolio risk per trade (default 2%).
+    vvix_size_factor : float
+        VVIX regime scaling (0.25-1.0). STABLE=1.0, NORMAL=0.75, UNSTABLE=0.25.
 
     Returns
     -------
@@ -167,7 +200,7 @@ def compute_position_size(
     # Scale by confluence score (higher conviction → closer to half-Kelly)
     # Score 60 = minimum, 100 = full half-Kelly
     score_scale = max(0.0, min(1.0, (confluence_score - 60) / 40.0))
-    adjusted_k = half_k * score_scale
+    adjusted_k = half_k * score_scale * vvix_size_factor
 
     # Cap at max risk
     risk_pct = min(adjusted_k, max_risk_pct)
