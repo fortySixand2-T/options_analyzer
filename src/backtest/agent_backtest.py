@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 BULLISH_STRATEGIES = {"long_call_spread", "short_put_spread"}
 BEARISH_STRATEGIES = {"long_put_spread", "short_call_spread"}
 CREDIT_STRATEGIES = {"iron_condor", "short_put_spread", "short_call_spread"}
+SWING_CREDIT = {"calendar_spread", "diagonal_spread", "iron_butterfly"}
 MEDIUM_TERM_CREDIT = {"mt_calendar_spread", "mt_diagonal_spread", "mt_iron_butterfly"}
 LONG_TERM_CREDIT = {"lt_calendar_spread", "lt_diagonal_spread"}
 
@@ -104,15 +105,19 @@ def _get_exit_rules(strategy: str, dte_at_entry: int = 14) -> dict:
         "butterfly":         {"profit_pct": 100, "loss_pct": 100, "exit_dte": 0},
     }
 
+    # Swing rules (14-60 DTE): moderate targets, 7 DTE time exit
+    _swing_rules = {
+        "calendar_spread":      {"profit_pct": 30, "loss_pct": 100, "exit_dte": 7},
+        "diagonal_spread":      {"profit_pct": 35, "loss_pct": 100, "exit_dte": 7},
+        "iron_butterfly":       {"profit_pct": 40, "loss_pct": 150, "exit_dte": 7},
+        "long_straddle":        {"profit_pct": 50, "loss_pct": 50,  "exit_dte": 10},
+    }
+
     # Medium/long-term rules (30-180 DTE): wider targets, earlier time exit
     _medium_rules = {
-        "calendar_spread":      {"profit_pct": 35, "loss_pct": 100, "exit_dte": 14},
         "mt_calendar_spread":   {"profit_pct": 35, "loss_pct": 100, "exit_dte": 14},
-        "diagonal_spread":      {"profit_pct": 40, "loss_pct": 100, "exit_dte": 14},
         "mt_diagonal_spread":   {"profit_pct": 40, "loss_pct": 100, "exit_dte": 14},
-        "iron_butterfly":       {"profit_pct": 50, "loss_pct": 150, "exit_dte": 14},
         "mt_iron_butterfly":    {"profit_pct": 50, "loss_pct": 150, "exit_dte": 14},
-        "long_straddle":        {"profit_pct": 50, "loss_pct": 50,  "exit_dte": 21},
         "mt_long_straddle":     {"profit_pct": 50, "loss_pct": 50,  "exit_dte": 21},
         # Long-term (90-180 DTE): wider stops, earlier time exit
         "lt_calendar_spread":   {"profit_pct": 30, "loss_pct": 80,  "exit_dte": 21},
@@ -123,8 +128,14 @@ def _get_exit_rules(strategy: str, dte_at_entry: int = 14) -> dict:
     if dte_at_entry >= 30 and strategy in _medium_rules:
         return _medium_rules[strategy]
 
+    if 14 <= dte_at_entry < 30 and strategy in _swing_rules:
+        return _swing_rules[strategy]
+
     if strategy in _short_rules:
         return _short_rules[strategy]
+
+    if strategy in _swing_rules:
+        return _swing_rules[strategy]
 
     if strategy in _medium_rules:
         return _medium_rules[strategy]
@@ -171,6 +182,23 @@ def _price_position(spot: float, entry_spot: float, iv: float,
             sc_2 = black_scholes_price(spot, atm, T, r, iv, "call") * 2
             bc_hi = black_scholes_price(spot, atm + inc, T, r, iv, "call")
             return bc_lo - sc_2 + bc_hi
+        elif strategy in ("calendar_spread", "diagonal_spread",
+                          "mt_calendar_spread", "mt_diagonal_spread",
+                          "lt_calendar_spread", "lt_diagonal_spread"):
+            front_T = max(T * 0.4, 1 / 365.0)
+            back = black_scholes_price(spot, atm, T, r, iv, "call")
+            front = black_scholes_price(spot, atm, front_T, r, iv, "call")
+            return back - front
+        elif strategy in ("iron_butterfly", "mt_iron_butterfly"):
+            sc = black_scholes_price(spot, atm, T, r, iv, "call")
+            sp = black_scholes_price(spot, atm, T, r, iv, "put")
+            bc = black_scholes_price(spot, atm + 2 * inc, T, r, iv, "call")
+            bp = black_scholes_price(spot, atm - 2 * inc, T, r, iv, "put")
+            return (sc + sp) - (bc + bp)
+        elif strategy in ("long_straddle", "mt_long_straddle", "lt_long_straddle"):
+            c = black_scholes_price(spot, atm, T, r, iv, "call")
+            p = black_scholes_price(spot, atm, T, r, iv, "put")
+            return c + p
         else:
             return black_scholes_price(spot, atm, T, r, iv, "call")
     except Exception:
@@ -237,7 +265,17 @@ def _build_candidates_from_signals(
 
     candidates = []
 
-    if dte_tier == "medium_term":
+    if dte_tier == "swing":
+        from swing.decision_matrix import map_swing_strategy
+        rec = map_swing_strategy(
+            regime=regime, swing_bias=bias_label, dealer_regime=None,
+            vrp_rich=vrp_pct > 0, vrp_pct=vrp_pct,
+            calendar_signal=calendar_signal,
+            in_earnings_window=bool(sig.get("in_earnings_window")),
+            earnings_iv_inflation=sig.get("earnings_iv_inflation") or 0,
+        )
+        dte_range = (14, 60)
+    elif dte_tier == "medium_term":
         from swing.decision_matrix import map_medium_term_strategy
         rec = map_medium_term_strategy(
             regime=regime, swing_bias=bias_label, dealer_regime=None,
@@ -264,7 +302,7 @@ def _build_candidates_from_signals(
         score = getattr(rec, "score", 70)
         edge_source = getattr(rec, "edge_source", "")
         suggested_dte = getattr(rec, "suggested_dte", sum(dte_range) // 2)
-        is_credit = rec.strategy in MEDIUM_TERM_CREDIT or rec.strategy in LONG_TERM_CREDIT
+        is_credit = rec.strategy in SWING_CREDIT or rec.strategy in MEDIUM_TERM_CREDIT or rec.strategy in LONG_TERM_CREDIT
 
         tc = _SyntheticCandidate(
             symbol=ticker,
@@ -282,6 +320,15 @@ def _build_candidates_from_signals(
 
     return state, candidates
 
+
+_SW_REMAP = {
+    "butterfly": "iron_butterfly",
+    "short_put_spread": "calendar_spread",
+    "short_call_spread": "diagonal_spread",
+    "iron_condor": "iron_butterfly",
+    "long_call_spread": "long_straddle",
+    "long_put_spread": "long_straddle",
+}
 
 _MT_REMAP = {
     "butterfly": "mt_iron_butterfly",
@@ -303,9 +350,14 @@ _LT_REMAP = {
 
 
 def _remap_candidates(raw_candidates: list, dte_tier: str) -> List[_SyntheticCandidate]:
-    """Remap short-term trade candidates to medium/long-term strategy names."""
-    remap = _MT_REMAP if dte_tier == "medium_term" else _LT_REMAP
-    dte_default = 60 if dte_tier == "medium_term" else 120
+    """Remap short-term trade candidates to swing/medium/long-term strategy names."""
+    if dte_tier == "swing":
+        remap = _SW_REMAP
+    elif dte_tier == "medium_term":
+        remap = _MT_REMAP
+    else:
+        remap = _LT_REMAP
+    dte_default = {"swing": 35, "medium_term": 60, "long_term": 120}.get(dte_tier, 60)
 
     result = []
     seen = set()
@@ -315,7 +367,7 @@ def _remap_candidates(raw_candidates: list, dte_tier: str) -> List[_SyntheticCan
             continue
         seen.add(new_strat)
 
-        is_credit = new_strat in MEDIUM_TERM_CREDIT or new_strat in LONG_TERM_CREDIT
+        is_credit = new_strat in SWING_CREDIT or new_strat in MEDIUM_TERM_CREDIT or new_strat in LONG_TERM_CREDIT
         result.append(_SyntheticCandidate(
             symbol=tc.symbol,
             strategy=new_strat,
@@ -487,7 +539,7 @@ def _try_entries(
             if len(agent_open[agent_id]) >= cfg.max_positions:
                 break
 
-            is_credit = tc.strategy in (CREDIT_STRATEGIES | MEDIUM_TERM_CREDIT | LONG_TERM_CREDIT)
+            is_credit = tc.strategy in (CREDIT_STRATEGIES | SWING_CREDIT | MEDIUM_TERM_CREDIT | LONG_TERM_CREDIT)
             dte = tc.suggested_dte if tc.suggested_dte > 0 else 7
 
             raw_price = _price_position(
@@ -582,7 +634,7 @@ def run_agent_backtest(
     dates_processed = 0
     all_dates = set()
 
-    is_mt_lt = dte_tier in ("medium_term", "long_term")
+    is_mt_lt = dte_tier in ("swing", "medium_term", "long_term")
 
     if is_mt_lt:
         from data.chain_store import get_swing_signals

@@ -40,7 +40,7 @@ def main():
     tickers = args.ticker
 
     results = {}
-    for tier in ["short_term", "medium_term", "long_term"]:
+    for tier in ["short_term", "swing", "medium_term", "long_term"]:
         print(f"Running {tier} backtest...", flush=True)
         results[tier] = run_agent_backtest(
             tickers=tickers,
@@ -51,7 +51,7 @@ def main():
             slippage_pct=args.slippage,
         )
 
-    hold_days = {"short_term": 7, "medium_term": 60, "long_term": 120}
+    hold_days = {"short_term": 7, "swing": 30, "medium_term": 60, "long_term": 120}
 
     print(f"\n{SEP}")
     print(f"  FULL PORTFOLIO BACKTEST")
@@ -147,7 +147,7 @@ def main():
         f"{'Total P&L':>12} {'MaxDD':>10} {'Sharpe':>8}"
     )
 
-    for tier in ["short_term", "medium_term", "long_term"]:
+    for tier in ["short_term", "swing", "medium_term", "long_term"]:
         ta = [a for a in agent_rows if a["tier"] == tier]
         if not ta:
             continue

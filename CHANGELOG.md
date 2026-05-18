@@ -1,5 +1,8 @@
 # Changelog
 
+- [2026-05-18] Modified: src/backtest/agent_backtest.py — Add swing tier (14-60 DTE) support: SWING_CREDIT set, swing exit rules, swing pricing, signal replay, _SW_REMAP
+- [2026-05-18] Modified: config/agents.yaml — Add swing_harvester agent (10% capital, calendars/diagonals/straddles, HIGH_IV+LOW_IV), rebalance medium_term to 20%, long_term to 10%
+- [2026-05-18] Modified: scripts/run_full_portfolio_backtest.py — Include swing tier in full portfolio backtest
 - [2026-05-18] Created: scripts/run_full_portfolio_backtest.py — Full portfolio backtest across all tickers and DTE tiers with unified reporting
 - [2026-05-18] Modified: config/agents.yaml — Disable momentum agent (negative expectancy at short DTE), differentiate opportunistic (iron condors, lower confluence), redistribute capital to vol_harvester (20%) and opportunistic (10%)
 - [2026-05-18] Modified: config/agents.yaml — Tune short-term agents: conservative min_confluence 80->75, momentum min_dte=7 + LOW_IV only, opportunistic HIGH_IV only
