@@ -344,6 +344,10 @@ def _filter_candidate(cfg: AgentConfig, tc, state) -> bool:
     if cfg.min_iv_rv_edge_pct > 0:
         if tc.iv_rv_edge_pct < cfg.min_iv_rv_edge_pct:
             return False
+    if cfg.min_dte > 0:
+        dte = getattr(tc, "suggested_dte", 0) or 0
+        if dte < cfg.min_dte:
+            return False
     return True
 
 

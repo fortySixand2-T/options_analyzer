@@ -27,7 +27,7 @@ agents:
   conservative:
     enabled: true
     capital_pct: 0.25
-    min_confluence: 80
+    min_confluence: 75
     allowed_strategies: [butterfly, short_put_spread]
     required_regimes: [HIGH_IV]
     max_positions: 3
@@ -40,11 +40,13 @@ agents:
     capital_pct: 0.15
     min_confluence: 70
     allowed_strategies: [long_call_spread, long_put_spread]
+    required_regimes: [LOW_IV]
     required_bias_strength: 3
+    min_dte: 7
     max_positions: 3
     max_daily_loss_pct: 0.015
     drawdown_pause_pct: 0.05
-    description: "Directional plays on strong bias signals"
+    description: "Directional debit plays, LOW_IV only, DTE >= 7"
 
   vol_harvester:
     enabled: true
@@ -63,11 +65,11 @@ agents:
     capital_pct: 0.05
     min_confluence: 70
     allowed_strategies: [butterfly, long_call_spread, long_put_spread, short_put_spread]
-    required_regimes: [HIGH_IV, LOW_IV]
+    required_regimes: [HIGH_IV]
     max_positions: 3
     max_daily_loss_pct: 0.01
     drawdown_pause_pct: 0.03
-    description: "Broader strategy set, skip MODERATE_IV"
+    description: "Broader strategy set, HIGH_IV only"
 
   # ── Medium-term (30-90 DTE) ──────────────────────────────────────
   medium_term_harvester:

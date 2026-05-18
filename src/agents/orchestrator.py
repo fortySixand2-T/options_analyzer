@@ -256,6 +256,12 @@ class Orchestrator:
                 if tc.iv_rv_edge_pct < cfg.min_iv_rv_edge_pct:
                     continue
 
+            # Min DTE filter
+            if cfg.min_dte > 0:
+                dte = getattr(tc, "suggested_dte", 0) or 0
+                if dte < cfg.min_dte:
+                    continue
+
             # Position count limit
             if risk.open_positions >= cfg.max_positions:
                 logger.debug("Agent '%s' at max positions (%d)", agent_id, cfg.max_positions)
