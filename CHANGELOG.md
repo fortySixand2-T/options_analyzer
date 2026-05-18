@@ -1,5 +1,39 @@
 # Changelog
 
+- [2026-05-18] Modified: scripts/run_integration_backtest.py — Fix win_rate double-multiplication in display (was 0-100, not 0-1)
+- [2026-05-18] Modified: src/backtest/agent_backtest.py — Add chain-snapshot fallback with strategy remapping for medium/long-term backtests
+- [2026-05-18] Modified: config/agents.yaml — Rebalance capital allocations to 100% (short 60%, medium 25%, long 15%)
+- [2026-05-18] Created: scripts/run_integration_backtest.py — Full integration backtest for medium/long-term agents with target validation
+- [2026-05-18] Modified: src/backtest/agent_backtest.py — Add signal-replay candidate generation from swing_signals, regime-transition exit (SPIKE), extract exit/entry helpers
+- [2026-05-18] Modified: src/backtest/agent_backtest.py — Add DTE-tier exit rules, entry_regime/edge_source tracking, dte_tier filter param
+- [2026-05-18] Created: scripts/backtest_flow_signal.py — Options flow composite backtest (PCP, OI, volume) with statistical tests
+- [2026-05-18] Created: scripts/backtest_cross_asset_signal.py — MOVE/VIX divergence and VVIX regime backtest with lead-lag analysis
+- [2026-05-18] Modified: src/sizing.py — Add long-term strategy Kelly stats (lt_calendar, lt_diagonal, lt_long_straddle)
+- [2026-05-18] Modified: src/agents/orchestrator.py — DTE-tier routing, agents grouped by tier, VVIX size factor passthrough
+- [2026-05-18] Modified: config/agents.yaml — Add medium_term_harvester and long_term_harvester agents
+- [2026-05-18] Modified: src/agents/agent_config.py — Add dte_tier field (short_term/swing/medium_term/long_term)
+- [2026-05-18] Created: scripts/backtest_skew_signal.py — Skew mean-reversion backtest (Xing 2010, z-score timing)
+- [2026-05-18] Created: src/strategies/long_term/ — Long-term strategy variants (lt_calendar, lt_diagonal, lt_long_straddle) for 90-180 DTE
+- [2026-05-17] Modified: src/sizing.py — Add medium-term strategy Kelly stats, VVIX-scaled position sizing (vvix_size_factor parameter)
+- [2026-05-17] Modified: src/backtest/agent_backtest.py — Add DTE-tier-aware exit rules for 30-180 DTE strategies (calendars, diagonals, straddles)
+- [2026-05-17] Created: src/strategies/medium_term/iron_butterfly.py — Medium-term iron butterfly (30-90 DTE) with VRP/skew regime checks
+- [2026-05-17] Created: src/strategies/medium_term/straddle.py — Medium-term long straddle (30-180 DTE) with cross-asset and VRP CHEAP checks
+- [2026-05-17] Created: src/strategies/medium_term/diagonal.py — Medium-term diagonal spread (30-120 DTE) with VRP/flow checks
+- [2026-05-17] Created: src/strategies/medium_term/calendar.py — Medium-term calendar spread (30-120 DTE) with VRP regime and skew checks
+- [2026-05-17] Modified: src/strategies/registry.py — Add MEDIUM_TERM_REGISTRY with 4 strategies, for_medium_term_regime() function
+- [2026-05-17] Modified: src/data/chain_store.py — Add 10 new signal columns to swing_signals (vrp_regime, vvix_*, move_vix_*, flow, correlation), add get_vrp_history()
+- [2026-05-17] Modified: src/swing/scanner.py — Pass skew/cross-asset/flow data to _persist_signals for complete signal replay
+- [2026-05-17] Modified: src/edge/vrp.py — Add compute_vrp_zscore() for VRP timing signal (z>1.5 = sell premium entry)
+- [2026-05-17] Created: scripts/backtest_vrp_signal.py — VRP timing signal backtest: z-score timed entries vs always-on premium selling
+- [2026-05-17] Created: src/edge/flow.py — Put-call parity deviations, OI flow signals, volume ratio with contrarian interpretation
+- [2026-05-17] Created: src/edge/cross_asset.py — VVIX vol-of-vol regime, MOVE/VIX divergence, correlation risk premium signals
+- [2026-05-17] Created: src/edge/skew.py — 25-delta put-call IV spread, skew z-score, skew regime classification
+- [2026-05-17] Created: src/edge/realized_vol.py — Yang-Zhang, Parkinson, Garman-Klass, close-to-close realized vol estimators
+- [2026-05-17] Modified: src/edge/vrp.py — Upgrade to Yang-Zhang realized vol, extend DTE buckets to 180, add VRP regime classification (RICH/NEUTRAL/CHEAP)
+- [2026-05-17] Modified: src/edge/__init__.py — Update module docstring for new signal modules
+- [2026-05-17] Modified: src/config.py — Add MEDIUM_TERM_SCANNER_CONFIG (30-90 DTE) and LONG_TERM_SCANNER_CONFIG (90-180 DTE) with signal weights
+- [2026-05-17] Modified: src/swing/decision_matrix.py — Add medium-term (30-90 DTE) and long-term (90-180 DTE) strategy mapping with skew, cross-asset, and flow inputs
+- [2026-05-17] Modified: src/swing/scanner.py — Add scan_medium_long_term(), upgrade VRP to Yang-Zhang, wire in skew/cross-asset/flow signals
 - [2026-05-17] Modified: scripts/param_optimizer.py — Integrate real_pricer into optimizer; build_spread/reprice_spread replace BS pricing when --pricing-mode real_bidask
 - [2026-05-17] Modified: src/backtest/real_pricer.py — Add exclude_strikes to find_contracts_near to prevent same-strike collisions (96% vs 78% success rate)
 - [2026-05-17] Modified: scripts/param_optimizer.py — Add pricing_mode column (bs_simulated/real_bidask) to tag all optimization results with their pricing method
