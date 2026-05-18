@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-17] Modified: scripts/param_optimizer.py — Add pricing_mode column (bs_simulated/real_bidask) to tag all optimization results with their pricing method
+- [2026-05-17] Modified: src/ui/app.py — Add pricing_mode query param to /api/params/best endpoints
 - [2026-05-17] Created: docs/param-optimization-report.md — Detailed optimization results for all 9 tickers with per-ticker optimal params
 - [2026-05-17] Modified: src/scanner/iv_rank.py — Add per-ticker-class regime thresholds and historical self-referencing IV rank
 - [2026-05-17] Modified: src/regime/detector.py — Accept ticker param for per-class threshold adjustment

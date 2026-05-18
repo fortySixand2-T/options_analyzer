@@ -87,7 +87,8 @@ def _init_db() -> sqlite3.Connection:
             start_date TEXT NOT NULL,
             end_date TEXT NOT NULL,
             run_timestamp TEXT NOT NULL,
-            UNIQUE(ticker, strategy_class, params_json, start_date, end_date)
+            pricing_mode TEXT NOT NULL DEFAULT 'bs_simulated',
+            UNIQUE(ticker, strategy_class, params_json, start_date, end_date, pricing_mode)
         )
     """)
     conn.execute("""
@@ -103,60 +104,72 @@ def _init_db() -> sqlite3.Connection:
             start_date TEXT NOT NULL,
             end_date TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            PRIMARY KEY (ticker, strategy_class)
+            pricing_mode TEXT NOT NULL DEFAULT 'bs_simulated',
+            PRIMARY KEY (ticker, strategy_class, pricing_mode)
         )
     """)
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_opt_ticker
-        ON optimization_runs(ticker, strategy_class, sharpe_ratio DESC)
+        ON optimization_runs(ticker, strategy_class, pricing_mode, sharpe_ratio DESC)
     """)
+    # Migrate existing tables: add pricing_mode if missing
+    try:
+        conn.execute("SELECT pricing_mode FROM optimization_runs LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE optimization_runs ADD COLUMN pricing_mode TEXT NOT NULL DEFAULT 'bs_simulated'")
+    try:
+        conn.execute("SELECT pricing_mode FROM best_params LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE best_params ADD COLUMN pricing_mode TEXT NOT NULL DEFAULT 'bs_simulated'")
     conn.commit()
     return conn
 
 
 def _store_result(conn: sqlite3.Connection, ticker: str, strategy_class: str,
-                  params: Dict, stats: BacktestStats, start_date: str, end_date: str):
+                  params: Dict, stats: BacktestStats, start_date: str, end_date: str,
+                  pricing_mode: str = "bs_simulated"):
     params_json = json.dumps(params, sort_keys=True)
     try:
         conn.execute("""
             INSERT OR REPLACE INTO optimization_runs
             (ticker, strategy_class, params_json, total_trades, win_rate,
              sharpe_ratio, profit_factor, total_pnl, avg_win, avg_loss,
-             max_drawdown, avg_dte, start_date, end_date, run_timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             max_drawdown, avg_dte, start_date, end_date, run_timestamp, pricing_mode)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             ticker, strategy_class, params_json, stats.total_trades,
             stats.win_rate, stats.sharpe_ratio, stats.profit_factor,
             stats.total_pnl, stats.avg_win, stats.avg_loss,
             stats.max_drawdown, stats.avg_dte_at_entry,
-            start_date, end_date, datetime.now().isoformat(),
+            start_date, end_date, datetime.now().isoformat(), pricing_mode,
         ))
     except sqlite3.IntegrityError:
         pass
 
 
 def _update_best(conn: sqlite3.Connection, ticker: str, strategy_class: str,
-                 start_date: str, end_date: str):
+                 start_date: str, end_date: str, pricing_mode: str = "bs_simulated"):
     """Pick the best param set for this ticker+class by Sharpe (min 10 trades)."""
     row = conn.execute("""
         SELECT params_json, sharpe_ratio, profit_factor, total_pnl, win_rate, total_trades
         FROM optimization_runs
         WHERE ticker = ? AND strategy_class = ? AND start_date = ? AND end_date = ?
-          AND total_trades >= 10
+          AND pricing_mode = ? AND total_trades >= 10
         ORDER BY sharpe_ratio DESC
         LIMIT 1
-    """, (ticker, strategy_class, start_date, end_date)).fetchone()
+    """, (ticker, strategy_class, start_date, end_date, pricing_mode)).fetchone()
 
     if row:
         conn.execute("""
             INSERT OR REPLACE INTO best_params
             (ticker, strategy_class, params_json, sharpe_ratio, profit_factor,
-             total_pnl, win_rate, total_trades, start_date, end_date, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             total_pnl, win_rate, total_trades, start_date, end_date, updated_at, pricing_mode)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             ticker, strategy_class, row["params_json"], row["sharpe_ratio"],
             row["profit_factor"], row["total_pnl"], row["win_rate"],
             row["total_trades"], start_date, end_date, datetime.now().isoformat(),
+            pricing_mode,
         ))
 
 
@@ -469,6 +482,7 @@ def optimize_ticker(
     end_date: str,
     strategy_classes: Optional[List[str]] = None,
     source: str = "dolt",
+    pricing_mode: str = "bs_simulated",
 ) -> Dict[str, Dict]:
     """Run full grid search for a ticker across strategy classes."""
     from data.chain_store import get_available_dates, get_snapshot
@@ -524,7 +538,7 @@ def optimize_ticker(
             if stats.sharpe_ratio > 0:
                 positive += 1
 
-            _store_result(conn, ticker, sc, params, stats, start_date, end_date)
+            _store_result(conn, ticker, sc, params, stats, start_date, end_date, pricing_mode)
 
             if tested % 100 == 0:
                 conn.commit()
@@ -535,7 +549,7 @@ def optimize_ticker(
                 )
 
         conn.commit()
-        _update_best(conn, ticker, sc, start_date, end_date)
+        _update_best(conn, ticker, sc, start_date, end_date, pricing_mode)
 
         elapsed = time.time() - t0
         logger.info(
@@ -548,10 +562,10 @@ def optimize_ticker(
             SELECT params_json, sharpe_ratio, profit_factor, total_pnl, win_rate, total_trades
             FROM optimization_runs
             WHERE ticker = ? AND strategy_class = ? AND start_date = ? AND end_date = ?
-              AND total_trades >= 10
+              AND pricing_mode = ? AND total_trades >= 10
             ORDER BY sharpe_ratio DESC
             LIMIT 1
-        """, (ticker, sc, start_date, end_date)).fetchone()
+        """, (ticker, sc, start_date, end_date, pricing_mode)).fetchone()
 
         if best:
             results[sc] = {
@@ -569,28 +583,35 @@ def optimize_ticker(
 
 # ─── Query functions (for use by other modules) ───────────────────────────────
 
-def get_best_params(ticker: str, strategy_class: Optional[str] = None) -> List[Dict]:
+def get_best_params(ticker: str, strategy_class: Optional[str] = None,
+                    pricing_mode: Optional[str] = None) -> List[Dict]:
     """Fetch stored best params for a ticker."""
     conn = _init_db()
+    query = "SELECT * FROM best_params WHERE ticker = ?"
+    args = [ticker]
     if strategy_class:
-        rows = conn.execute(
-            "SELECT * FROM best_params WHERE ticker = ? AND strategy_class = ?",
-            (ticker, strategy_class)
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT * FROM best_params WHERE ticker = ?", (ticker,)
-        ).fetchall()
+        query += " AND strategy_class = ?"
+        args.append(strategy_class)
+    if pricing_mode:
+        query += " AND pricing_mode = ?"
+        args.append(pricing_mode)
+    rows = conn.execute(query, args).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def get_all_best_params() -> Dict[str, List[Dict]]:
+def get_all_best_params(pricing_mode: Optional[str] = None) -> Dict[str, List[Dict]]:
     """Fetch best params for all tickers."""
     conn = _init_db()
-    rows = conn.execute(
-        "SELECT * FROM best_params ORDER BY ticker, strategy_class"
-    ).fetchall()
+    if pricing_mode:
+        rows = conn.execute(
+            "SELECT * FROM best_params WHERE pricing_mode = ? ORDER BY ticker, strategy_class",
+            (pricing_mode,)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM best_params ORDER BY ticker, strategy_class"
+        ).fetchall()
     conn.close()
 
     result = {}
@@ -606,14 +627,15 @@ def get_optimization_status() -> Dict:
     """Get summary of optimization runs."""
     conn = _init_db()
     rows = conn.execute("""
-        SELECT ticker, strategy_class, COUNT(*) as combos_tested,
+        SELECT ticker, strategy_class, pricing_mode,
+               COUNT(*) as combos_tested,
                MAX(sharpe_ratio) as best_sharpe,
                MAX(total_pnl) as best_pnl,
                run_timestamp
         FROM optimization_runs
         WHERE total_trades >= 10
-        GROUP BY ticker, strategy_class
-        ORDER BY ticker, strategy_class
+        GROUP BY ticker, strategy_class, pricing_mode
+        ORDER BY ticker, strategy_class, pricing_mode
     """).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -633,7 +655,9 @@ def _print_best(ticker: str):
 
     for r in results:
         params = json.loads(r["params_json"])
-        print(f"\n  Strategy class: {r['strategy_class']}")
+        mode = r.get("pricing_mode", "bs_simulated")
+        mode_label = "BS Simulated" if mode == "bs_simulated" else "Real Bid/Ask"
+        print(f"\n  Strategy class: {r['strategy_class']}  [{mode_label}]")
         print(f"  Sharpe: {r['sharpe_ratio']:.2f} | PF: {r['profit_factor']:.2f} | "
               f"Win%: {r['win_rate']:.1f}% | Trades: {r['total_trades']}")
         print(f"  Total P&L: ${r['total_pnl']:.0f}")
@@ -649,18 +673,20 @@ def _print_all_best():
         print("  No optimization results found. Run optimizer first.")
         return
 
-    print(f"\n{'='*70}")
+    print(f"\n{'='*80}")
     print(f"  Optimal Parameters by Ticker (ranked by Sharpe)")
-    print(f"{'='*70}")
-    print(f"\n  {'Ticker':<6} {'Class':<8} {'Sharpe':>7} {'PF':>6} {'Win%':>6} "
+    print(f"{'='*80}")
+    print(f"\n  {'Ticker':<6} {'Class':<8} {'Pricing':<10} {'Sharpe':>7} {'PF':>6} {'Win%':>6} "
           f"{'Trades':>7} {'P&L':>8} {'StopL':>6} {'ProfT':>6} {'DTE':>7} {'Conf':>5}")
-    print(f"  {'-'*6} {'-'*8} {'-'*7} {'-'*6} {'-'*6} {'-'*7} {'-'*8} {'-'*6} {'-'*6} {'-'*7} {'-'*5}")
+    print(f"  {'-'*6} {'-'*8} {'-'*10} {'-'*7} {'-'*6} {'-'*6} {'-'*7} {'-'*8} {'-'*6} {'-'*6} {'-'*7} {'-'*5}")
 
     for ticker, entries in sorted(all_best.items()):
         for e in entries:
             params = json.loads(e["params_json"])
             dte_str = f"{params.get('dte_min', '?')}-{params.get('dte_max', '?')}"
-            print(f"  {ticker:<6} {e['strategy_class']:<8} "
+            mode = e.get("pricing_mode", "bs_simulated")
+            mode_label = "BS" if mode == "bs_simulated" else "Real"
+            print(f"  {ticker:<6} {e['strategy_class']:<8} {mode_label:<10} "
                   f"{e['sharpe_ratio']:>7.2f} {e['profit_factor']:>6.2f} "
                   f"{e['win_rate']:>5.1f}% {e['total_trades']:>7} "
                   f"${e['total_pnl']:>7.0f} "
@@ -676,14 +702,16 @@ def _print_status():
         print("  No optimization runs found.")
         return
 
-    print(f"\n{'='*60}")
+    print(f"\n{'='*70}")
     print(f"  Parameter Optimization Status")
-    print(f"{'='*60}")
-    print(f"\n  {'Ticker':<6} {'Class':<8} {'Tested':>7} {'Best Sharpe':>12} {'Best P&L':>9}")
-    print(f"  {'-'*6} {'-'*8} {'-'*7} {'-'*12} {'-'*9}")
+    print(f"{'='*70}")
+    print(f"\n  {'Ticker':<6} {'Class':<8} {'Pricing':<10} {'Tested':>7} {'Best Sharpe':>12} {'Best P&L':>9}")
+    print(f"  {'-'*6} {'-'*8} {'-'*10} {'-'*7} {'-'*12} {'-'*9}")
 
     for r in rows:
-        print(f"  {r['ticker']:<6} {r['strategy_class']:<8} "
+        mode = r.get("pricing_mode", "bs_simulated")
+        mode_label = "BS" if mode == "bs_simulated" else "Real"
+        print(f"  {r['ticker']:<6} {r['strategy_class']:<8} {mode_label:<10} "
               f"{r['combos_tested']:>7} {r['best_sharpe']:>12.2f} "
               f"${r['best_pnl']:>8.0f}")
     print()
@@ -698,6 +726,9 @@ def main():
                         choices=["credit", "debit", "neutral"])
     parser.add_argument("--source", default="dolt", choices=["dolt", "backfill"],
                         help="Data label in chain_snapshots.db")
+    parser.add_argument("--pricing-mode", default="bs_simulated",
+                        choices=["bs_simulated", "real_bidask"],
+                        help="Pricing method: bs_simulated (Black-Scholes) or real_bidask (actual bid/ask)")
     parser.add_argument("--status", action="store_true")
     parser.add_argument("--best", type=str, help="Show best params for ticker")
     parser.add_argument("--best-all", action="store_true")
@@ -716,18 +747,21 @@ def main():
         return
 
     # Run optimization
+    pricing_label = "Black-Scholes Simulated" if args.pricing_mode == "bs_simulated" else "Real Bid/Ask"
     print(f"\n{'='*60}")
     print(f"  Parameter Optimization")
     print(f"  Tickers: {', '.join(args.tickers)}")
     print(f"  Period: {args.start} to {args.end}")
     print(f"  Strategy classes: {args.classes or ['credit', 'debit', 'neutral']}")
+    print(f"  Pricing: {pricing_label}")
     print(f"  Output: {DB_PATH}")
     print(f"{'='*60}\n")
 
     all_results = {}
     for ticker in args.tickers:
         logger.info("Optimizing %s...", ticker)
-        results = optimize_ticker(ticker, args.start, args.end, args.classes, source=args.source)
+        results = optimize_ticker(ticker, args.start, args.end, args.classes,
+                                  source=args.source, pricing_mode=args.pricing_mode)
         all_results[ticker] = results
 
     # Final summary

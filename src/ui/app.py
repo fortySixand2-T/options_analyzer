@@ -601,7 +601,7 @@ def compare_backtests(
 # ── Journal ───────────────────────────��──────────────────────────────────────
 
 @app.get("/api/params/best/{ticker}")
-def get_best_params_endpoint(ticker: str):
+def get_best_params_endpoint(ticker: str, pricing_mode: str = None):
     """Get optimized parameters for a ticker."""
     import sys as _sys
     from pathlib import Path as _Path
@@ -609,14 +609,14 @@ def get_best_params_endpoint(ticker: str):
     if _scripts not in _sys.path:
         _sys.path.insert(0, _scripts)
     from param_optimizer import get_best_params
-    results = get_best_params(ticker.upper())
+    results = get_best_params(ticker.upper(), pricing_mode=pricing_mode)
     if not results:
         return {"ticker": ticker.upper(), "optimized": False, "params": []}
     return {"ticker": ticker.upper(), "optimized": True, "params": results}
 
 
 @app.get("/api/params/best")
-def get_all_best_params_endpoint():
+def get_all_best_params_endpoint(pricing_mode: str = None):
     """Get optimized parameters for all tickers."""
     import sys as _sys
     from pathlib import Path as _Path
@@ -624,7 +624,7 @@ def get_all_best_params_endpoint():
     if _scripts not in _sys.path:
         _sys.path.insert(0, _scripts)
     from param_optimizer import get_all_best_params
-    return {"tickers": get_all_best_params()}
+    return {"tickers": get_all_best_params(pricing_mode=pricing_mode)}
 
 
 # Simple SQLite-backed journal
