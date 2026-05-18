@@ -26,7 +26,7 @@ orchestrator:
 agents:
   conservative:
     enabled: true
-    capital_pct: 0.35
+    capital_pct: 0.25
     min_confluence: 80
     allowed_strategies: [butterfly, short_put_spread]
     required_regimes: [HIGH_IV]
@@ -37,7 +37,7 @@ agents:
 
   momentum:
     enabled: true
-    capital_pct: 0.25
+    capital_pct: 0.15
     min_confluence: 70
     allowed_strategies: [long_call_spread, long_put_spread]
     required_bias_strength: 3
@@ -48,7 +48,7 @@ agents:
 
   vol_harvester:
     enabled: true
-    capital_pct: 0.25
+    capital_pct: 0.15
     min_confluence: 70
     allowed_strategies: [short_put_spread, butterfly]
     required_regimes: [HIGH_IV]
@@ -60,7 +60,7 @@ agents:
 
   opportunistic:
     enabled: true
-    capital_pct: 0.10
+    capital_pct: 0.05
     min_confluence: 70
     allowed_strategies: [butterfly, long_call_spread, long_put_spread, short_put_spread]
     required_regimes: [HIGH_IV, LOW_IV]
@@ -73,7 +73,7 @@ agents:
   medium_term_harvester:
     enabled: true
     dte_tier: medium_term
-    capital_pct: 0.15
+    capital_pct: 0.25
     min_confluence: 65
     allowed_strategies: [mt_calendar_spread, mt_diagonal_spread, mt_long_straddle, mt_iron_butterfly]
     required_regimes: [HIGH_IV, MODERATE_IV, LOW_IV]
@@ -86,7 +86,7 @@ agents:
   long_term_harvester:
     enabled: true
     dte_tier: long_term
-    capital_pct: 0.10
+    capital_pct: 0.15
     min_confluence: 60
     allowed_strategies: [lt_calendar_spread, lt_diagonal_spread, lt_long_straddle]
     required_regimes: [HIGH_IV, MODERATE_IV, LOW_IV]

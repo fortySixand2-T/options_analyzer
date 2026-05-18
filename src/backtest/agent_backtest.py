@@ -283,6 +283,53 @@ def _build_candidates_from_signals(
     return state, candidates
 
 
+_MT_REMAP = {
+    "butterfly": "mt_iron_butterfly",
+    "short_put_spread": "mt_calendar_spread",
+    "short_call_spread": "mt_diagonal_spread",
+    "iron_condor": "mt_iron_butterfly",
+    "long_call_spread": "mt_long_straddle",
+    "long_put_spread": "mt_long_straddle",
+}
+
+_LT_REMAP = {
+    "butterfly": "lt_calendar_spread",
+    "short_put_spread": "lt_calendar_spread",
+    "short_call_spread": "lt_diagonal_spread",
+    "iron_condor": "lt_calendar_spread",
+    "long_call_spread": "lt_long_straddle",
+    "long_put_spread": "lt_long_straddle",
+}
+
+
+def _remap_candidates(raw_candidates: list, dte_tier: str) -> List[_SyntheticCandidate]:
+    """Remap short-term trade candidates to medium/long-term strategy names."""
+    remap = _MT_REMAP if dte_tier == "medium_term" else _LT_REMAP
+    dte_default = 60 if dte_tier == "medium_term" else 120
+
+    result = []
+    seen = set()
+    for tc in raw_candidates:
+        new_strat = remap.get(tc.strategy)
+        if not new_strat or new_strat in seen:
+            continue
+        seen.add(new_strat)
+
+        is_credit = new_strat in MEDIUM_TERM_CREDIT or new_strat in LONG_TERM_CREDIT
+        result.append(_SyntheticCandidate(
+            symbol=tc.symbol,
+            strategy=new_strat,
+            strategy_label=new_strat.replace("_", " ").title(),
+            confluence_score=tc.confluence_score,
+            regime=tc.regime,
+            bias_label=tc.bias_label,
+            suggested_dte=dte_default,
+            iv_rv_edge_pct=getattr(tc, "iv_rv_edge_pct", 0),
+            is_credit=is_credit,
+        ))
+    return result
+
+
 def _filter_candidate(cfg: AgentConfig, tc, state) -> bool:
     if tc.strategy not in cfg.allowed_strategies:
         return False
@@ -533,55 +580,75 @@ def run_agent_backtest(
 
     is_mt_lt = dte_tier in ("medium_term", "long_term")
 
-    # For medium/long-term, get dates from swing_signals instead of chain snapshots
     if is_mt_lt:
         from data.chain_store import get_swing_signals
+
         for ticker in tickers:
+            # Try signal replay first; fall back to chain snapshots
             signals = get_swing_signals(ticker, start_date=start_date, end_date=end_date)
-            ticker_dates = [s["snapshot_date"] for s in signals]
+            signal_dates = {s["snapshot_date"]: s for s in signals}
+
+            available = _get_dates(ticker)
+            ticker_dates = sorted(set(
+                [d for d in available if start_date <= d <= end_date]
+                + list(signal_dates.keys())
+            ))
             all_dates.update(ticker_dates)
 
             logger.info(
-                "Backtesting %s (signal replay, %s): %d dates",
+                "Backtesting %s (%s): %d dates (%d from signals, %d from snapshots)",
                 ticker, dte_tier, len(ticker_dates),
+                len(signal_dates), len(available),
             )
 
             for date_str in ticker_dates:
-                sig_state, candidates = _build_candidates_from_signals(
-                    ticker, date_str, dte_tier,
-                )
-                if sig_state is None:
-                    continue
-
-                # Need spot from chain snapshot if available, else skip pricing
-                snapshot = _get_snap(ticker, date_str) if _get_snap else None
+                # Get spot + chain_iv from chain snapshot
+                snapshot = _get_snap(ticker, date_str)
                 if snapshot and snapshot.contracts:
                     try:
                         from market_state import build_market_state
                         ms = build_market_state(ticker, chain_snapshot=snapshot)
                         spot = ms.spot
-                        chain_iv = ms.chain_iv if not math.isnan(ms.chain_iv) else sig_state["chain_iv"]
+                        chain_iv = ms.chain_iv if not math.isnan(ms.chain_iv) else 0.20
                     except Exception:
-                        spot = 0
-                        chain_iv = sig_state["chain_iv"]
+                        continue
                 else:
-                    spot = 0
-                    chain_iv = sig_state["chain_iv"]
+                    continue
 
                 if spot <= 0:
                     continue
 
-                sig_state["spot"] = spot
+                # Build candidates: prefer persisted signals, fall back to on-the-fly
+                if date_str in signal_dates:
+                    sig_state, candidates = _build_candidates_from_signals(
+                        ticker, date_str, dte_tier,
+                    )
+                    if sig_state:
+                        sig_state["spot"] = spot
+                    else:
+                        sig_state = {"spot": spot, "chain_iv": chain_iv, "regime": "MODERATE_IV"}
+                        candidates = []
+                else:
+                    # On-the-fly: use short-term pipeline, remap to mt/lt strategies
+                    try:
+                        from trade_generator import generate_trades
+                        raw_candidates = generate_trades(ms)
+                        candidates = _remap_candidates(raw_candidates, dte_tier)
+                        sig_state = {
+                            "spot": spot, "chain_iv": chain_iv,
+                            "regime": getattr(ms, "regime", "MODERATE_IV"),
+                        }
+                    except Exception:
+                        continue
+
                 current_regime = sig_state.get("regime", "")
 
-                # Check exits for open trades (with regime-transition logic)
                 _check_exits(
                     enabled_agents, agent_open, agent_trades, cooldowns,
                     ticker, date_str, spot, chain_iv, slippage_pct,
                     current_regime=current_regime,
                 )
 
-                # Try new entries
                 _try_entries(
                     enabled_agents, agent_open, cooldowns,
                     agent_entries_attempted, agent_entries_filtered,
