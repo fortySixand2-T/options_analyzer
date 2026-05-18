@@ -170,7 +170,7 @@ def main():
     parser.add_argument("--ticker", nargs="+", default=["SPY"], help="Ticker(s)")
     parser.add_argument("--start", default="2023-01-01", help="Start date")
     parser.add_argument("--end", default="2026-01-01", help="End date")
-    parser.add_argument("--tier", choices=["medium_term", "long_term", "both"],
+    parser.add_argument("--tier", choices=["swing", "medium_term", "long_term", "all", "both"],
                         default="both", help="DTE tier to test")
     parser.add_argument("--slippage", type=float, default=3.0, help="Slippage %")
     parser.add_argument("--source", default="chain_store",
@@ -183,7 +183,10 @@ def main():
     )
 
     config = load_config()
-    tiers = ["medium_term", "long_term"] if args.tier == "both" else [args.tier]
+    if args.tier in ("both", "all"):
+        tiers = ["swing", "medium_term", "long_term"]
+    else:
+        tiers = [args.tier]
 
     for tier in tiers:
         print(f"\n\nRunning {tier} integration backtest...")

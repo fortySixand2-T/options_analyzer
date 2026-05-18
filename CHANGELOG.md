@@ -1,5 +1,6 @@
 # Changelog
 
+- [2026-05-18] Modified: scripts/run_integration_backtest.py — Add swing tier choice to integration backtest script
 - [2026-05-18] Modified: src/backtest/agent_backtest.py — Add swing tier (14-60 DTE) support: SWING_CREDIT set, swing exit rules, swing pricing, signal replay, _SW_REMAP
 - [2026-05-18] Modified: config/agents.yaml — Add swing_harvester agent (10% capital, calendars/diagonals/straddles, HIGH_IV+LOW_IV), rebalance medium_term to 20%, long_term to 10%
 - [2026-05-18] Modified: scripts/run_full_portfolio_backtest.py — Include swing tier in full portfolio backtest
