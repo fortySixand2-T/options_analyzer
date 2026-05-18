@@ -76,11 +76,11 @@ agents:
     capital_pct: 0.25
     min_confluence: 65
     allowed_strategies: [mt_calendar_spread, mt_diagonal_spread, mt_long_straddle, mt_iron_butterfly]
-    required_regimes: [HIGH_IV, MODERATE_IV, LOW_IV]
+    required_regimes: [HIGH_IV, LOW_IV]
     max_positions: 4
     max_daily_loss_pct: 0.015
     drawdown_pause_pct: 0.05
-    description: "VRP + skew driven premium harvesting, 30-90 DTE"
+    description: "VRP + skew driven premium harvesting, 30-90 DTE, skip MODERATE_IV"
 
   # ── Long-term (90-180 DTE) ───────────────────────────────────────
   long_term_harvester:
@@ -89,8 +89,8 @@ agents:
     capital_pct: 0.15
     min_confluence: 60
     allowed_strategies: [lt_calendar_spread, lt_diagonal_spread, lt_long_straddle]
-    required_regimes: [HIGH_IV, MODERATE_IV, LOW_IV]
+    required_regimes: [HIGH_IV, LOW_IV]
     max_positions: 3
     max_daily_loss_pct: 0.01
     drawdown_pause_pct: 0.04
-    description: "Cross-asset + correlation driven, 90-180 DTE"
+    description: "Cross-asset + correlation driven, 90-180 DTE, skip MODERATE_IV"

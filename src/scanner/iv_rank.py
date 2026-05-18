@@ -22,16 +22,22 @@ logger = logging.getLogger(__name__)
 
 # Per-ticker-class regime thresholds (iv_rank cutoffs)
 TICKER_CLASSES = {
-    "etf": ["SPY", "QQQ", "IWM", "DIA", "XSP", "XLF", "XLE", "XLK", "GLD", "TLT"],
+    "broad_etf": ["SPY", "DIA", "XSP"],
+    "tech_etf": ["QQQ", "XLK"],
+    "small_cap_etf": ["IWM"],
+    "sector_etf": ["XLF", "XLE", "GLD", "TLT"],
     "mega_cap": ["AAPL", "MSFT", "GOOG", "GOOGL", "AMZN", "META", "BRK.B", "UNH", "JNJ", "V"],
     "high_vol": ["TSLA", "NFLX", "AMD", "NVDA", "COIN", "MARA", "RIOT", "GME", "AMC"],
 }
 
 _CLASS_THRESHOLDS = {
-    "etf":      [(50, "HIGH_IV"), (30, "MODERATE_IV"), (0, "LOW_IV")],
-    "mega_cap": [(40, "HIGH_IV"), (25, "MODERATE_IV"), (0, "LOW_IV")],
-    "high_vol": [(35, "HIGH_IV"), (20, "MODERATE_IV"), (0, "LOW_IV")],
-    "default":  [(50, "HIGH_IV"), (30, "MODERATE_IV"), (0, "LOW_IV")],
+    "broad_etf":     [(50, "HIGH_IV"), (30, "MODERATE_IV"), (0, "LOW_IV")],
+    "tech_etf":      [(60, "HIGH_IV"), (38, "MODERATE_IV"), (0, "LOW_IV")],
+    "small_cap_etf": [(55, "HIGH_IV"), (33, "MODERATE_IV"), (0, "LOW_IV")],
+    "sector_etf":    [(50, "HIGH_IV"), (30, "MODERATE_IV"), (0, "LOW_IV")],
+    "mega_cap":      [(40, "HIGH_IV"), (25, "MODERATE_IV"), (0, "LOW_IV")],
+    "high_vol":      [(35, "HIGH_IV"), (20, "MODERATE_IV"), (0, "LOW_IV")],
+    "default":       [(50, "HIGH_IV"), (30, "MODERATE_IV"), (0, "LOW_IV")],
 }
 
 # Legacy alias for existing code
