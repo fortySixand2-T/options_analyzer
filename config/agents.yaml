@@ -74,7 +74,7 @@ agents:
     enabled: true
     dte_tier: medium_term
     capital_pct: 0.25
-    min_confluence: 65
+    min_confluence: 70
     allowed_strategies: [mt_calendar_spread, mt_diagonal_spread, mt_long_straddle, mt_iron_butterfly]
     required_regimes: [HIGH_IV, LOW_IV]
     max_positions: 4
