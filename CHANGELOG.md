@@ -1,5 +1,6 @@
 # Changelog
 
+- [2026-05-18] Created: scripts/run_full_portfolio_backtest.py — Full portfolio backtest across all tickers and DTE tiers with unified reporting
 - [2026-05-18] Modified: config/agents.yaml — Disable momentum agent (negative expectancy at short DTE), differentiate opportunistic (iron condors, lower confluence), redistribute capital to vol_harvester (20%) and opportunistic (10%)
 - [2026-05-18] Modified: config/agents.yaml — Tune short-term agents: conservative min_confluence 80->75, momentum min_dte=7 + LOW_IV only, opportunistic HIGH_IV only
 - [2026-05-18] Modified: src/agents/agent_config.py — Add min_dte field to AgentConfig for DTE filtering
