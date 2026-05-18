@@ -56,7 +56,7 @@ def _print_agent_report(result, tier_label: str):
             continue
 
         print(f"\n  Performance:")
-        print(f"    Win rate:       {stats.win_rate*100:.1f}%")
+        print(f"    Win rate:       {stats.win_rate:.1f}%")
         print(f"    Avg P&L:        ${stats.avg_pnl:+.2f}")
         print(f"    Total P&L:      ${stats.total_pnl:+.2f}")
         print(f"    Max drawdown:   ${stats.max_drawdown:.2f}")
@@ -148,9 +148,8 @@ def _validate_targets(result, tier_label: str):
         cal_trades = [t for t in trades if "calendar" in (t.exit_reason or "")]
         # Actually check strategy-based
         # We don't have strategy on BacktestTrade, use regime as proxy
-        win_rate = stats.win_rate * 100
-        status = "PASS" if win_rate > 60 else "FAIL"
-        print(f"    Win rate > 60%:         {win_rate:.1f}%  [{status}]")
+        status = "PASS" if stats.win_rate > 60 else "FAIL"
+        print(f"    Win rate > 60%:         {stats.win_rate:.1f}%  [{status}]")
 
         # Target 3: Regime exits reduce drawdown
         regime_exits = [t for t in trades if t.exit_reason == "regime_spike"]
