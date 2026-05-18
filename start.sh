@@ -246,6 +246,26 @@ case "$CMD" in
         python3 scripts/import_dolt.py --status
         ;;
 
+    param-optimize)
+        setup_env
+        ensure_prod
+        shift || true
+        ARGS="${*:---tickers SPY --start 2020-01-01 --end 2024-12-31}"
+        echo -e "${GREEN}Parameter optimization:${NC} $ARGS"
+        $COMPOSE run --rm collect python scripts/param_optimizer.py $ARGS
+        ;;
+
+    param-best)
+        setup_env
+        ensure_prod
+        shift || true
+        if [ -z "$1" ]; then
+            $COMPOSE run --rm collect python scripts/param_optimizer.py --best-all
+        else
+            $COMPOSE run --rm collect python scripts/param_optimizer.py --best "$1"
+        fi
+        ;;
+
     backfill-status)
         setup_env
         ensure_prod

@@ -1,5 +1,8 @@
 # Changelog
 
+- [2026-05-17] Created: scripts/param_optimizer.py — Per-ticker grid search optimizer for agent trading params with SQLite storage
+- [2026-05-17] Modified: src/ui/app.py — Add /api/params/best and /api/params/best/{ticker} endpoints
+- [2026-05-17] Modified: start.sh — Add param-optimize and param-best commands
 - [2026-05-17] Created: docs/dolt-backtest-report.md — Multi-year agent backtest report (2020-2024) with per-ticker results and 10 action items
 - [2026-05-17] Created: src/data/dolt_provider.py — Adapter to read DoltHub options data as ChainSnapshot objects
 - [2026-05-17] Created: scripts/import_dolt.py — Import DoltHub options data into chain_snapshots.db for backtesting

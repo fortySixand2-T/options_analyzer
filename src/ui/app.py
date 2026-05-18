@@ -600,6 +600,33 @@ def compare_backtests(
 
 # ── Journal ───────────────────────────��──────────────────────────────────────
 
+@app.get("/api/params/best/{ticker}")
+def get_best_params_endpoint(ticker: str):
+    """Get optimized parameters for a ticker."""
+    import sys as _sys
+    from pathlib import Path as _Path
+    _scripts = str(_Path(__file__).resolve().parent.parent.parent / "scripts")
+    if _scripts not in _sys.path:
+        _sys.path.insert(0, _scripts)
+    from param_optimizer import get_best_params
+    results = get_best_params(ticker.upper())
+    if not results:
+        return {"ticker": ticker.upper(), "optimized": False, "params": []}
+    return {"ticker": ticker.upper(), "optimized": True, "params": results}
+
+
+@app.get("/api/params/best")
+def get_all_best_params_endpoint():
+    """Get optimized parameters for all tickers."""
+    import sys as _sys
+    from pathlib import Path as _Path
+    _scripts = str(_Path(__file__).resolve().parent.parent.parent / "scripts")
+    if _scripts not in _sys.path:
+        _sys.path.insert(0, _scripts)
+    from param_optimizer import get_all_best_params
+    return {"tickers": get_all_best_params()}
+
+
 # Simple SQLite-backed journal
 _JOURNAL_DB = os.getenv("JOURNAL_DB", "data/journal.db")
 
