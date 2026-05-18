@@ -138,6 +138,18 @@ def _init_schema(conn: sqlite3.Connection):
             -- Skew
             skew_25d REAL,
             skew_zscore REAL,
+            skew_regime TEXT,
+            -- Cross-asset
+            vrp_regime TEXT,
+            vvix_regime TEXT,
+            vvix_ratio REAL,
+            vvix_size_factor REAL,
+            move_vix_signal TEXT,
+            move_vix_divergence REAL,
+            -- Flow
+            flow_composite TEXT,
+            -- Correlation
+            correlation_premium REAL,
             -- Decision
             recommended_strategy TEXT,
             recommendation_rationale TEXT,
@@ -162,11 +174,24 @@ def _init_schema(conn: sqlite3.Connection):
         CREATE INDEX IF NOT EXISTS idx_iv_by_expiry_ticker_date
             ON iv_by_expiry(ticker, snapshot_date);
     """)
-    # Add skew column if not present (safe migration for existing DBs)
-    try:
-        conn.execute("ALTER TABLE iv_snapshots ADD COLUMN skew_25d REAL")
-    except sqlite3.OperationalError:
-        pass  # column already exists
+    # Safe migrations for existing DBs
+    _migrate_columns = [
+        ("iv_snapshots", "skew_25d", "REAL"),
+        ("swing_signals", "skew_regime", "TEXT"),
+        ("swing_signals", "vrp_regime", "TEXT"),
+        ("swing_signals", "vvix_regime", "TEXT"),
+        ("swing_signals", "vvix_ratio", "REAL"),
+        ("swing_signals", "vvix_size_factor", "REAL"),
+        ("swing_signals", "move_vix_signal", "TEXT"),
+        ("swing_signals", "move_vix_divergence", "REAL"),
+        ("swing_signals", "flow_composite", "TEXT"),
+        ("swing_signals", "correlation_premium", "REAL"),
+    ]
+    for table, col, col_type in _migrate_columns:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+        except sqlite3.OperationalError:
+            pass
 
 
 # ── Write operations ─────────────────────────────────────────────────────────
@@ -312,12 +337,19 @@ def store_swing_signals(
     in_earnings_window: Optional[bool] = None,
     skew_25d: Optional[float] = None,
     skew_zscore: Optional[float] = None,
+    skew_regime: Optional[str] = None,
+    vrp_regime: Optional[str] = None,
+    vvix_regime: Optional[str] = None,
+    vvix_ratio: Optional[float] = None,
+    vvix_size_factor: Optional[float] = None,
+    move_vix_signal: Optional[str] = None,
+    move_vix_divergence: Optional[float] = None,
+    flow_composite: Optional[str] = None,
+    correlation_premium: Optional[float] = None,
     recommended_strategy: Optional[str] = None,
     recommendation_rationale: Optional[str] = None,
 ):
-    """Persist all swing edge signals for backtester replay."""
-    import json
-
+    """Persist all swing/medium-term edge signals for backtester replay."""
     conn = _get_conn()
     try:
         conn.execute("""
@@ -328,9 +360,12 @@ def store_swing_signals(
                  kink_expiry, kink_magnitude, contango, front_iv, back_iv,
                  swing_bias_label, swing_bias_score, swing_atr_percentile,
                  earnings_days, earnings_iv_inflation, expected_move_pct, in_earnings_window,
-                 skew_25d, skew_zscore,
+                 skew_25d, skew_zscore, skew_regime,
+                 vrp_regime, vvix_regime, vvix_ratio, vvix_size_factor,
+                 move_vix_signal, move_vix_divergence,
+                 flow_composite, correlation_premium,
                  recommended_strategy, recommendation_rationale)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(ticker, snapshot_date) DO UPDATE SET
                 vrp_overall = excluded.vrp_overall,
                 vrp_overall_pct = excluded.vrp_overall_pct,
@@ -353,6 +388,15 @@ def store_swing_signals(
                 in_earnings_window = excluded.in_earnings_window,
                 skew_25d = excluded.skew_25d,
                 skew_zscore = excluded.skew_zscore,
+                skew_regime = excluded.skew_regime,
+                vrp_regime = excluded.vrp_regime,
+                vvix_regime = excluded.vvix_regime,
+                vvix_ratio = excluded.vvix_ratio,
+                vvix_size_factor = excluded.vvix_size_factor,
+                move_vix_signal = excluded.move_vix_signal,
+                move_vix_divergence = excluded.move_vix_divergence,
+                flow_composite = excluded.flow_composite,
+                correlation_premium = excluded.correlation_premium,
                 recommended_strategy = excluded.recommended_strategy,
                 recommendation_rationale = excluded.recommendation_rationale
         """, (
@@ -365,7 +409,10 @@ def store_swing_signals(
             swing_bias_label, swing_bias_score, swing_atr_percentile,
             earnings_days, earnings_iv_inflation, expected_move_pct,
             int(in_earnings_window) if in_earnings_window is not None else None,
-            skew_25d, skew_zscore,
+            skew_25d, skew_zscore, skew_regime,
+            vrp_regime, vvix_regime, vvix_ratio, vvix_size_factor,
+            move_vix_signal, move_vix_divergence,
+            flow_composite, correlation_premium,
             recommended_strategy, recommendation_rationale,
         ))
         conn.commit()
@@ -393,6 +440,26 @@ def get_swing_signals(
         sql += " ORDER BY snapshot_date"
         rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_vrp_history(
+    ticker: str, lookback_days: int = 120,
+) -> List[float]:
+    """Retrieve historical VRP% values for z-score computation.
+
+    Returns list of vrp_overall_pct values (most recent last), filtering nulls.
+    """
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT vrp_overall_pct FROM swing_signals
+            WHERE ticker = ? AND vrp_overall_pct IS NOT NULL
+            ORDER BY snapshot_date DESC
+            LIMIT ?
+        """, (ticker, lookback_days)).fetchall()
+        return [float(r[0]) for r in reversed(rows)]
     finally:
         conn.close()
 

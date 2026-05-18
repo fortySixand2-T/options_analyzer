@@ -1,7 +1,7 @@
 """
 Options scanner configuration.
 All settings are read from environment variables with sensible defaults.
-Calibrated for 0-14 DTE index options.
+Four DTE tiers: chain (0-14), swing (14-60), medium-term (30-90), long-term (90-180).
 """
 import os
 
@@ -73,6 +73,56 @@ SWING_SCANNER_CONFIG = {
         "garch_edge": 0.15,
         "directional": 0.10,
         "dealer_regime": 0.10,
+        "liquidity": 0.05,
+    },
+}
+
+# ── Medium-term scanner (30-90 DTE) ────────────────────────────────────
+# VRP is the primary edge at this horizon (Sharpe 0.5-0.6, Carr & Wu 2009).
+# Skew and cross-asset signals become actionable here.
+MEDIUM_TERM_SCANNER_CONFIG = {
+    "filter": {
+        "min_dte": 30,
+        "max_dte": 90,
+        "min_delta": 0.10,
+        "max_delta": 0.50,
+        "min_open_interest": 500,
+        "max_spread_pct": 10.0,
+        "moneyness_range": [0.85, 1.15],
+    },
+    "scoring_weights": {
+        "vrp": 0.25,
+        "skew": 0.15,
+        "term_structure": 0.15,
+        "cross_asset": 0.10,
+        "flow": 0.10,
+        "vol_regime": 0.10,
+        "directional": 0.10,
+        "liquidity": 0.05,
+    },
+}
+
+# ── Long-term scanner (90-180 DTE) ─────────────────────────────────────
+# Correlation premium and cross-asset divergences dominate at this horizon.
+# VRP still relevant but slower-moving. Flow signals have longer lead times.
+LONG_TERM_SCANNER_CONFIG = {
+    "filter": {
+        "min_dte": 90,
+        "max_dte": 180,
+        "min_delta": 0.10,
+        "max_delta": 0.45,
+        "min_open_interest": 300,
+        "max_spread_pct": 8.0,
+        "moneyness_range": [0.85, 1.15],
+    },
+    "scoring_weights": {
+        "vrp": 0.20,
+        "cross_asset": 0.20,
+        "skew": 0.15,
+        "flow": 0.15,
+        "term_structure": 0.10,
+        "vol_regime": 0.10,
+        "directional": 0.05,
         "liquidity": 0.05,
     },
 }
