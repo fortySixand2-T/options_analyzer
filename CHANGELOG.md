@@ -1,5 +1,10 @@
 # Changelog
 
+- [2026-05-17] Created: docs/param-optimization-report.md — Detailed optimization results for all 9 tickers with per-ticker optimal params
+- [2026-05-17] Modified: src/scanner/iv_rank.py — Add per-ticker-class regime thresholds and historical self-referencing IV rank
+- [2026-05-17] Modified: src/regime/detector.py — Accept ticker param for per-class threshold adjustment
+- [2026-05-17] Modified: src/market_state.py — Use stored chain history for bias detection, historical IV rank for backtesting
+- [2026-05-17] Modified: src/data/chain_store.py — Add get_history_from_snapshots() and snapshot_date/label attributes
 - [2026-05-17] Created: scripts/param_optimizer.py — Per-ticker grid search optimizer for agent trading params with SQLite storage
 - [2026-05-17] Modified: src/ui/app.py — Add /api/params/best and /api/params/best/{ticker} endpoints
 - [2026-05-17] Modified: start.sh — Add param-optimize and param-best commands

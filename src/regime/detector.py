@@ -44,6 +44,7 @@ class RegimeResult:
 def detect_regime(
     vix_data: Optional[VixSnapshot] = None,
     iv_rank: Optional[float] = None,
+    ticker: Optional[str] = None,
 ) -> RegimeResult:
     """Classify the current market regime.
 
@@ -53,6 +54,8 @@ def detect_regime(
         Pre-fetched VIX data. If None, fetches live data.
     iv_rank : float, optional
         Current IV rank (0-100). Used for refined classification.
+    ticker : str, optional
+        Ticker symbol for per-class threshold adjustment.
 
     Returns
     -------
@@ -99,24 +102,31 @@ def detect_regime(
         )
 
     # Use IV rank if available for finer classification
+    # Per-ticker-class thresholds: mega-cap >40, high-vol >35, ETF/default >50
     if iv_rank is not None:
-        if iv_rank > 50 and vix < 25:
+        from scanner.iv_rank import get_regime_thresholds, get_ticker_class
+        thresholds = get_regime_thresholds(ticker or "")
+        high_iv_threshold = thresholds[0][0]  # first tuple is HIGH_IV
+        mod_iv_threshold = thresholds[1][0]    # second is MODERATE_IV
+        ticker_class = get_ticker_class(ticker or "")
+
+        if iv_rank > high_iv_threshold and vix < 25:
             return RegimeResult(
                 regime=MarketRegime.HIGH_IV,
                 vix=vix_data,
                 event_active=in_event,
                 event_type=event_type,
                 event_days=event_days,
-                rationale=f"IV rank {iv_rank:.0f}% (>50), VIX {vix:.1f} — sell premium",
+                rationale=f"IV rank {iv_rank:.0f}% (>{high_iv_threshold}, {ticker_class}), VIX {vix:.1f} — sell premium",
             )
-        if iv_rank >= 30:
+        if iv_rank >= mod_iv_threshold:
             return RegimeResult(
                 regime=MarketRegime.MODERATE_IV,
                 vix=vix_data,
                 event_active=in_event,
                 event_type=event_type,
                 event_days=event_days,
-                rationale=f"IV rank {iv_rank:.0f}% (30-50), VIX {vix:.1f} — either side",
+                rationale=f"IV rank {iv_rank:.0f}% ({mod_iv_threshold}-{high_iv_threshold}, {ticker_class}), VIX {vix:.1f} — either side",
             )
         return RegimeResult(
             regime=MarketRegime.LOW_IV,
@@ -124,7 +134,7 @@ def detect_regime(
             event_active=in_event,
             event_type=event_type,
             event_days=event_days,
-            rationale=f"IV rank {iv_rank:.0f}% (<30), VIX {vix:.1f} — buy premium",
+            rationale=f"IV rank {iv_rank:.0f}% (<{mod_iv_threshold}, {ticker_class}), VIX {vix:.1f} — buy premium",
         )
 
     # Fallback: use VIX level when IV rank not available

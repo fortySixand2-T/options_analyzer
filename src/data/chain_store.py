@@ -21,6 +21,8 @@ import sqlite3
 from datetime import datetime
 from typing import List, Optional
 
+import numpy as np
+
 from scanner.providers.base import ChainSnapshot, OptionContract
 
 logger = logging.getLogger(__name__)
@@ -502,13 +504,16 @@ def get_snapshot(
             for r in contracts_rows
         ]
 
-        return ChainSnapshot(
+        snap = ChainSnapshot(
             ticker=row["ticker"],
             spot=row["spot"],
             fetched_at=datetime.fromisoformat(row["fetched_at"]),
             contracts=contracts,
             expiries=json.loads(row["expiries_json"]) if row["expiries_json"] else [],
         )
+        snap.snapshot_date = date
+        snap.label = label or row.get("label", "eod")
+        return snap
     finally:
         conn.close()
 
@@ -556,6 +561,50 @@ def get_iv_history(
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+def get_history_from_snapshots(
+    ticker: str, before_date: str, label: str = "dolt", lookback: int = 120,
+):
+    """Build HistoryData from stored spot prices — no yfinance needed.
+
+    Used during backtesting to avoid yfinance rate limits. Returns a
+    HistoryData-compatible object built from chain_snapshots spot prices.
+    """
+    import pandas as pd
+    from scanner.providers.base import HistoryData
+
+    conn = _get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT snapshot_date, spot FROM chain_snapshots "
+            "WHERE ticker = ? AND label = ? AND snapshot_date < ? AND spot > 0 "
+            "ORDER BY snapshot_date DESC LIMIT ?",
+            (ticker, label, before_date, lookback),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if len(rows) < 10:
+        return None
+
+    rows = list(reversed(rows))
+    dates = pd.to_datetime([r["snapshot_date"] for r in rows])
+    prices = [r["spot"] for r in rows]
+    closes = pd.Series(prices, index=dates, name="Close")
+
+    returns_arr = np.diff(prices) / np.array(prices[:-1])
+
+    rv30 = float(np.std(returns_arr[-30:]) * np.sqrt(252)) if len(returns_arr) >= 30 else 0.20
+    rv60 = float(np.std(returns_arr[-60:]) * np.sqrt(252)) if len(returns_arr) >= 60 else rv30
+
+    return HistoryData(
+        ticker=ticker,
+        closes=closes,
+        returns=returns_arr,
+        realized_vol_30d=rv30,
+        realized_vol_60d=rv60,
+    )
 
 
 def get_intraday_snapshots(

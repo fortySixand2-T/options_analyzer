@@ -542,11 +542,18 @@ def build_market_state(
     if math.isnan(spot) or spot <= 0:
         spot = provider.get_spot(symbol)
 
-    # 2. Fetch history if needed
+    # 2. Fetch history — prefer stored data when backtesting with chain_snapshot
     if history_data is None:
-        history_data = provider.get_history(
-            symbol, days=CHAIN_SCANNER_CONFIG["garch"]["history_days"],
-        )
+        if chain_snapshot is not None and hasattr(chain_snapshot, 'snapshot_date') and chain_snapshot.snapshot_date:
+            from data.chain_store import get_history_from_snapshots
+            label = getattr(chain_snapshot, 'label', 'dolt')
+            history_data = get_history_from_snapshots(
+                symbol, chain_snapshot.snapshot_date, label=label,
+            )
+        if history_data is None:
+            history_data = provider.get_history(
+                symbol, days=CHAIN_SCANNER_CONFIG["garch"]["history_days"],
+            )
 
     # 3. Compute GARCH forward vol
     returns = history_data.returns
@@ -571,13 +578,25 @@ def build_market_state(
     if math.isnan(hv20):
         hv20 = 0.20
 
-    # 7. IV rank
-    iv_metrics = compute_iv_metrics(chain_iv, history_data)
+    # 7. IV rank — use historical chain IV when backtesting
+    historical_iv = None
+    if chain_snapshot is not None and hasattr(chain_snapshot, 'snapshot_date') and chain_snapshot.snapshot_date:
+        from scanner.iv_rank import compute_historical_iv_rank
+        snapshot_date = chain_snapshot.snapshot_date
+        label = getattr(chain_snapshot, 'label', 'dolt')
+        historical_iv = compute_historical_iv_rank(
+            symbol, snapshot_date, chain_iv, label=label,
+        )
+
+    if historical_iv is not None:
+        iv_metrics = historical_iv
+    else:
+        iv_metrics = compute_iv_metrics(chain_iv, history_data, ticker=symbol)
     iv_rank = iv_metrics["iv_rank"]
 
-    # 8. Regime
+    # 8. Regime — pass ticker for per-class thresholds
     if regime_result is None:
-        regime_result = detect_regime(iv_rank=iv_rank)
+        regime_result = detect_regime(iv_rank=iv_rank, ticker=symbol)
     regime = regime_result.regime.value
     regime_rationale = regime_result.rationale
 
