@@ -1,5 +1,8 @@
 # Changelog
 
+- [2026-05-18] Modified: config/agents.yaml — Raise medium_term_harvester min_confluence 65->70 to filter weak setups
+- [2026-05-18] Modified: config/agents.yaml — Filter MODERATE_IV from medium/long-term agents (consistent loser across all tickers)
+- [2026-05-18] Modified: src/scanner/iv_rank.py — Split ETF into broad_etf/tech_etf/small_cap_etf with per-class thresholds (QQQ 60/38, IWM 55/33, SPY 50/30)
 - [2026-05-18] Modified: scripts/run_integration_backtest.py — Fix win_rate double-multiplication in display (was 0-100, not 0-1)
 - [2026-05-18] Modified: src/backtest/agent_backtest.py — Add chain-snapshot fallback with strategy remapping for medium/long-term backtests
 - [2026-05-18] Modified: config/agents.yaml — Rebalance capital allocations to 100% (short 60%, medium 25%, long 15%)
