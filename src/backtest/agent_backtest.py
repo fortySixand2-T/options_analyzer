@@ -177,6 +177,112 @@ def _price_position(spot: float, entry_spot: float, iv: float,
         return 0.0
 
 
+@dataclass
+class _SyntheticCandidate:
+    """Lightweight trade candidate built from persisted swing_signals."""
+    symbol: str
+    strategy: str
+    strategy_label: str
+    confluence_score: float
+    regime: str
+    bias_label: str
+    suggested_dte: int
+    iv_rv_edge_pct: float
+    legs: List[Dict] = field(default_factory=list)
+    is_credit: bool = False
+    edge_source: str = ""
+
+
+def _build_candidates_from_signals(
+    ticker: str, date_str: str, dte_tier: str,
+) -> Tuple[Optional[Dict], List[_SyntheticCandidate]]:
+    """Build trade candidates from persisted swing_signals for medium/long-term tiers.
+
+    Replays the decision matrix using stored signal values instead of live data.
+    Returns (signal_state_dict, list_of_candidates).
+    """
+    from data.chain_store import get_swing_signals
+
+    signals = get_swing_signals(ticker, start_date=date_str, end_date=date_str)
+    if not signals:
+        return None, []
+
+    sig = signals[0]
+    vrp_pct = sig.get("vrp_overall_pct") or 0
+    vrp_regime = sig.get("vrp_regime") or "NEUTRAL"
+    skew_regime = sig.get("skew_regime") or "NORMAL"
+    bias_label = sig.get("swing_bias_label") or "NEUTRAL"
+    cross_signal = sig.get("move_vix_signal") or "ALIGNED"
+    flow_signal = sig.get("flow_composite") or "NEUTRAL"
+    vvix_size = sig.get("vvix_size_factor") or 1.0
+    calendar_signal = sig.get("calendar_signal") or 0
+    correlation_premium = sig.get("correlation_premium")
+    chain_iv = sig.get("front_iv") or 0.20
+
+    # Determine regime from VRP context
+    regime = "HIGH_IV" if vrp_pct > 0 else "MODERATE_IV"
+
+    state = {
+        "spot": 0,
+        "chain_iv": chain_iv,
+        "regime": regime,
+        "bias_label": bias_label,
+        "vrp_regime": vrp_regime,
+        "skew_regime": skew_regime,
+        "cross_signal": cross_signal,
+        "flow_signal": flow_signal,
+        "vvix_size_factor": vvix_size,
+        "cross_asset": {"position_size_factor": vvix_size},
+    }
+
+    candidates = []
+
+    if dte_tier == "medium_term":
+        from swing.decision_matrix import map_medium_term_strategy
+        rec = map_medium_term_strategy(
+            regime=regime, swing_bias=bias_label, dealer_regime=None,
+            vrp_regime=vrp_regime, vrp_pct=vrp_pct,
+            calendar_signal=calendar_signal, skew_regime=skew_regime,
+            cross_asset_signal=cross_signal, flow_signal=flow_signal,
+            vvix_size_factor=vvix_size,
+            in_earnings_window=bool(sig.get("in_earnings_window")),
+            earnings_iv_inflation=sig.get("earnings_iv_inflation") or 0,
+        )
+        dte_range = (30, 90)
+    else:
+        from swing.decision_matrix import map_long_term_strategy
+        rec = map_long_term_strategy(
+            regime=regime, swing_bias=bias_label,
+            vrp_regime=vrp_regime, vrp_pct=vrp_pct,
+            skew_regime=skew_regime, cross_asset_signal=cross_signal,
+            flow_signal=flow_signal, vvix_size_factor=vvix_size,
+            correlation_premium=correlation_premium,
+        )
+        dte_range = (90, 180)
+
+    if rec:
+        score = getattr(rec, "score", 70)
+        edge_source = getattr(rec, "edge_source", "")
+        suggested_dte = getattr(rec, "suggested_dte", sum(dte_range) // 2)
+        is_credit = rec.strategy in MEDIUM_TERM_CREDIT or rec.strategy in LONG_TERM_CREDIT
+
+        tc = _SyntheticCandidate(
+            symbol=ticker,
+            strategy=rec.strategy,
+            strategy_label=getattr(rec, "strategy_label", rec.strategy),
+            confluence_score=score,
+            regime=regime,
+            bias_label=bias_label,
+            suggested_dte=suggested_dte,
+            iv_rv_edge_pct=vrp_pct,
+            is_credit=is_credit,
+            edge_source=edge_source,
+        )
+        candidates.append(tc)
+
+    return state, candidates
+
+
 def _filter_candidate(cfg: AgentConfig, tc, state) -> bool:
     if tc.strategy not in cfg.allowed_strategies:
         return False
@@ -192,6 +298,184 @@ def _filter_candidate(cfg: AgentConfig, tc, state) -> bool:
         if tc.iv_rv_edge_pct < cfg.min_iv_rv_edge_pct:
             return False
     return True
+
+
+def _check_exits(
+    enabled_agents, agent_open, agent_trades, cooldowns,
+    ticker, date_str, spot, chain_iv, slippage_pct,
+    current_regime: str = "",
+):
+    """Check exit conditions for all open trades on this ticker/date."""
+    for agent_id in enabled_agents:
+        still_open = []
+        for ot in agent_open[agent_id]:
+            if ot.ticker != ticker:
+                still_open.append(ot)
+                continue
+
+            entry_dt = datetime.strptime(ot.entry_date, "%Y-%m-%d")
+            current_dt = datetime.strptime(date_str, "%Y-%m-%d")
+            days_held = (current_dt - entry_dt).days
+            dte_remaining = ot.dte_at_entry - days_held
+
+            current_value = _price_position(
+                spot, ot.entry_spot, chain_iv,
+                dte_remaining, ot.strategy, ot.is_credit,
+            )
+
+            if ot.is_credit:
+                pnl = ot.entry_price - current_value
+            else:
+                pnl = current_value - ot.entry_price
+
+            rules = _get_exit_rules(ot.strategy, ot.dte_at_entry)
+            exit_reason = None
+
+            if ot.is_credit and ot.entry_price > 0:
+                if pnl >= ot.entry_price * (rules["profit_pct"] / 100):
+                    exit_reason = "profit_target"
+                elif pnl <= -ot.entry_price * (rules["loss_pct"] / 100):
+                    exit_reason = "stop_loss"
+            elif not ot.is_credit and ot.entry_price > 0:
+                if pnl >= ot.entry_price * (rules["profit_pct"] / 100):
+                    exit_reason = "profit_target"
+                elif pnl <= -ot.entry_price * (rules["loss_pct"] / 100):
+                    exit_reason = "stop_loss"
+
+            if dte_remaining <= rules["exit_dte"]:
+                exit_reason = "dte_exit"
+
+            # Regime-transition exit: close credit positions if regime → SPIKE
+            if (
+                not exit_reason
+                and current_regime == "SPIKE"
+                and ot.entry_regime
+                and ot.entry_regime != "SPIKE"
+                and ot.is_credit
+            ):
+                exit_reason = "regime_spike"
+                logger.info(
+                    "Regime exit: %s %s entered in %s, now SPIKE",
+                    ot.ticker, ot.strategy, ot.entry_regime,
+                )
+
+            if exit_reason:
+                slip = abs(current_value) * (slippage_pct / 100.0)
+                if ot.is_credit:
+                    final_pnl = ot.entry_price - (current_value + slip)
+                else:
+                    final_pnl = (current_value - slip) - ot.entry_price
+
+                entry_d = datetime.strptime(ot.entry_date, "%Y-%m-%d").date()
+                exit_d = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+                trade = BacktestTrade(
+                    entry_date=entry_d,
+                    exit_date=exit_d,
+                    entry_price=round(ot.entry_price, 2),
+                    exit_price=round(current_value, 2),
+                    pnl=round(final_pnl * 100, 2),
+                    pnl_pct=round(final_pnl / max(abs(ot.entry_price), 0.01) * 100, 1),
+                    dte_at_entry=ot.dte_at_entry,
+                    dte_at_exit=max(dte_remaining, 0),
+                    regime=ot.regime,
+                    score=ot.confluence_score,
+                    win=final_pnl > 0,
+                    exit_reason=exit_reason,
+                    bias_label=ot.bias_label,
+                    iv_at_entry=round(ot.entry_iv, 4),
+                )
+                agent_trades[agent_id].append(trade)
+                cooldowns[agent_id][ticker] = date_str
+            else:
+                still_open.append(ot)
+
+        agent_open[agent_id] = still_open
+
+
+def _try_entries(
+    enabled_agents, agent_open, cooldowns,
+    agent_entries_attempted, agent_entries_filtered,
+    candidates, state, ticker, date_str, spot, chain_iv,
+    slippage_pct,
+):
+    """Try new entries for each agent on this ticker/date."""
+    # Extract regime for entry_regime tracking
+    if isinstance(state, dict):
+        current_regime = state.get("regime", "")
+        edge_source = ""
+    else:
+        current_regime = getattr(state, "regime", "")
+        edge_source = ""
+
+    for agent_id, cfg in enabled_agents.items():
+        open_count = len(agent_open[agent_id])
+        if open_count >= cfg.max_positions:
+            continue
+
+        last_exit = cooldowns[agent_id].get(ticker)
+        if last_exit:
+            last_dt = datetime.strptime(last_exit, "%Y-%m-%d")
+            curr_dt = datetime.strptime(date_str, "%Y-%m-%d")
+            if (curr_dt - last_dt).days < 5:
+                continue
+
+        ticker_positions = sum(
+            1 for ot in agent_open[agent_id] if ot.ticker == ticker
+        )
+        if ticker_positions > 0:
+            continue
+
+        for tc in candidates:
+            agent_entries_attempted[agent_id] += 1
+
+            if not _filter_candidate(cfg, tc, state):
+                agent_entries_filtered[agent_id] += 1
+                continue
+
+            if len(agent_open[agent_id]) >= cfg.max_positions:
+                break
+
+            is_credit = tc.strategy in (CREDIT_STRATEGIES | MEDIUM_TERM_CREDIT | LONG_TERM_CREDIT)
+            dte = tc.suggested_dte if tc.suggested_dte > 0 else 7
+
+            raw_price = _price_position(
+                spot, spot, chain_iv, dte,
+                tc.strategy, is_credit,
+            )
+            if raw_price <= 0.05:
+                continue
+
+            slip = abs(raw_price) * (slippage_pct / 100.0)
+            if is_credit:
+                entry_price = raw_price - slip
+            else:
+                entry_price = raw_price + slip
+
+            if entry_price <= 0.01:
+                continue
+
+            tc_edge = getattr(tc, "edge_source", edge_source)
+
+            ot = AgentTrade(
+                agent_id=agent_id,
+                ticker=ticker,
+                strategy=tc.strategy,
+                entry_date=date_str,
+                entry_spot=spot,
+                entry_price=entry_price,
+                entry_iv=chain_iv,
+                dte_at_entry=dte,
+                confluence_score=tc.confluence_score,
+                regime=tc.regime,
+                bias_label=tc.bias_label,
+                is_credit=is_credit,
+                legs=getattr(tc, "legs", []),
+                entry_regime=current_regime if isinstance(current_regime, str) else "",
+                edge_source=tc_edge,
+            )
+            agent_open[agent_id].append(ot)
+            break
 
 
 def run_agent_backtest(
@@ -247,184 +531,109 @@ def run_agent_backtest(
     dates_processed = 0
     all_dates = set()
 
-    for ticker in tickers:
-        available = _get_dates(ticker)
-        ticker_dates = [d for d in available if start_date <= d <= end_date]
-        all_dates.update(ticker_dates)
+    is_mt_lt = dte_tier in ("medium_term", "long_term")
 
-        logger.info(
-            "Backtesting %s: %d dates available (%s to %s)",
-            ticker, len(ticker_dates),
-            ticker_dates[0] if ticker_dates else "none",
-            ticker_dates[-1] if ticker_dates else "none",
-        )
+    # For medium/long-term, get dates from swing_signals instead of chain snapshots
+    if is_mt_lt:
+        from data.chain_store import get_swing_signals
+        for ticker in tickers:
+            signals = get_swing_signals(ticker, start_date=start_date, end_date=end_date)
+            ticker_dates = [s["snapshot_date"] for s in signals]
+            all_dates.update(ticker_dates)
 
-        for date_str in ticker_dates:
-            snapshot = _get_snap(ticker, date_str)
-            if not snapshot or not snapshot.contracts:
-                continue
+            logger.info(
+                "Backtesting %s (signal replay, %s): %d dates",
+                ticker, dte_tier, len(ticker_dates),
+            )
 
-            # Build MarketState from stored snapshot
-            try:
-                from market_state import build_market_state
-                state = build_market_state(ticker, chain_snapshot=snapshot)
-            except Exception as e:
-                logger.warning("MarketState failed for %s %s: %s", ticker, date_str, e)
-                continue
-
-            # Generate trade candidates
-            try:
-                from trade_generator import generate_trades
-                candidates = generate_trades(state)
-            except Exception as e:
-                logger.warning("TradeGen failed for %s %s: %s", ticker, date_str, e)
-                continue
-
-            spot = state.spot
-            chain_iv = state.chain_iv if not math.isnan(state.chain_iv) else 0.20
-
-            # Check exits for open trades
-            for agent_id in enabled_agents:
-                still_open = []
-                for ot in agent_open[agent_id]:
-                    if ot.ticker != ticker:
-                        still_open.append(ot)
-                        continue
-
-                    entry_dt = datetime.strptime(ot.entry_date, "%Y-%m-%d")
-                    current_dt = datetime.strptime(date_str, "%Y-%m-%d")
-                    days_held = (current_dt - entry_dt).days
-                    dte_remaining = ot.dte_at_entry - days_held
-
-                    current_value = _price_position(
-                        spot, ot.entry_spot, chain_iv,
-                        dte_remaining, ot.strategy, ot.is_credit,
-                    )
-
-                    if ot.is_credit:
-                        pnl = ot.entry_price - current_value
-                    else:
-                        pnl = current_value - ot.entry_price
-
-                    rules = _get_exit_rules(ot.strategy, ot.dte_at_entry)
-                    exit_reason = None
-
-                    if ot.is_credit and ot.entry_price > 0:
-                        if pnl >= ot.entry_price * (rules["profit_pct"] / 100):
-                            exit_reason = "profit_target"
-                        elif pnl <= -ot.entry_price * (rules["loss_pct"] / 100):
-                            exit_reason = "stop_loss"
-                    elif not ot.is_credit and ot.entry_price > 0:
-                        if pnl >= ot.entry_price * (rules["profit_pct"] / 100):
-                            exit_reason = "profit_target"
-                        elif pnl <= -ot.entry_price * (rules["loss_pct"] / 100):
-                            exit_reason = "stop_loss"
-
-                    if dte_remaining <= rules["exit_dte"]:
-                        exit_reason = "dte_exit"
-
-                    if exit_reason:
-                        # Apply slippage to exit
-                        slip = abs(current_value) * (slippage_pct / 100.0)
-                        if ot.is_credit:
-                            final_pnl = ot.entry_price - (current_value + slip)
-                        else:
-                            final_pnl = (current_value - slip) - ot.entry_price
-
-                        entry_d = datetime.strptime(ot.entry_date, "%Y-%m-%d").date()
-                        exit_d = datetime.strptime(date_str, "%Y-%m-%d").date()
-
-                        trade = BacktestTrade(
-                            entry_date=entry_d,
-                            exit_date=exit_d,
-                            entry_price=round(ot.entry_price, 2),
-                            exit_price=round(current_value, 2),
-                            pnl=round(final_pnl * 100, 2),
-                            pnl_pct=round(final_pnl / max(abs(ot.entry_price), 0.01) * 100, 1),
-                            dte_at_entry=ot.dte_at_entry,
-                            dte_at_exit=max(dte_remaining, 0),
-                            regime=ot.regime,
-                            score=ot.confluence_score,
-                            win=final_pnl > 0,
-                            exit_reason=exit_reason,
-                            bias_label=ot.bias_label,
-                            iv_at_entry=round(ot.entry_iv, 4),
-                        )
-                        agent_trades[agent_id].append(trade)
-                        cooldowns[agent_id][ticker] = date_str
-                    else:
-                        still_open.append(ot)
-
-                agent_open[agent_id] = still_open
-
-            # Try new entries for each agent
-            for agent_id, cfg in enabled_agents.items():
-                open_count = len(agent_open[agent_id])
-                if open_count >= cfg.max_positions:
-                    continue
-
-                # Cooldown: 5 days after last exit on same ticker
-                last_exit = cooldowns[agent_id].get(ticker)
-                if last_exit:
-                    last_dt = datetime.strptime(last_exit, "%Y-%m-%d")
-                    curr_dt = datetime.strptime(date_str, "%Y-%m-%d")
-                    if (curr_dt - last_dt).days < 5:
-                        continue
-
-                # Already has a position in this ticker?
-                ticker_positions = sum(
-                    1 for ot in agent_open[agent_id] if ot.ticker == ticker
+            for date_str in ticker_dates:
+                sig_state, candidates = _build_candidates_from_signals(
+                    ticker, date_str, dte_tier,
                 )
-                if ticker_positions > 0:
+                if sig_state is None:
                     continue
 
-                for tc in candidates:
-                    agent_entries_attempted[agent_id] += 1
+                # Need spot from chain snapshot if available, else skip pricing
+                snapshot = _get_snap(ticker, date_str) if _get_snap else None
+                if snapshot and snapshot.contracts:
+                    try:
+                        from market_state import build_market_state
+                        ms = build_market_state(ticker, chain_snapshot=snapshot)
+                        spot = ms.spot
+                        chain_iv = ms.chain_iv if not math.isnan(ms.chain_iv) else sig_state["chain_iv"]
+                    except Exception:
+                        spot = 0
+                        chain_iv = sig_state["chain_iv"]
+                else:
+                    spot = 0
+                    chain_iv = sig_state["chain_iv"]
 
-                    if not _filter_candidate(cfg, tc, state):
-                        agent_entries_filtered[agent_id] += 1
-                        continue
+                if spot <= 0:
+                    continue
 
-                    if len(agent_open[agent_id]) >= cfg.max_positions:
-                        break
+                sig_state["spot"] = spot
+                current_regime = sig_state.get("regime", "")
 
-                    is_credit = tc.strategy in (CREDIT_STRATEGIES | MEDIUM_TERM_CREDIT | LONG_TERM_CREDIT)
-                    dte = tc.suggested_dte if tc.suggested_dte > 0 else 7
+                # Check exits for open trades (with regime-transition logic)
+                _check_exits(
+                    enabled_agents, agent_open, agent_trades, cooldowns,
+                    ticker, date_str, spot, chain_iv, slippage_pct,
+                    current_regime=current_regime,
+                )
 
-                    raw_price = _price_position(
-                        spot, spot, chain_iv, dte,
-                        tc.strategy, is_credit,
-                    )
-                    if raw_price <= 0.05:
-                        continue
+                # Try new entries
+                _try_entries(
+                    enabled_agents, agent_open, cooldowns,
+                    agent_entries_attempted, agent_entries_filtered,
+                    candidates, sig_state, ticker, date_str, spot, chain_iv,
+                    slippage_pct,
+                )
+    else:
+        for ticker in tickers:
+            available = _get_dates(ticker)
+            ticker_dates = [d for d in available if start_date <= d <= end_date]
+            all_dates.update(ticker_dates)
 
-                    # Apply entry slippage
-                    slip = abs(raw_price) * (slippage_pct / 100.0)
-                    if is_credit:
-                        entry_price = raw_price - slip
-                    else:
-                        entry_price = raw_price + slip
+            logger.info(
+                "Backtesting %s: %d dates available (%s to %s)",
+                ticker, len(ticker_dates),
+                ticker_dates[0] if ticker_dates else "none",
+                ticker_dates[-1] if ticker_dates else "none",
+            )
 
-                    if entry_price <= 0.01:
-                        continue
+            for date_str in ticker_dates:
+                snapshot = _get_snap(ticker, date_str)
+                if not snapshot or not snapshot.contracts:
+                    continue
 
-                    ot = AgentTrade(
-                        agent_id=agent_id,
-                        ticker=ticker,
-                        strategy=tc.strategy,
-                        entry_date=date_str,
-                        entry_spot=spot,
-                        entry_price=entry_price,
-                        entry_iv=chain_iv,
-                        dte_at_entry=dte,
-                        confluence_score=tc.confluence_score,
-                        regime=tc.regime,
-                        bias_label=tc.bias_label,
-                        is_credit=is_credit,
-                        legs=tc.legs,
-                    )
-                    agent_open[agent_id].append(ot)
-                    break  # one entry per ticker per day per agent
+                try:
+                    from market_state import build_market_state
+                    state = build_market_state(ticker, chain_snapshot=snapshot)
+                except Exception as e:
+                    logger.warning("MarketState failed for %s %s: %s", ticker, date_str, e)
+                    continue
+
+                try:
+                    from trade_generator import generate_trades
+                    candidates = generate_trades(state)
+                except Exception as e:
+                    logger.warning("TradeGen failed for %s %s: %s", ticker, date_str, e)
+                    continue
+
+                spot = state.spot
+                chain_iv = state.chain_iv if not math.isnan(state.chain_iv) else 0.20
+
+                _check_exits(
+                    enabled_agents, agent_open, agent_trades, cooldowns,
+                    ticker, date_str, spot, chain_iv, slippage_pct,
+                )
+
+                _try_entries(
+                    enabled_agents, agent_open, cooldowns,
+                    agent_entries_attempted, agent_entries_filtered,
+                    candidates, state, ticker, date_str, spot, chain_iv,
+                    slippage_pct,
+                )
 
     dates_processed = len(all_dates)
 
