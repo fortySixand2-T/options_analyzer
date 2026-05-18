@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 BULLISH_STRATEGIES = {"long_call_spread", "short_put_spread"}
 BEARISH_STRATEGIES = {"long_put_spread", "short_call_spread"}
 CREDIT_STRATEGIES = {"iron_condor", "short_put_spread", "short_call_spread"}
+MEDIUM_TERM_CREDIT = {"mt_calendar_spread", "mt_diagonal_spread", "mt_iron_butterfly"}
+LONG_TERM_CREDIT = {"lt_calendar_spread", "lt_diagonal_spread"}
 
 
 @dataclass
@@ -46,6 +48,8 @@ class AgentTrade:
     bias_label: str
     is_credit: bool
     legs: List[Dict]
+    entry_regime: str = ""
+    edge_source: str = ""
 
 
 @dataclass
@@ -89,8 +93,9 @@ class AgentBacktestSummary:
         }
 
 
-def _get_exit_rules(strategy: str) -> dict:
-    rules = {
+def _get_exit_rules(strategy: str, dte_at_entry: int = 14) -> dict:
+    # Short-term rules (0-14 DTE)
+    _short_rules = {
         "iron_condor":       {"profit_pct": 50, "loss_pct": 200, "exit_dte": 1},
         "short_put_spread":  {"profit_pct": 50, "loss_pct": 200, "exit_dte": 1},
         "short_call_spread": {"profit_pct": 50, "loss_pct": 200, "exit_dte": 1},
@@ -98,7 +103,33 @@ def _get_exit_rules(strategy: str) -> dict:
         "long_put_spread":   {"profit_pct": 75, "loss_pct": 100, "exit_dte": 2},
         "butterfly":         {"profit_pct": 100, "loss_pct": 100, "exit_dte": 0},
     }
-    return rules.get(strategy, {"profit_pct": 50, "loss_pct": 200, "exit_dte": 1})
+
+    # Medium/long-term rules (30-180 DTE): wider targets, earlier time exit
+    _medium_rules = {
+        "calendar_spread":      {"profit_pct": 35, "loss_pct": 100, "exit_dte": 14},
+        "mt_calendar_spread":   {"profit_pct": 35, "loss_pct": 100, "exit_dte": 14},
+        "diagonal_spread":      {"profit_pct": 40, "loss_pct": 100, "exit_dte": 14},
+        "mt_diagonal_spread":   {"profit_pct": 40, "loss_pct": 100, "exit_dte": 14},
+        "iron_butterfly":       {"profit_pct": 50, "loss_pct": 150, "exit_dte": 14},
+        "mt_iron_butterfly":    {"profit_pct": 50, "loss_pct": 150, "exit_dte": 14},
+        "long_straddle":        {"profit_pct": 50, "loss_pct": 50,  "exit_dte": 21},
+        "mt_long_straddle":     {"profit_pct": 50, "loss_pct": 50,  "exit_dte": 21},
+        # Long-term (90-180 DTE): wider stops, earlier time exit
+        "lt_calendar_spread":   {"profit_pct": 30, "loss_pct": 80,  "exit_dte": 21},
+        "lt_diagonal_spread":   {"profit_pct": 35, "loss_pct": 80,  "exit_dte": 21},
+        "lt_long_straddle":     {"profit_pct": 50, "loss_pct": 50,  "exit_dte": 30},
+    }
+
+    if dte_at_entry >= 30 and strategy in _medium_rules:
+        return _medium_rules[strategy]
+
+    if strategy in _short_rules:
+        return _short_rules[strategy]
+
+    if strategy in _medium_rules:
+        return _medium_rules[strategy]
+
+    return {"profit_pct": 50, "loss_pct": 200, "exit_dte": 1}
 
 
 def _price_position(spot: float, entry_spot: float, iv: float,
@@ -171,6 +202,7 @@ def run_agent_backtest(
     label: str = "backfill",
     slippage_pct: float = 3.0,
     source: str = "chain_store",
+    dte_tier: Optional[str] = None,
 ) -> AgentBacktestSummary:
     """Replay historical chain snapshots through all agent filters.
 
@@ -182,6 +214,7 @@ def run_agent_backtest(
         label: chain_store snapshot label to use.
         slippage_pct: Slippage as % of premium.
         source: Data source — "chain_store" (local snapshots) or "dolt" (DoltHub options DB).
+        dte_tier: Filter to only run agents matching this tier (short_term, swing, medium_term, long_term).
 
     Returns:
         AgentBacktestSummary with per-agent results.
@@ -200,7 +233,8 @@ def run_agent_backtest(
         config = load_config()
 
     enabled_agents = {
-        name: cfg for name, cfg in config.agents.items() if cfg.enabled
+        name: cfg for name, cfg in config.agents.items()
+        if cfg.enabled and (dte_tier is None or cfg.dte_tier == dte_tier)
     }
 
     # Per-agent state
@@ -272,7 +306,7 @@ def run_agent_backtest(
                     else:
                         pnl = current_value - ot.entry_price
 
-                    rules = _get_exit_rules(ot.strategy)
+                    rules = _get_exit_rules(ot.strategy, ot.dte_at_entry)
                     exit_reason = None
 
                     if ot.is_credit and ot.entry_price > 0:
@@ -354,7 +388,7 @@ def run_agent_backtest(
                     if len(agent_open[agent_id]) >= cfg.max_positions:
                         break
 
-                    is_credit = tc.strategy in CREDIT_STRATEGIES
+                    is_credit = tc.strategy in (CREDIT_STRATEGIES | MEDIUM_TERM_CREDIT | LONG_TERM_CREDIT)
                     dte = tc.suggested_dte if tc.suggested_dte > 0 else 7
 
                     raw_price = _price_position(
