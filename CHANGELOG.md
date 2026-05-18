@@ -1,5 +1,10 @@
 # Changelog
 
+- [2026-05-18] Modified: config/agents.yaml — Disable momentum agent (negative expectancy at short DTE), differentiate opportunistic (iron condors, lower confluence), redistribute capital to vol_harvester (20%) and opportunistic (10%)
+- [2026-05-18] Modified: config/agents.yaml — Tune short-term agents: conservative min_confluence 80->75, momentum min_dte=7 + LOW_IV only, opportunistic HIGH_IV only
+- [2026-05-18] Modified: src/agents/agent_config.py — Add min_dte field to AgentConfig for DTE filtering
+- [2026-05-18] Modified: src/agents/orchestrator.py — Add min_dte filter to _filter_for_agent
+- [2026-05-18] Modified: src/backtest/agent_backtest.py — Add min_dte filter to _filter_candidate
 - [2026-05-18] Modified: config/agents.yaml — Raise medium_term_harvester min_confluence 65->70 to filter weak setups
 - [2026-05-18] Modified: config/agents.yaml — Filter MODERATE_IV from medium/long-term agents (consistent loser across all tickers)
 - [2026-05-18] Modified: src/scanner/iv_rank.py — Split ETF into broad_etf/tech_etf/small_cap_etf with per-class thresholds (QQQ 60/38, IWM 55/33, SPY 50/30)
