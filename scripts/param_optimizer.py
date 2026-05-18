@@ -184,6 +184,7 @@ class PrecomputedDay:
     iv_rank: float
     bias_score: int
     candidates: List[Any]
+    contracts: List[Any] = None
 
 
 def precompute_days(ticker: str, dates: List[str], snapshots: Dict) -> List[PrecomputedDay]:
@@ -217,6 +218,7 @@ def precompute_days(ticker: str, dates: List[str], snapshots: Dict) -> List[Prec
             iv_rank=iv_rank,
             bias_score=bias_score,
             candidates=candidates,
+            contracts=snapshot.contracts,
         ))
     return days
 
@@ -228,6 +230,7 @@ def _run_single_backtest(
     precomputed: List[PrecomputedDay],
     start_date: str,
     end_date: str,
+    pricing_mode: str = "bs_simulated",
 ) -> Optional[BacktestStats]:
     """Run a single param combination through precomputed data."""
     stop_loss_pct = params["stop_loss_pct"]
@@ -237,7 +240,11 @@ def _run_single_backtest(
     iv_rank_threshold = params["iv_rank_threshold"]
     min_confluence = params["min_confluence"]
     min_bias_strength = params["min_bias_strength"]
-    slippage_pct = 3.0
+    slippage_pct = 3.0 if pricing_mode == "bs_simulated" else 0.0
+
+    use_real = pricing_mode == "real_bidask"
+    if use_real:
+        from backtest.real_pricer import build_spread, reprice_spread, compute_pnl
 
     allowed_strategies = STRATEGY_CLASSES[strategy_class]
     trades: List[BacktestTrade] = []
@@ -254,34 +261,51 @@ def _run_single_backtest(
             days_held = (current_dt - entry_dt).days
             dte_remaining = open_trade["dte"] - days_held
 
-            current_value = _price_position_fast(
-                day.spot, open_trade["entry_spot"], day.chain_iv,
-                dte_remaining, open_trade["strategy"], open_trade["is_credit"],
-            )
-
-            if open_trade["is_credit"]:
-                pnl = open_trade["entry_price"] - current_value
+            if use_real:
+                position = open_trade.get("position")
+                if position and day.contracts:
+                    close_value = reprice_spread(position, day.contracts)
+                    if close_value is None:
+                        if dte_remaining <= 1:
+                            close_value = 0.0
+                        else:
+                            continue
+                    current_pnl = compute_pnl(position, close_value)
+                else:
+                    continue
             else:
-                pnl = current_value - open_trade["entry_price"]
+                current_value = _price_position_fast(
+                    day.spot, open_trade["entry_spot"], day.chain_iv,
+                    dte_remaining, open_trade["strategy"], open_trade["is_credit"],
+                )
+                if open_trade["is_credit"]:
+                    current_pnl = open_trade["entry_price"] - current_value
+                else:
+                    current_pnl = current_value - open_trade["entry_price"]
 
             exit_reason = None
             entry_price = open_trade["entry_price"]
 
             if entry_price > 0:
-                if pnl >= entry_price * (profit_target_pct / 100):
+                if current_pnl >= entry_price * (profit_target_pct / 100):
                     exit_reason = "profit_target"
-                elif pnl <= -entry_price * (stop_loss_pct / 100):
+                elif current_pnl <= -entry_price * (stop_loss_pct / 100):
                     exit_reason = "stop_loss"
 
             if dte_remaining <= 1:
                 exit_reason = "dte_exit"
 
             if exit_reason:
-                slip = abs(current_value) * (slippage_pct / 100.0)
-                if open_trade["is_credit"]:
-                    final_pnl = entry_price - (current_value + slip)
+                if use_real:
+                    final_pnl = current_pnl
+                    exit_price = close_value if close_value else 0.0
                 else:
-                    final_pnl = (current_value - slip) - entry_price
+                    slip = abs(current_value) * (slippage_pct / 100.0)
+                    if open_trade["is_credit"]:
+                        final_pnl = entry_price - (current_value + slip)
+                    else:
+                        final_pnl = (current_value - slip) - entry_price
+                    exit_price = current_value
 
                 entry_d = datetime.strptime(open_trade["entry_date"], "%Y-%m-%d").date()
                 exit_d = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -290,7 +314,7 @@ def _run_single_backtest(
                     entry_date=entry_d,
                     exit_date=exit_d,
                     entry_price=round(entry_price, 2),
-                    exit_price=round(current_value, 2),
+                    exit_price=round(exit_price, 2),
                     pnl=round(final_pnl * 100, 2),
                     pnl_pct=round(final_pnl / max(abs(entry_price), 0.01) * 100, 1),
                     dte_at_entry=open_trade["dte"],
@@ -332,29 +356,54 @@ def _run_single_backtest(
                     continue
 
                 is_credit = tc.strategy in CREDIT_STRATEGIES
-                raw_price = _price_position_fast(
-                    day.spot, day.spot, day.chain_iv, dte, tc.strategy, is_credit
-                )
-                if raw_price <= 0.05:
-                    continue
 
-                slip = abs(raw_price) * (slippage_pct / 100.0)
-                entry_price = (raw_price - slip) if is_credit else (raw_price + slip)
-                if entry_price <= 0.01:
-                    continue
-
-                open_trade = {
-                    "entry_date": date_str,
-                    "entry_spot": day.spot,
-                    "entry_price": entry_price,
-                    "dte": dte,
-                    "strategy": tc.strategy,
-                    "is_credit": is_credit,
-                    "regime": tc.regime,
-                    "confluence": tc.confluence_score,
-                    "bias_label": tc.bias_label,
-                    "iv": day.chain_iv,
-                }
+                if use_real:
+                    if not day.contracts:
+                        continue
+                    position = build_spread(
+                        day.contracts, day.spot, tc.strategy, date_str,
+                        dte_min=dte_min, dte_max=dte_max,
+                    )
+                    if not position:
+                        continue
+                    entry_price = abs(position.entry_net)
+                    if entry_price <= 0.01:
+                        continue
+                    open_trade = {
+                        "entry_date": date_str,
+                        "entry_spot": day.spot,
+                        "entry_price": entry_price,
+                        "dte": position.dte,
+                        "strategy": tc.strategy,
+                        "is_credit": is_credit,
+                        "regime": tc.regime,
+                        "confluence": tc.confluence_score,
+                        "bias_label": tc.bias_label,
+                        "iv": day.chain_iv,
+                        "position": position,
+                    }
+                else:
+                    raw_price = _price_position_fast(
+                        day.spot, day.spot, day.chain_iv, dte, tc.strategy, is_credit
+                    )
+                    if raw_price <= 0.05:
+                        continue
+                    slip = abs(raw_price) * (slippage_pct / 100.0)
+                    entry_price = (raw_price - slip) if is_credit else (raw_price + slip)
+                    if entry_price <= 0.01:
+                        continue
+                    open_trade = {
+                        "entry_date": date_str,
+                        "entry_spot": day.spot,
+                        "entry_price": entry_price,
+                        "dte": dte,
+                        "strategy": tc.strategy,
+                        "is_credit": is_credit,
+                        "regime": tc.regime,
+                        "confluence": tc.confluence_score,
+                        "bias_label": tc.bias_label,
+                        "iv": day.chain_iv,
+                    }
                 break
 
     if len(trades) < 3:
@@ -529,7 +578,8 @@ def optimize_ticker(
 
         for params in combos:
             stats = _run_single_backtest(
-                ticker, sc, params, precomputed, start_date, end_date
+                ticker, sc, params, precomputed, start_date, end_date,
+                pricing_mode=pricing_mode,
             )
             if stats is None:
                 continue

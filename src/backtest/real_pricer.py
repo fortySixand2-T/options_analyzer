@@ -57,14 +57,16 @@ class SpreadPosition:
 
 
 def find_contracts_near(contracts, strike_target: float, option_type: str,
-                        expiry: str) -> Optional[Dict]:
+                        expiry: str, exclude_strikes: Optional[List[float]] = None) -> Optional[Dict]:
     """Find the contract closest to target strike with given type and expiry."""
+    excl = set(exclude_strikes or [])
     matches = [
         c for c in contracts
         if c.option_type == option_type
         and c.expiry == expiry
         and c.bid is not None and c.bid > 0
         and c.ask is not None and c.ask > 0
+        and c.strike not in excl
     ]
     if not matches:
         return None
@@ -124,8 +126,11 @@ def build_spread(contracts, spot: float, strategy: str, date_str: str,
         short_k = atm - inc
         long_k = atm - 2 * inc
         short_c = find_contracts_near(contracts, short_k, "put", expiry)
-        long_c = find_contracts_near(contracts, long_k, "put", expiry)
-        if not short_c or not long_c:
+        if not short_c:
+            return None
+        long_c = find_contracts_near(contracts, long_k, "put", expiry,
+                                     exclude_strikes=[short_c.strike])
+        if not long_c:
             return None
         if short_c.strike <= long_c.strike:
             return None
@@ -145,8 +150,11 @@ def build_spread(contracts, spot: float, strategy: str, date_str: str,
         short_k = atm + inc
         long_k = atm + 2 * inc
         short_c = find_contracts_near(contracts, short_k, "call", expiry)
-        long_c = find_contracts_near(contracts, long_k, "call", expiry)
-        if not short_c or not long_c:
+        if not short_c:
+            return None
+        long_c = find_contracts_near(contracts, long_k, "call", expiry,
+                                     exclude_strikes=[short_c.strike])
+        if not long_c:
             return None
         if long_c.strike <= short_c.strike:
             return None
@@ -163,16 +171,16 @@ def build_spread(contracts, spot: float, strategy: str, date_str: str,
         return SpreadPosition(strategy, legs, entry_net, True, expiry, max_risk)
 
     elif strategy == "iron_condor":
-        # Put side
-        sp_k = atm - inc
-        bp_k = atm - 2 * inc
-        sp = find_contracts_near(contracts, sp_k, "put", expiry)
-        bp = find_contracts_near(contracts, bp_k, "put", expiry)
-        # Call side
-        sc_k = atm + inc
-        bc_k = atm + 2 * inc
-        sc = find_contracts_near(contracts, sc_k, "call", expiry)
-        bc = find_contracts_near(contracts, bc_k, "call", expiry)
+        sp = find_contracts_near(contracts, atm - inc, "put", expiry)
+        if not sp:
+            return None
+        bp = find_contracts_near(contracts, atm - 2 * inc, "put", expiry,
+                                 exclude_strikes=[sp.strike])
+        sc = find_contracts_near(contracts, atm + inc, "call", expiry)
+        if not sc:
+            return None
+        bc = find_contracts_near(contracts, atm + 2 * inc, "call", expiry,
+                                 exclude_strikes=[sc.strike])
 
         if not all([sp, bp, sc, bc]):
             return None
@@ -193,11 +201,12 @@ def build_spread(contracts, spot: float, strategy: str, date_str: str,
         return SpreadPosition(strategy, legs, entry_net, True, expiry, max_risk)
 
     elif strategy == "long_call_spread":
-        long_k = atm
-        short_k = atm + inc
-        long_c = find_contracts_near(contracts, long_k, "call", expiry)
-        short_c = find_contracts_near(contracts, short_k, "call", expiry)
-        if not long_c or not short_c:
+        long_c = find_contracts_near(contracts, atm, "call", expiry)
+        if not long_c:
+            return None
+        short_c = find_contracts_near(contracts, atm + inc, "call", expiry,
+                                      exclude_strikes=[long_c.strike])
+        if not short_c:
             return None
         if short_c.strike <= long_c.strike:
             return None
@@ -213,11 +222,12 @@ def build_spread(contracts, spot: float, strategy: str, date_str: str,
         return SpreadPosition(strategy, legs, entry_net, False, expiry, max_risk)
 
     elif strategy == "long_put_spread":
-        long_k = atm
-        short_k = atm - inc
-        long_c = find_contracts_near(contracts, long_k, "put", expiry)
-        short_c = find_contracts_near(contracts, short_k, "put", expiry)
-        if not long_c or not short_c:
+        long_c = find_contracts_near(contracts, atm, "put", expiry)
+        if not long_c:
+            return None
+        short_c = find_contracts_near(contracts, atm - inc, "put", expiry,
+                                      exclude_strikes=[long_c.strike])
+        if not short_c:
             return None
         if long_c.strike <= short_c.strike:
             return None
@@ -233,13 +243,16 @@ def build_spread(contracts, spot: float, strategy: str, date_str: str,
         return SpreadPosition(strategy, legs, entry_net, False, expiry, max_risk)
 
     elif strategy == "butterfly":
-        lo_k = atm - inc
-        mid_k = atm
-        hi_k = atm + inc
-        lo = find_contracts_near(contracts, lo_k, "call", expiry)
-        mid_c = find_contracts_near(contracts, mid_k, "call", expiry)
-        hi = find_contracts_near(contracts, hi_k, "call", expiry)
-        if not all([lo, mid_c, hi]):
+        lo = find_contracts_near(contracts, atm - inc, "call", expiry)
+        if not lo:
+            return None
+        mid_c = find_contracts_near(contracts, atm, "call", expiry,
+                                    exclude_strikes=[lo.strike])
+        if not mid_c:
+            return None
+        hi = find_contracts_near(contracts, atm + inc, "call", expiry,
+                                 exclude_strikes=[lo.strike, mid_c.strike])
+        if not hi:
             return None
 
         legs = [

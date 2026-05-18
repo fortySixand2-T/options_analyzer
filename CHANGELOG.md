@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-17] Modified: scripts/param_optimizer.py — Integrate real_pricer into optimizer; build_spread/reprice_spread replace BS pricing when --pricing-mode real_bidask
+- [2026-05-17] Modified: src/backtest/real_pricer.py — Add exclude_strikes to find_contracts_near to prevent same-strike collisions (96% vs 78% success rate)
 - [2026-05-17] Modified: scripts/param_optimizer.py — Add pricing_mode column (bs_simulated/real_bidask) to tag all optimization results with their pricing method
 - [2026-05-17] Modified: src/ui/app.py — Add pricing_mode query param to /api/params/best endpoints
 - [2026-05-17] Created: docs/param-optimization-report.md — Detailed optimization results for all 9 tickers with per-ticker optimal params
