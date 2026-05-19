@@ -407,8 +407,11 @@ def _check_exits(
     enabled_agents, agent_open, agent_trades, cooldowns,
     ticker, date_str, spot, chain_iv, slippage_pct,
     current_regime: str = "",
+    contracts=None, pricing_mode: str = "bs",
 ):
     """Check exit conditions for all open trades on this ticker/date."""
+    from backtest.real_pricer import reprice_spread
+
     for agent_id in enabled_agents:
         still_open = []
         for ot in agent_open[agent_id]:
@@ -421,15 +424,32 @@ def _check_exits(
             days_held = (current_dt - entry_dt).days
             dte_remaining = ot.dte_at_entry - days_held
 
-            current_value = _price_position(
-                spot, ot.entry_spot, chain_iv,
-                dte_remaining, ot.strategy, ot.is_credit,
-            )
-
-            if ot.is_credit:
-                pnl = ot.entry_price - current_value
+            if pricing_mode == "real" and contracts and hasattr(ot, "spread_position") and ot.spread_position:
+                close_val = reprice_spread(ot.spread_position, contracts)
+                if close_val is not None:
+                    current_value = abs(close_val)
+                    if ot.is_credit:
+                        pnl = ot.entry_price - current_value
+                    else:
+                        pnl = current_value - ot.entry_price
+                else:
+                    current_value = _price_position(
+                        spot, ot.entry_spot, chain_iv,
+                        dte_remaining, ot.strategy, ot.is_credit,
+                    )
+                    if ot.is_credit:
+                        pnl = ot.entry_price - current_value
+                    else:
+                        pnl = current_value - ot.entry_price
             else:
-                pnl = current_value - ot.entry_price
+                current_value = _price_position(
+                    spot, ot.entry_spot, chain_iv,
+                    dte_remaining, ot.strategy, ot.is_credit,
+                )
+                if ot.is_credit:
+                    pnl = ot.entry_price - current_value
+                else:
+                    pnl = current_value - ot.entry_price
 
             rules = _get_exit_rules(ot.strategy, ot.dte_at_entry)
             exit_reason = None
@@ -463,11 +483,14 @@ def _check_exits(
                 )
 
             if exit_reason:
-                slip = abs(current_value) * (slippage_pct / 100.0)
-                if ot.is_credit:
-                    final_pnl = ot.entry_price - (current_value + slip)
+                if pricing_mode == "real":
+                    final_pnl = pnl
                 else:
-                    final_pnl = (current_value - slip) - ot.entry_price
+                    slip = abs(current_value) * (slippage_pct / 100.0)
+                    if ot.is_credit:
+                        final_pnl = ot.entry_price - (current_value + slip)
+                    else:
+                        final_pnl = (current_value - slip) - ot.entry_price
 
                 entry_d = datetime.strptime(ot.entry_date, "%Y-%m-%d").date()
                 exit_d = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -501,8 +524,11 @@ def _try_entries(
     agent_entries_attempted, agent_entries_filtered,
     candidates, state, ticker, date_str, spot, chain_iv,
     slippage_pct,
+    contracts=None, pricing_mode: str = "bs",
 ):
     """Try new entries for each agent on this ticker/date."""
+    from backtest.real_pricer import build_spread
+
     # Extract regime for entry_regime tracking
     if isinstance(state, dict):
         current_regime = state.get("regime", "")
@@ -510,6 +536,12 @@ def _try_entries(
     else:
         current_regime = getattr(state, "regime", "")
         edge_source = ""
+
+    # DTE ranges by tier for real pricing spread construction
+    _dte_ranges = {
+        "short_term": (3, 14), "swing": (14, 60),
+        "medium_term": (30, 90), "long_term": (90, 180),
+    }
 
     for agent_id, cfg in enabled_agents.items():
         open_count = len(agent_open[agent_id])
@@ -542,18 +574,38 @@ def _try_entries(
             is_credit = tc.strategy in (CREDIT_STRATEGIES | SWING_CREDIT | MEDIUM_TERM_CREDIT | LONG_TERM_CREDIT)
             dte = tc.suggested_dte if tc.suggested_dte > 0 else 7
 
-            raw_price = _price_position(
-                spot, spot, chain_iv, dte,
-                tc.strategy, is_credit,
-            )
-            if raw_price <= 0.05:
-                continue
+            spread_position = None
 
-            slip = abs(raw_price) * (slippage_pct / 100.0)
-            if is_credit:
-                entry_price = raw_price - slip
+            if pricing_mode == "real" and contracts:
+                dte_range = _dte_ranges.get(cfg.dte_tier, (3, 14))
+                base_strat = tc.strategy
+                for prefix in ("mt_", "lt_"):
+                    if base_strat.startswith(prefix):
+                        base_strat = base_strat[len(prefix):]
+                        break
+                spread_position = build_spread(
+                    contracts, spot, base_strat, date_str,
+                    dte_min=dte_range[0], dte_max=dte_range[1],
+                )
+                if spread_position:
+                    entry_price = abs(spread_position.entry_net)
+                    is_credit = spread_position.is_credit
+                    dte = spread_position.dte
+                else:
+                    continue
             else:
-                entry_price = raw_price + slip
+                raw_price = _price_position(
+                    spot, spot, chain_iv, dte,
+                    tc.strategy, is_credit,
+                )
+                if raw_price <= 0.05:
+                    continue
+
+                slip = abs(raw_price) * (slippage_pct / 100.0)
+                if is_credit:
+                    entry_price = raw_price - slip
+                else:
+                    entry_price = raw_price + slip
 
             if entry_price <= 0.01:
                 continue
@@ -577,6 +629,8 @@ def _try_entries(
                 entry_regime=current_regime if isinstance(current_regime, str) else "",
                 edge_source=tc_edge,
             )
+            if spread_position:
+                ot.spread_position = spread_position
             agent_open[agent_id].append(ot)
             break
 
@@ -590,6 +644,7 @@ def run_agent_backtest(
     slippage_pct: float = 3.0,
     source: str = "chain_store",
     dte_tier: Optional[str] = None,
+    pricing_mode: str = "bs",
 ) -> AgentBacktestSummary:
     """Replay historical chain snapshots through all agent filters.
 
@@ -599,9 +654,10 @@ def run_agent_backtest(
         end_date: End date "YYYY-MM-DD".
         config: Orchestrator config (loaded from agents.yaml if None).
         label: chain_store snapshot label to use.
-        slippage_pct: Slippage as % of premium.
+        slippage_pct: Slippage as % of premium (ignored in "real" pricing mode).
         source: Data source — "chain_store" (local snapshots) or "dolt" (DoltHub options DB).
         dte_tier: Filter to only run agents matching this tier (short_term, swing, medium_term, long_term).
+        pricing_mode: "bs" for Black-Scholes theoretical or "real" for bid/ask from chain snapshots.
 
     Returns:
         AgentBacktestSummary with per-agent results.
@@ -698,11 +754,13 @@ def run_agent_backtest(
                         continue
 
                 current_regime = sig_state.get("regime", "")
+                snap_contracts = snapshot.contracts if snapshot else None
 
                 _check_exits(
                     enabled_agents, agent_open, agent_trades, cooldowns,
                     ticker, date_str, spot, chain_iv, slippage_pct,
                     current_regime=current_regime,
+                    contracts=snap_contracts, pricing_mode=pricing_mode,
                 )
 
                 _try_entries(
@@ -710,6 +768,7 @@ def run_agent_backtest(
                     agent_entries_attempted, agent_entries_filtered,
                     candidates, sig_state, ticker, date_str, spot, chain_iv,
                     slippage_pct,
+                    contracts=snap_contracts, pricing_mode=pricing_mode,
                 )
     else:
         for ticker in tickers:
@@ -749,6 +808,7 @@ def run_agent_backtest(
                 _check_exits(
                     enabled_agents, agent_open, agent_trades, cooldowns,
                     ticker, date_str, spot, chain_iv, slippage_pct,
+                    contracts=snapshot.contracts, pricing_mode=pricing_mode,
                 )
 
                 _try_entries(
@@ -756,6 +816,7 @@ def run_agent_backtest(
                     agent_entries_attempted, agent_entries_filtered,
                     candidates, state, ticker, date_str, spot, chain_iv,
                     slippage_pct,
+                    contracts=snapshot.contracts, pricing_mode=pricing_mode,
                 )
 
     dates_processed = len(all_dates)
@@ -780,9 +841,11 @@ def run_agent_backtest(
             entries_filtered=agent_entries_filtered[agent_id],
         )
 
-    return AgentBacktestSummary(
+    summary = AgentBacktestSummary(
         tickers=tickers,
         date_range=(start_date, end_date),
         dates_processed=dates_processed,
         agent_results=agent_results,
     )
+    summary.pricing_mode = pricing_mode
+    return summary
