@@ -266,6 +266,89 @@ def build_spread(contracts, spot: float, strategy: str, date_str: str,
         max_risk = abs(debit)
         return SpreadPosition(strategy, legs, entry_net, False, expiry, max_risk)
 
+    elif strategy == "calendar_spread":
+        back_expiry = _pick_expiry(contracts, dte_min, dte_max, date_str)
+        front_expiry = _pick_expiry(contracts, max(dte_min // 3, 3), dte_min, date_str)
+        if not back_expiry or not front_expiry or front_expiry >= back_expiry:
+            return None
+
+        sell_c = find_contracts_near(contracts, atm, "call", front_expiry)
+        buy_c = find_contracts_near(contracts, atm, "call", back_expiry)
+        if not sell_c or not buy_c:
+            return None
+
+        legs = [
+            SpreadLeg(sell_c.strike, front_expiry, "call", "sell",
+                      sell_c.bid, sell_c.ask, sell_c.mid, sell_c.implied_volatility or 0),
+            SpreadLeg(buy_c.strike, back_expiry, "call", "buy",
+                      buy_c.bid, buy_c.ask, buy_c.mid, buy_c.implied_volatility or 0),
+        ]
+        entry_net = legs[0].fill_price - legs[1].fill_price  # typically negative (debit)
+        max_risk = abs(entry_net) if entry_net < 0 else legs[1].fill_price
+        return SpreadPosition(strategy, legs, entry_net,
+                              entry_net > 0, back_expiry, max_risk)
+
+    elif strategy == "diagonal_spread":
+        back_expiry = _pick_expiry(contracts, dte_min, dte_max, date_str)
+        front_expiry = _pick_expiry(contracts, max(dte_min // 3, 3), dte_min, date_str)
+        if not back_expiry or not front_expiry or front_expiry >= back_expiry:
+            return None
+
+        sell_c = find_contracts_near(contracts, atm + inc, "call", front_expiry)
+        buy_c = find_contracts_near(contracts, atm, "call", back_expiry)
+        if not sell_c or not buy_c:
+            return None
+
+        legs = [
+            SpreadLeg(sell_c.strike, front_expiry, "call", "sell",
+                      sell_c.bid, sell_c.ask, sell_c.mid, sell_c.implied_volatility or 0),
+            SpreadLeg(buy_c.strike, back_expiry, "call", "buy",
+                      buy_c.bid, buy_c.ask, buy_c.mid, buy_c.implied_volatility or 0),
+        ]
+        entry_net = legs[0].fill_price - legs[1].fill_price
+        max_risk = abs(entry_net) if entry_net < 0 else legs[1].fill_price
+        return SpreadPosition(strategy, legs, entry_net,
+                              entry_net > 0, back_expiry, max_risk)
+
+    elif strategy == "iron_butterfly":
+        sc = find_contracts_near(contracts, atm, "call", expiry)
+        sp = find_contracts_near(contracts, atm, "put", expiry)
+        if not sc or not sp:
+            return None
+        bc = find_contracts_near(contracts, atm + 2 * inc, "call", expiry,
+                                 exclude_strikes=[sc.strike])
+        bp = find_contracts_near(contracts, atm - 2 * inc, "put", expiry,
+                                 exclude_strikes=[sp.strike])
+        if not bc or not bp:
+            return None
+
+        legs = [
+            SpreadLeg(sc.strike, expiry, "call", "sell", sc.bid, sc.ask, sc.mid, sc.implied_volatility or 0),
+            SpreadLeg(sp.strike, expiry, "put", "sell", sp.bid, sp.ask, sp.mid, sp.implied_volatility or 0),
+            SpreadLeg(bc.strike, expiry, "call", "buy", bc.bid, bc.ask, bc.mid, bc.implied_volatility or 0),
+            SpreadLeg(bp.strike, expiry, "put", "buy", bp.bid, bp.ask, bp.mid, bp.implied_volatility or 0),
+        ]
+        credit = (legs[0].fill_price + legs[1].fill_price
+                  - legs[2].fill_price - legs[3].fill_price)
+        width = max(bc.strike - sc.strike, sp.strike - bp.strike)
+        max_risk = width - credit
+        return SpreadPosition(strategy, legs, credit, True, expiry, max_risk)
+
+    elif strategy == "long_straddle":
+        buy_c = find_contracts_near(contracts, atm, "call", expiry)
+        buy_p = find_contracts_near(contracts, atm, "put", expiry)
+        if not buy_c or not buy_p:
+            return None
+
+        legs = [
+            SpreadLeg(buy_c.strike, expiry, "call", "buy",
+                      buy_c.bid, buy_c.ask, buy_c.mid, buy_c.implied_volatility or 0),
+            SpreadLeg(buy_p.strike, expiry, "put", "buy",
+                      buy_p.bid, buy_p.ask, buy_p.mid, buy_p.implied_volatility or 0),
+        ]
+        debit = legs[0].fill_price + legs[1].fill_price
+        return SpreadPosition(strategy, legs, -debit, False, expiry, debit)
+
     return None
 
 

@@ -1,5 +1,6 @@
 # Changelog
 
+- [2026-05-18] Modified: src/backtest/real_pricer.py — Add calendar, diagonal, iron butterfly, long straddle to real pricing build_spread
 - [2026-05-18] Created: scripts/run_pricing_comparison.py — Side-by-side BS vs real bid/ask pricing backtest comparison
 - [2026-05-18] Modified: src/backtest/agent_backtest.py — Add pricing_mode parameter: "bs" (Black-Scholes) or "real" (bid/ask from chain snapshots)
 - [2026-05-18] Modified: scripts/run_integration_backtest.py — Add swing tier choice to integration backtest script
