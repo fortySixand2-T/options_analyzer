@@ -425,7 +425,8 @@ def _check_exits(
             dte_remaining = ot.dte_at_entry - days_held
 
             if pricing_mode == "real" and contracts and hasattr(ot, "spread_position") and ot.spread_position:
-                close_val = reprice_spread(ot.spread_position, contracts)
+                close_val = reprice_spread(ot.spread_position, contracts,
+                                          current_date=date_str, spot=spot)
                 if close_val is not None:
                     current_value = abs(close_val)
                     if ot.is_credit:

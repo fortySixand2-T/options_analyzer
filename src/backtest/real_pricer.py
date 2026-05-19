@@ -352,15 +352,48 @@ def build_spread(contracts, spot: float, strategy: str, date_str: str,
     return None
 
 
-def reprice_spread(position: SpreadPosition, contracts) -> Optional[float]:
+def _leg_expired_value(leg: SpreadLeg, spot: float) -> float:
+    """Intrinsic value of an expired leg. OTM = 0."""
+    if leg.option_type == "call":
+        return max(spot - leg.strike, 0)
+    else:
+        return max(leg.strike - spot, 0)
+
+
+def reprice_spread(position: SpreadPosition, contracts,
+                   current_date: str = "", spot: float = 0.0) -> Optional[float]:
     """Reprice an open spread using real bid/ask from a new snapshot.
 
+    Handles expired legs: if a leg's expiry has passed, values it at
+    intrinsic (OTM = 0). This is critical for calendar/diagonal spreads
+    where the front month expires before the back month.
+
     Returns the net value to CLOSE the position (cost to close for credits,
-    proceeds for debits). Returns None if contracts can't be found.
+    proceeds for debits). Returns None only if a live leg can't be found.
     """
     close_value = 0.0
+
     for leg in position.legs:
+        leg_expired = False
+        if current_date and leg.expiry:
+            try:
+                exp_dt = datetime.strptime(leg.expiry, "%Y-%m-%d")
+                cur_dt = datetime.strptime(current_date, "%Y-%m-%d")
+                leg_expired = cur_dt > exp_dt
+            except (ValueError, TypeError):
+                pass
+
+        if leg_expired:
+            intrinsic = _leg_expired_value(leg, spot)
+            if leg.side == "sell":
+                close_value -= intrinsic
+            else:
+                close_value += intrinsic
+            continue
+
         match = find_contracts_near(contracts, leg.strike, leg.option_type, leg.expiry)
+        if not match:
+            match = _find_closest_expiry_match(contracts, leg, current_date)
         if not match:
             return None
         if match.bid is None or match.ask is None:
@@ -371,6 +404,44 @@ def reprice_spread(position: SpreadPosition, contracts) -> Optional[float]:
             close_value += match.bid  # sell at bid
 
     return close_value
+
+
+def _find_closest_expiry_match(contracts, leg: SpreadLeg,
+                                current_date: str = ""):
+    """Find a contract at the same strike/type but nearest available expiry.
+
+    Used when the exact expiry isn't in the current snapshot but hasn't
+    technically expired yet (e.g., snapshot is from a few days before expiry
+    and the contract is no longer listed).
+    """
+    matches = [
+        c for c in contracts
+        if c.option_type == leg.option_type
+        and abs(c.strike - leg.strike) < 0.01
+        and c.bid is not None and c.bid > 0
+        and c.ask is not None and c.ask > 0
+    ]
+    if not matches:
+        return None
+
+    if current_date:
+        try:
+            cur_dt = datetime.strptime(current_date, "%Y-%m-%d")
+            future = [
+                m for m in matches
+                if datetime.strptime(m.expiry, "%Y-%m-%d") >= cur_dt
+            ]
+            if future:
+                return min(future, key=lambda m: abs(
+                    (datetime.strptime(m.expiry, "%Y-%m-%d")
+                     - datetime.strptime(leg.expiry, "%Y-%m-%d")).days
+                ))
+        except (ValueError, TypeError):
+            pass
+
+    return min(matches, key=lambda m: abs(
+        hash(m.expiry) - hash(leg.expiry)
+    )) if matches else None
 
 
 def compute_pnl(position: SpreadPosition, close_value: float) -> float:

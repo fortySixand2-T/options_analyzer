@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-18] Modified: src/backtest/real_pricer.py — Fix calendar/diagonal repricing when front month expires: value expired legs at intrinsic, find nearest-expiry fallback for missing contracts
+- [2026-05-18] Modified: src/backtest/agent_backtest.py — Pass date and spot to reprice_spread for expired-leg detection
 - [2026-05-18] Modified: Dockerfile — Install Dolt binary for options chain data queries
 - [2026-05-18] Modified: src/data/dolt_provider.py — Increase max_dte to 180, query timeout to 300s
 - [2026-05-18] Modified: scripts/run_pricing_comparison.py — Add --source flag for chain_store vs dolt
