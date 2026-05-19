@@ -429,9 +429,9 @@ def _check_exits(
                 close_val = reprice_spread(ot.spread_position, contracts,
                                           current_date=date_str, spot=spot)
                 if close_val is not None:
-                    # close_val is the net to close (signed).
-                    # P&L = close_val - entry_net: positive when position gained value.
-                    pnl = close_val - ot.entry_net
+                    # Total P&L = cash at entry + cash at close
+                    pnl = ot.entry_net + close_val
+                    current_value = abs(close_val)
                 else:
                     current_value = _price_position(
                         spot, ot.entry_spot, chain_iv,
