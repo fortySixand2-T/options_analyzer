@@ -76,6 +76,8 @@ def _agent_stats(result):
         "win_rate": wins / len(all_trades) * 100,
         "total_pnl": sum(t.pnl for t in all_trades),
         "avg_pnl": np.mean(pnls),
+        "max_trade": float(np.max(pnls)),
+        "min_trade": float(np.min(pnls)),
         "max_dd": max_dd,
         "pf": gross_p / gross_l if gross_l > 0 else float("inf"),
         "sharpe": sharpe,

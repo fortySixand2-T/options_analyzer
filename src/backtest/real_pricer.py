@@ -392,35 +392,109 @@ def reprice_spread(position: SpreadPosition, contracts,
             continue
 
         match = find_contracts_near(contracts, leg.strike, leg.option_type, leg.expiry)
+        expiry_adjusted = False
         if not match:
-            match = _find_closest_expiry_match(contracts, leg, current_date)
+            match = _find_closest_expiry_match(contracts, leg, current_date, spot)
+            expiry_adjusted = True
         if not match:
             return None
         if match.bid is None or match.ask is None:
             return None
+
+        bid = match.bid
+        ask = match.ask
+
+        if expiry_adjusted and current_date:
+            bid, ask = _adjust_for_expiry_diff(
+                bid, ask, match.expiry, leg.expiry, current_date, spot,
+                leg.strike, leg.option_type,
+            )
+
         if leg.side == "sell":
-            close_value -= match.ask  # buy back at ask
+            close_value -= ask
         else:
-            close_value += match.bid  # sell at bid
+            close_value += bid
 
     return close_value
 
 
-def _find_closest_expiry_match(contracts, leg: SpreadLeg,
-                                current_date: str = ""):
-    """Find a contract at the same strike/type but nearest available expiry.
+def _adjust_for_expiry_diff(
+    bid: float, ask: float,
+    match_expiry: str, target_expiry: str,
+    current_date: str, spot: float,
+    strike: float, option_type: str,
+) -> Tuple[float, float]:
+    """Scale bid/ask when matched expiry differs from target.
 
-    Used when the exact expiry isn't in the current snapshot but hasn't
-    technically expired yet (e.g., snapshot is from a few days before expiry
-    and the contract is no longer listed).
+    Uses sqrt(time) scaling: an option with half the DTE has roughly
+    sqrt(0.5) ≈ 71% of the time value of the longer-dated option.
     """
+    try:
+        cur = datetime.strptime(current_date, "%Y-%m-%d")
+        match_dt = datetime.strptime(match_expiry, "%Y-%m-%d")
+        target_dt = datetime.strptime(target_expiry, "%Y-%m-%d")
+
+        match_dte = max((match_dt - cur).days, 1)
+        target_dte = max((target_dt - cur).days, 1)
+
+        if match_dte == target_dte:
+            return bid, ask
+
+        if option_type == "call":
+            intrinsic = max(spot - strike, 0)
+        else:
+            intrinsic = max(strike - spot, 0)
+
+        ratio = min((target_dte / match_dte) ** 0.5, 1.5)
+
+        bid_tv = max(bid - intrinsic, 0)
+        ask_tv = max(ask - intrinsic, 0)
+
+        adj_bid = intrinsic + bid_tv * ratio
+        adj_ask = intrinsic + ask_tv * ratio
+
+        if spot > 0:
+            cap = spot * 0.15
+            adj_bid = min(adj_bid, cap)
+            adj_ask = min(adj_ask, cap)
+
+        return max(adj_bid, 0), max(adj_ask, 0.01)
+    except (ValueError, TypeError):
+        return bid, ask
+
+
+def _find_closest_expiry_match(contracts, leg: SpreadLeg,
+                                current_date: str = "",
+                                spot: float = 0.0):
+    """Find a contract near the same strike/type at nearest available expiry.
+
+    Tolerates strike differences up to 2% of strike price — Dolt data may
+    have non-standard strikes (e.g., 524 instead of 525).
+
+    Excludes deep ITM contracts (moneyness > 10%) to avoid inflated repricing
+    from contracts whose value is mostly intrinsic.
+    """
+    strike_tol = max(leg.strike * 0.01, 1.0)
     matches = [
         c for c in contracts
         if c.option_type == leg.option_type
-        and abs(c.strike - leg.strike) < 0.01
+        and abs(c.strike - leg.strike) <= strike_tol
         and c.bid is not None and c.bid > 0
         and c.ask is not None and c.ask > 0
     ]
+
+    if spot > 0 and matches:
+        filtered = []
+        for c in matches:
+            if c.option_type == "call":
+                itm_pct = (spot - c.strike) / spot
+            else:
+                itm_pct = (c.strike - spot) / spot
+            if itm_pct < 0.10:
+                filtered.append(c)
+        if filtered:
+            matches = filtered
+
     if not matches:
         return None
 
@@ -432,16 +506,27 @@ def _find_closest_expiry_match(contracts, leg: SpreadLeg,
                 if datetime.strptime(m.expiry, "%Y-%m-%d") >= cur_dt
             ]
             if future:
-                return min(future, key=lambda m: abs(
+                best = min(future, key=lambda m: abs(
                     (datetime.strptime(m.expiry, "%Y-%m-%d")
                      - datetime.strptime(leg.expiry, "%Y-%m-%d")).days
                 ))
+                drift = abs((datetime.strptime(best.expiry, "%Y-%m-%d")
+                             - datetime.strptime(leg.expiry, "%Y-%m-%d")).days)
+                if drift <= 14:
+                    return best
+                return None
         except (ValueError, TypeError):
             pass
 
-    return min(matches, key=lambda m: abs(
-        hash(m.expiry) - hash(leg.expiry)
-    )) if matches else None
+    if not matches:
+        return None
+    best = min(matches, key=lambda m: abs(
+        (datetime.strptime(m.expiry, "%Y-%m-%d")
+         - datetime.strptime(leg.expiry, "%Y-%m-%d")).days
+    ))
+    drift = abs((datetime.strptime(best.expiry, "%Y-%m-%d")
+                 - datetime.strptime(leg.expiry, "%Y-%m-%d")).days)
+    return best if drift <= 14 else None
 
 
 def compute_pnl(position: SpreadPosition, close_value: float) -> float:
