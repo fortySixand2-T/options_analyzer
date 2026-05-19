@@ -1,5 +1,8 @@
 # Changelog
 
+- [2026-05-18] Modified: Dockerfile — Install Dolt binary for options chain data queries
+- [2026-05-18] Modified: src/data/dolt_provider.py — Increase max_dte to 180, query timeout to 300s
+- [2026-05-18] Modified: scripts/run_pricing_comparison.py — Add --source flag for chain_store vs dolt
 - [2026-05-18] Modified: src/backtest/real_pricer.py — Add calendar, diagonal, iron butterfly, long straddle to real pricing build_spread
 - [2026-05-18] Created: scripts/run_pricing_comparison.py — Side-by-side BS vs real bid/ask pricing backtest comparison
 - [2026-05-18] Modified: src/backtest/agent_backtest.py — Add pricing_mode parameter: "bs" (Black-Scholes) or "real" (bid/ask from chain snapshots)

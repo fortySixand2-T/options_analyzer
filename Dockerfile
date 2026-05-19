@@ -7,11 +7,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps needed by numpy/scipy/matplotlib
+# System deps needed by numpy/scipy/matplotlib + curl for dolt install
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
         g++ \
         libgomp1 \
+        curl \
+    && curl -L https://github.com/dolthub/dolt/releases/latest/download/install.sh | bash \
     && rm -rf /var/lib/apt/lists/*
 
 # Install runtime deps (cached layer)

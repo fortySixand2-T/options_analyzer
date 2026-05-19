@@ -28,20 +28,20 @@ SEP = "=" * 80
 LINE = "-" * 80
 
 
-def _run_tier(tickers, tier, start, end, slippage, config):
+def _run_tier(tickers, tier, start, end, slippage, config, source="chain_store"):
     """Run both BS and real pricing for a tier, return (bs_result, real_result)."""
-    print(f"  Running {tier} — Black-Scholes pricing...", flush=True)
+    print(f"  Running {tier} — Black-Scholes pricing ({source})...", flush=True)
     bs = run_agent_backtest(
         tickers=tickers, start_date=start, end_date=end,
         config=config, dte_tier=tier, slippage_pct=slippage,
-        pricing_mode="bs",
+        pricing_mode="bs", source=source,
     )
 
-    print(f"  Running {tier} — Real bid/ask pricing...", flush=True)
+    print(f"  Running {tier} — Real bid/ask pricing ({source})...", flush=True)
     real = run_agent_backtest(
         tickers=tickers, start_date=start, end_date=end,
         config=config, dte_tier=tier, slippage_pct=slippage,
-        pricing_mode="real",
+        pricing_mode="real", source=source,
     )
 
     return bs, real
@@ -183,6 +183,9 @@ def main():
     parser.add_argument("--tier", default="short_term",
                         choices=["short_term", "swing", "medium_term", "long_term", "all"])
     parser.add_argument("--slippage", type=float, default=3.0)
+    parser.add_argument("--source", default="chain_store",
+                        choices=["chain_store", "dolt"],
+                        help="Data source for chain snapshots")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.WARNING)
@@ -200,6 +203,7 @@ def main():
     print(f"  Tickers: {', '.join(tickers)}")
     print(f"  Period:  {args.start} to {args.end}")
     print(f"  BS Slippage: {args.slippage}%  |  Real: bid/ask spread (no added slippage)")
+    print(f"  Data source: {args.source}")
     print(SEP)
 
     all_bs = {}
@@ -207,7 +211,7 @@ def main():
 
     for tier in tiers:
         print(f"\n  Processing {tier}...")
-        bs, real = _run_tier(tickers, tier, args.start, args.end, args.slippage, config)
+        bs, real = _run_tier(tickers, tier, args.start, args.end, args.slippage, config, args.source)
         all_bs[tier] = bs
         all_real[tier] = real
         _print_comparison(tier, bs, real)

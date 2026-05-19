@@ -55,7 +55,7 @@ def _dolt_query(sql: str, dolt_path: Optional[str] = None) -> List[Dict]:
         cwd=path,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=300,
     )
     if result.returncode != 0:
         logger.error("Dolt query failed: %s", result.stderr.strip())
@@ -149,7 +149,7 @@ def _estimate_spot(contracts: List[Dict]) -> float:
 def get_snapshot(
     ticker: str,
     date: str,
-    max_dte: int = 60,
+    max_dte: int = 180,
     dolt_path: Optional[str] = None,
 ) -> Optional[ChainSnapshot]:
     """Build a ChainSnapshot from Dolt option_chain data.
