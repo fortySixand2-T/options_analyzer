@@ -1,5 +1,6 @@
 # Changelog
 
+- [2026-05-18] Modified: src/backtest/agent_backtest.py — Fix calendar P&L: use signed entry_net instead of abs(), gate dte_exit behind profit/stop checks, add min entry threshold for real mode
 - [2026-05-18] Modified: src/backtest/real_pricer.py — Filter deep ITM contracts from expiry fallback matching and cap adjusted values at 15% of spot
 - [2026-05-18] Modified: src/backtest/real_pricer.py — Fix calendar/diagonal repricing when front month expires: value expired legs at intrinsic, find nearest-expiry fallback for missing contracts
 - [2026-05-18] Modified: src/backtest/agent_backtest.py — Pass date and spot to reprice_spread for expired-leg detection

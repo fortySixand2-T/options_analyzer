@@ -51,6 +51,7 @@ class AgentTrade:
     legs: List[Dict]
     entry_regime: str = ""
     edge_source: str = ""
+    entry_net: float = 0.0  # signed: positive=credit received, negative=debit paid
 
 
 @dataclass
@@ -428,11 +429,9 @@ def _check_exits(
                 close_val = reprice_spread(ot.spread_position, contracts,
                                           current_date=date_str, spot=spot)
                 if close_val is not None:
-                    current_value = abs(close_val)
-                    if ot.is_credit:
-                        pnl = ot.entry_price - current_value
-                    else:
-                        pnl = current_value - ot.entry_price
+                    # close_val is the net to close (signed).
+                    # P&L = close_val - entry_net: positive when position gained value.
+                    pnl = close_val - ot.entry_net
                 else:
                     current_value = _price_position(
                         spot, ot.entry_spot, chain_iv,
@@ -466,7 +465,7 @@ def _check_exits(
                 elif pnl <= -ot.entry_price * (rules["loss_pct"] / 100):
                     exit_reason = "stop_loss"
 
-            if dte_remaining <= rules["exit_dte"]:
+            if not exit_reason and dte_remaining <= rules["exit_dte"]:
                 exit_reason = "dte_exit"
 
             # Regime-transition exit: close credit positions if regime → SPIKE
@@ -592,6 +591,9 @@ def _try_entries(
                     entry_price = abs(spread_position.entry_net)
                     is_credit = spread_position.is_credit
                     dte = spread_position.dte
+                    min_entry = max(0.10, spread_position.max_risk * 0.03)
+                    if entry_price < min_entry:
+                        continue
                 else:
                     continue
             else:
@@ -629,6 +631,7 @@ def _try_entries(
                 legs=getattr(tc, "legs", []),
                 entry_regime=current_regime if isinstance(current_regime, str) else "",
                 edge_source=tc_edge,
+                entry_net=spread_position.entry_net if spread_position else (entry_price if is_credit else -entry_price),
             )
             if spread_position:
                 ot.spread_position = spread_position
