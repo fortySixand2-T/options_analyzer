@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-20] Created: docs/pricing_validation_report.md — Summary of all pricing bugs found and validated backtest results
+- [2026-05-20] Modified: src/backtest/agent_backtest.py — Add on-the-fly candidate generation for swing/MT/LT tiers using proper decision matrices instead of short-term pipeline remap
 - [2026-05-19] Modified: src/backtest/agent_backtest.py — Fix P&L sign: pnl = entry_net + close_val (cash flow sum), not close_val - entry_net (double-counted debit)
 - [2026-05-18] Modified: src/backtest/agent_backtest.py — Fix calendar P&L: use signed entry_net instead of abs(), gate dte_exit behind profit/stop checks, add min entry threshold for real mode
 - [2026-05-18] Modified: src/backtest/real_pricer.py — Filter deep ITM contracts from expiry fallback matching and cap adjusted values at 15% of spot

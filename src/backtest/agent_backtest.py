@@ -300,9 +300,10 @@ def _build_candidates_from_signals(
         dte_range = (90, 180)
 
     if rec:
-        score = getattr(rec, "score", 70)
+        score = getattr(rec, "score", None) or getattr(rec, "confluence_score", 70) or 70
         edge_source = getattr(rec, "edge_source", "")
-        suggested_dte = getattr(rec, "suggested_dte", sum(dte_range) // 2)
+        raw_dte = getattr(rec, "suggested_dte", sum(dte_range) // 2)
+        suggested_dte = sum(raw_dte) // 2 if isinstance(raw_dte, (tuple, list)) else raw_dte
         is_credit = rec.strategy in SWING_CREDIT or rec.strategy in MEDIUM_TERM_CREDIT or rec.strategy in LONG_TERM_CREDIT
 
         tc = _SyntheticCandidate(
@@ -320,6 +321,75 @@ def _build_candidates_from_signals(
         candidates.append(tc)
 
     return state, candidates
+
+
+def _build_candidates_on_the_fly(
+    ticker: str, dte_tier: str, regime: str, bias_label: str,
+    vrp_pct: float, ms,
+) -> List[_SyntheticCandidate]:
+    """Build swing/MT/LT candidates directly from market state without persisted signals."""
+    try:
+        vrp_rich = vrp_pct > 0
+        calendar_signal = getattr(ms, "calendar_signal", 0) or 0
+        in_earnings = getattr(ms, "in_earnings_window", False)
+        earnings_inflation = getattr(ms, "earnings_iv_inflation", 0) or 0
+
+        if dte_tier == "swing":
+            from swing.decision_matrix import map_swing_strategy
+            rec = map_swing_strategy(
+                regime=regime, swing_bias=bias_label, dealer_regime=None,
+                vrp_rich=vrp_rich, vrp_pct=vrp_pct,
+                calendar_signal=calendar_signal,
+                in_earnings_window=in_earnings,
+                earnings_iv_inflation=earnings_inflation,
+            )
+            dte_range = (14, 60)
+        elif dte_tier == "medium_term":
+            from swing.decision_matrix import map_medium_term_strategy
+            rec = map_medium_term_strategy(
+                regime=regime, swing_bias=bias_label, dealer_regime=None,
+                vrp_regime="RICH" if vrp_rich else "NEUTRAL", vrp_pct=vrp_pct,
+                calendar_signal=calendar_signal, skew_regime="NORMAL",
+                cross_asset_signal="ALIGNED", flow_signal="NEUTRAL",
+                vvix_size_factor=1.0,
+                in_earnings_window=in_earnings,
+                earnings_iv_inflation=earnings_inflation,
+            )
+            dte_range = (30, 90)
+        else:
+            from swing.decision_matrix import map_long_term_strategy
+            rec = map_long_term_strategy(
+                regime=regime, swing_bias=bias_label,
+                vrp_regime="RICH" if vrp_rich else "NEUTRAL", vrp_pct=vrp_pct,
+                skew_regime="NORMAL", cross_asset_signal="ALIGNED",
+                flow_signal="NEUTRAL", vvix_size_factor=1.0,
+                correlation_premium=None,
+            )
+            dte_range = (90, 180)
+
+        if not rec:
+            return []
+
+        score = getattr(rec, "score", None) or getattr(rec, "confluence_score", 70) or 70
+        edge_source = getattr(rec, "edge_source", "")
+        raw_dte = getattr(rec, "suggested_dte", sum(dte_range) // 2)
+        suggested_dte = sum(raw_dte) // 2 if isinstance(raw_dte, (tuple, list)) else raw_dte
+        is_credit = rec.strategy in SWING_CREDIT or rec.strategy in MEDIUM_TERM_CREDIT or rec.strategy in LONG_TERM_CREDIT
+
+        return [_SyntheticCandidate(
+            symbol=ticker,
+            strategy=rec.strategy,
+            strategy_label=getattr(rec, "strategy_label", rec.strategy),
+            confluence_score=score,
+            regime=regime,
+            bias_label=bias_label,
+            suggested_dte=suggested_dte,
+            iv_rv_edge_pct=vrp_pct,
+            is_credit=is_credit,
+            edge_source=edge_source,
+        )]
+    except Exception:
+        return []
 
 
 _SW_REMAP = {
@@ -745,17 +815,14 @@ def run_agent_backtest(
                         sig_state = {"spot": spot, "chain_iv": chain_iv, "regime": "MODERATE_IV"}
                         candidates = []
                 else:
-                    # On-the-fly: use short-term pipeline, remap to mt/lt strategies
-                    try:
-                        from trade_generator import generate_trades
-                        raw_candidates = generate_trades(ms)
-                        candidates = _remap_candidates(raw_candidates, dte_tier)
-                        sig_state = {
-                            "spot": spot, "chain_iv": chain_iv,
-                            "regime": getattr(ms, "regime", "MODERATE_IV"),
-                        }
-                    except Exception:
-                        continue
+                    # On-the-fly: build candidates from market state via tier decision matrix
+                    regime = getattr(ms, "regime", "MODERATE_IV")
+                    bias_label = getattr(ms, "bias_label", "NEUTRAL")
+                    vrp_pct = getattr(ms, "vrp_overall", 0) or 0
+                    sig_state = {"spot": spot, "chain_iv": chain_iv, "regime": regime}
+                    candidates = _build_candidates_on_the_fly(
+                        ticker, dte_tier, regime, bias_label, vrp_pct, ms,
+                    )
 
                 current_regime = sig_state.get("regime", "")
                 snap_contracts = snapshot.contracts if snapshot else None
