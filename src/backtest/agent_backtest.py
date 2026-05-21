@@ -392,66 +392,6 @@ def _build_candidates_on_the_fly(
         return []
 
 
-_SW_REMAP = {
-    "butterfly": "iron_butterfly",
-    "short_put_spread": "calendar_spread",
-    "short_call_spread": "diagonal_spread",
-    "iron_condor": "iron_butterfly",
-    "long_call_spread": "long_straddle",
-    "long_put_spread": "long_straddle",
-}
-
-_MT_REMAP = {
-    "butterfly": "mt_iron_butterfly",
-    "short_put_spread": "mt_calendar_spread",
-    "short_call_spread": "mt_diagonal_spread",
-    "iron_condor": "mt_iron_butterfly",
-    "long_call_spread": "mt_long_straddle",
-    "long_put_spread": "mt_long_straddle",
-}
-
-_LT_REMAP = {
-    "butterfly": "lt_calendar_spread",
-    "short_put_spread": "lt_calendar_spread",
-    "short_call_spread": "lt_diagonal_spread",
-    "iron_condor": "lt_calendar_spread",
-    "long_call_spread": "lt_long_straddle",
-    "long_put_spread": "lt_long_straddle",
-}
-
-
-def _remap_candidates(raw_candidates: list, dte_tier: str) -> List[_SyntheticCandidate]:
-    """Remap short-term trade candidates to swing/medium/long-term strategy names."""
-    if dte_tier == "swing":
-        remap = _SW_REMAP
-    elif dte_tier == "medium_term":
-        remap = _MT_REMAP
-    else:
-        remap = _LT_REMAP
-    dte_default = {"swing": 35, "medium_term": 60, "long_term": 120}.get(dte_tier, 60)
-
-    result = []
-    seen = set()
-    for tc in raw_candidates:
-        new_strat = remap.get(tc.strategy)
-        if not new_strat or new_strat in seen:
-            continue
-        seen.add(new_strat)
-
-        is_credit = new_strat in SWING_CREDIT or new_strat in MEDIUM_TERM_CREDIT or new_strat in LONG_TERM_CREDIT
-        result.append(_SyntheticCandidate(
-            symbol=tc.symbol,
-            strategy=new_strat,
-            strategy_label=new_strat.replace("_", " ").title(),
-            confluence_score=tc.confluence_score,
-            regime=tc.regime,
-            bias_label=tc.bias_label,
-            suggested_dte=dte_default,
-            iv_rv_edge_pct=getattr(tc, "iv_rv_edge_pct", 0),
-            is_credit=is_credit,
-        ))
-    return result
-
 
 def _filter_candidate(cfg: AgentConfig, tc, state) -> bool:
     if tc.strategy not in cfg.allowed_strategies:

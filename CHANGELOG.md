@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-20] Created: tests/test_real_pricing.py — 18 unit tests for P&L formula, spread leg pricing, calendar entry net, and reprice_spread (expired legs, live legs, end-to-end flows)
+- [2026-05-20] Modified: src/backtest/agent_backtest.py — Remove dead _remap_candidates() and remap dictionaries (_SW_REMAP, _MT_REMAP, _LT_REMAP), superseded by _build_candidates_on_the_fly()
 - [2026-05-20] Created: docs/pricing_validation_report.md — Summary of all pricing bugs found and validated backtest results
 - [2026-05-20] Modified: src/backtest/agent_backtest.py — Add on-the-fly candidate generation for swing/MT/LT tiers using proper decision matrices instead of short-term pipeline remap
 - [2026-05-19] Modified: src/backtest/agent_backtest.py — Fix P&L sign: pnl = entry_net + close_val (cash flow sum), not close_val - entry_net (double-counted debit)
