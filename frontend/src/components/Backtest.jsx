@@ -25,6 +25,7 @@ export default function Backtest() {
   const [dealerFilter, setDealerFilter] = useState(false);
   const [edgeThreshold, setEdgeThreshold] = useState(0);
   const [slippage, setSlippage] = useState(3);
+  const [source, setSource] = useState('local');
   const [compareMode, setCompareMode] = useState(false);
   const [compareStrategies, setCompareStrategies] = useState(['iron_condor', 'butterfly']);
   const [showTrades, setShowTrades] = useState(false);
@@ -41,6 +42,7 @@ export default function Backtest() {
     if (dealerFilter) p.set('dealer_filter', 'true');
     if (edgeThreshold > 0) p.set('edge_threshold', edgeThreshold);
     if (slippage > 0) p.set('slippage_pct', (slippage / 100).toFixed(4));
+    if (source !== 'local') p.set('source', source);
     return p;
   }
 
@@ -100,6 +102,16 @@ export default function Backtest() {
             <label className="bt-label">Start Date</label>
             <input className="bt-input" type="date" value={start}
               onChange={e => setStart(e.target.value)} />
+          </div>
+
+          <div className="bt-field">
+            <label className="bt-label">Data Source</label>
+            <div className="bt-toggle-group">
+              <button className={`bt-toggle ${source === 'local' ? 'active' : ''}`}
+                onClick={() => setSource('local')}>BS Model</button>
+              <button className={`bt-toggle ${source === 'chain_replay' ? 'active' : ''}`}
+                onClick={() => setSource('chain_replay')}>Real Data</button>
+            </div>
           </div>
 
           <div className="bt-field">
@@ -189,8 +201,22 @@ function SingleView({ data, showTrades, setShowTrades, sortCol, setSortCol, sort
     return 0;
   });
 
+  const isReal = data.source === 'chain_replay';
+
   return (
     <div className="bt-results">
+      {/* Source badge */}
+      <div className="bt-source-bar">
+        <span className={`bt-source-badge ${isReal ? 'real' : 'sim'}`}>
+          {isReal ? 'Real Market Data' : 'BS Simulated'}
+        </span>
+        {data.data_issues?.length > 0 && (
+          <span className="bt-data-warn">
+            {data.data_issues.length} data issue{data.data_issues.length > 1 ? 's' : ''} detected
+          </span>
+        )}
+      </div>
+
       {/* Stats Row */}
       <div className="bt-stats">
         <Stat label="Win Rate" value={`${s.win_rate?.toFixed(1)}%`}
