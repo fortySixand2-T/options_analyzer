@@ -8,6 +8,8 @@
 #   ./start.sh backtest         # Run a backtest
 #   ./start.sh collect          # Collect daily chain snapshots
 #   ./start.sh collect-stats    # Show snapshot DB statistics
+#   ./start.sh backfill         # Alpaca historical options backfill
+#   ./start.sh backfill-theta   # ThetaData historical options backfill
 #   ./start.sh test             # Run test suite
 #   ./start.sh shell            # Interactive dev shell
 #   ./start.sh dev              # Foreground with hot-reload
@@ -22,7 +24,7 @@
 #   1. Create .env from .env.example (edit with your TT credentials)
 #   2. Create data/ directory for SQLite databases
 #   3. Build Docker images (~2-3 min first time)
-#   4. Start the app on http://localhost:8000
+#   4. Start the app on http://localhost:9000
 
 set -euo pipefail
 
@@ -100,7 +102,7 @@ wait_for_healthy() {
             echo -n "."
             continue
         fi
-        if curl -sf http://localhost:8000/docs > /dev/null 2>&1; then
+        if curl -sf http://localhost:9000/docs > /dev/null 2>&1; then
             echo ""
             echo -e "  ${GREEN}✓ Server is up${NC}"
             return 0
@@ -134,9 +136,8 @@ case "$CMD" in
         echo -e "${GREEN}Building and starting Options Scanner...${NC}"
         $COMPOSE up -d --build app
         echo ""
-        echo -e "  Backend API:  ${BLUE}http://localhost:8000${NC}"
-        echo -e "  API docs:     ${BLUE}http://localhost:8000/docs${NC}"
-        echo -e "  Web UI:       ${BLUE}http://localhost:8000${NC}"
+        echo -e "  Web UI:       ${BLUE}http://localhost:9000${NC}"
+        echo -e "  API docs:     ${BLUE}http://localhost:9000/docs${NC}"
         echo ""
         wait_for_healthy
         echo ""
@@ -151,8 +152,7 @@ case "$CMD" in
         banner
         setup_env
         echo -e "${GREEN}Starting in dev mode (foreground, hot-reload)...${NC}"
-        echo -e "  Backend API:  ${BLUE}http://localhost:8000${NC}"
-        echo -e "  Frontend dev: ${BLUE}http://localhost:3000${NC} (if running npm dev separately)"
+        echo -e "  Web UI:       ${BLUE}http://localhost:9000${NC}"
         echo ""
         echo -e "  Press ${YELLOW}Ctrl+C${NC} to stop"
         echo ""
@@ -164,7 +164,7 @@ case "$CMD" in
         banner
         setup_env
         echo -e "${GREEN}Starting in foreground (Ctrl+C to stop)...${NC}"
-        echo -e "  Backend API:  ${BLUE}http://localhost:8000${NC}"
+        echo -e "  Web UI:       ${BLUE}http://localhost:9000${NC}"
         echo ""
         $COMPOSE up --build app
         ;;
@@ -185,26 +185,6 @@ case "$CMD" in
         ARGS="${*:---strategy iron_condor --symbol SPY}"
         echo -e "${GREEN}Running backtest: ${NC}$ARGS"
         $COMPOSE run --rm backtest python scripts/run_backtest.py $ARGS
-        ;;
-
-    collect-intraday)
-        setup_env
-        ensure_prod
-        shift || true
-        MODE="${1:-bars}"
-        shift || true
-        ARGS="$*"
-        echo -e "${GREEN}Intraday collection (${MODE}): ${NC}$ARGS"
-        $COMPOSE run --rm collect-intraday python scripts/collect_intraday.py $MODE $ARGS
-        ;;
-
-    intraday-backtest)
-        setup_env
-        ensure_prod
-        shift || true
-        ARGS="${*:---strategy 0dte_iron_condor --symbol SPY}"
-        echo -e "${GREEN}Running 0 DTE intraday backtest: ${NC}$ARGS"
-        $COMPOSE run --rm backtest python scripts/run_intraday_backtest.py $ARGS
         ;;
 
     collect)
@@ -232,40 +212,6 @@ case "$CMD" in
         $COMPOSE run --rm backfill python scripts/backfill_chains.py $ARGS
         ;;
 
-    dolt-import)
-        setup_env
-        shift || true
-        ARGS="$*"
-        echo -e "${GREEN}Importing DoltHub options data:${NC} $ARGS"
-        python3 scripts/import_dolt.py $ARGS
-        ;;
-
-    dolt-status)
-        setup_env
-        echo -e "${GREEN}DoltHub options data status:${NC}"
-        python3 scripts/import_dolt.py --status
-        ;;
-
-    param-optimize)
-        setup_env
-        ensure_prod
-        shift || true
-        ARGS="${*:---tickers SPY --start 2020-01-01 --end 2024-12-31}"
-        echo -e "${GREEN}Parameter optimization:${NC} $ARGS"
-        $COMPOSE run --rm collect python scripts/param_optimizer.py $ARGS
-        ;;
-
-    param-best)
-        setup_env
-        ensure_prod
-        shift || true
-        if [ -z "$1" ]; then
-            $COMPOSE run --rm collect python scripts/param_optimizer.py --best-all
-        else
-            $COMPOSE run --rm collect python scripts/param_optimizer.py --best "$1"
-        fi
-        ;;
-
     backfill-status)
         setup_env
         ensure_prod
@@ -273,61 +219,14 @@ case "$CMD" in
         $COMPOSE run --rm backfill python scripts/backfill_chains.py --status
         ;;
 
-    shadow)
+    backfill-theta)
         setup_env
         ensure_prod
         shift || true
-        ARGS="${*:---scan-and-log SPY,QQQ,IWM}"
-        echo -e "${GREEN}Shadow paper trading:${NC} $ARGS"
-        $COMPOSE run --rm collect python scripts/shadow_check.py $ARGS
-        ;;
-
-    shadow-stats)
-        setup_env
-        ensure_prod
-        echo -e "${GREEN}Shadow trading stats:${NC}"
-        $COMPOSE run --rm collect python scripts/shadow_check.py --stats
-        ;;
-
-    shadow-monitor)
-        setup_env
-        ensure_prod
-        echo -e "${GREEN}Starting shadow trade monitor (5-min checks)...${NC}"
-        $COMPOSE up -d shadow-monitor
-        echo -e "  Monitor running in background. Use ${YELLOW}./start.sh logs shadow-monitor${NC} to watch."
-        ;;
-
-    shadow-monitor-stop)
-        setup_env
-        echo -e "${GREEN}Stopping shadow trade monitor...${NC}"
-        $COMPOSE stop shadow-monitor
-        ;;
-
-    agent-backtest)
-        setup_env
-        ensure_prod
-        shift || true
-        ARGS="${*:---tickers SPY,QQQ,IWM}"
-        echo -e "${GREEN}Agent backtest:${NC} $ARGS"
-        $COMPOSE run --rm agent-backtest python scripts/backtest_agents.py $ARGS
-        ;;
-
-    orchestrator)
-        setup_env
-        ensure_prod
-        shift || true
-        ARGS="$*"
-        echo -e "${GREEN}Multi-agent orchestrator:${NC} $ARGS"
-        $COMPOSE run --rm orchestrator python scripts/run_orchestrator.py $ARGS
-        ;;
-
-    orchestrator-stats)
-        setup_env
-        ensure_prod
-        shift || true
-        ARGS="$*"
-        echo -e "${GREEN}Multi-agent stats:${NC}"
-        $COMPOSE run --rm orchestrator python scripts/run_orchestrator.py --stats $ARGS
+        ARGS="${*:---start 2020-01-01 --end 2025-12-31}"
+        echo -e "${GREEN}ThetaData backfill:${NC} $ARGS"
+        echo -e "  ${YELLOW}Requires Theta Terminal running on host (port 25503)${NC}"
+        $COMPOSE run --rm backfill-theta python scripts/backfill_thetadata.py $ARGS
         ;;
 
     test)
@@ -385,35 +284,31 @@ case "$CMD" in
         echo "Usage: ./start.sh [command]"
         echo ""
         echo "Commands:"
-        echo "  (none), up    Start the app detached (stays running)"
-        echo "  dev           Start with hot-reload (foreground)"
-        echo "  fg            Start in foreground (Ctrl+C to stop)"
-        echo "  scan          Run a CLI scan (pass args after command)"
-        echo "  backtest      Run a backtest (pass args after command)"
-        echo "  collect       Collect daily chain snapshots (pass tickers after)"
-        echo "  collect-stats Show chain snapshot database statistics"
-        echo "  intraday-backtest  Run 0 DTE intraday backtest (pass args)"
-        echo "  agent-backtest Backtest agents against historical chain data"
-        echo "  dolt-import   Import DoltHub options data into chain_snapshots.db"
-        echo "  dolt-status   Show DoltHub data availability and import status"
-        echo "  orchestrator  Run multi-agent paper trading cycle"
-        echo "  orchestrator-stats  Show per-agent performance stats"
-        echo "  test          Run the test suite"
-        echo "  shell         Interactive dev shell"
-        echo "  build         Rebuild Docker images (no cache)"
-        echo "  restart       Stop + rebuild + start"
-        echo "  stop          Stop all services"
-        echo "  logs          Tail app logs"
-        echo "  status        Show running containers"
-        echo "  clean         Stop + remove everything"
+        echo "  (none), up      Start the app detached (stays running)"
+        echo "  dev             Start with hot-reload (foreground)"
+        echo "  fg              Start in foreground (Ctrl+C to stop)"
+        echo "  scan            Run a CLI scan (pass args after command)"
+        echo "  backtest        Run a backtest (pass args after command)"
+        echo "  collect         Collect daily chain snapshots"
+        echo "  collect-stats   Show chain snapshot database statistics"
+        echo "  backfill        Alpaca historical options backfill"
+        echo "  backfill-status Show backfill progress"
+        echo "  backfill-theta  ThetaData historical backfill (needs Theta Terminal)"
+        echo "  test            Run the test suite"
+        echo "  shell           Interactive dev shell"
+        echo "  build           Rebuild Docker images (no cache)"
+        echo "  restart         Stop + rebuild + start"
+        echo "  stop            Stop all services"
+        echo "  logs            Tail app logs"
+        echo "  status          Show running containers"
+        echo "  clean           Stop + remove everything"
         echo ""
         echo "Examples:"
         echo "  ./start.sh                    # start detached"
         echo "  ./start.sh scan SPY,QQQ --strategies --top 5"
         echo "  ./start.sh backtest --strategy iron_condor --symbol SPY"
         echo "  ./start.sh collect SPY,QQQ,IWM --max-dte 30"
-        echo "  ./start.sh collect-stats"
-        echo "  ./start.sh intraday-backtest --strategy 0dte_iron_condor --symbol SPY"
+        echo "  ./start.sh backfill-theta SPY --start 2024-01-01 --end 2024-12-31"
         echo "  ./start.sh restart            # rebuild + relaunch"
         exit 1
         ;;

@@ -8,7 +8,7 @@ cd options_analyzer
 ./start.sh
 ```
 
-That's it. Open **http://localhost:8000** in your browser.
+That's it. Open **http://localhost:9000** in your browser.
 
 First run takes ~2-3 minutes to build Docker images. Subsequent runs start in seconds.
 
@@ -67,19 +67,18 @@ You'll see:
 ║   Short-term options decision tool   ║
 ╚══════════════════════════════════════╝
 
-Starting Options Scanner...
-  Backend API:  http://localhost:8000
-  API docs:     http://localhost:8000/docs
-  Web UI:       http://localhost:8000
+Building and starting Options Scanner...
+  Web UI:       http://localhost:9000
+  API docs:     http://localhost:9000/docs
 
-  Press Ctrl+C to stop
+  App is running in the background.
 ```
 
 ---
 
 ## What you get
 
-### Web UI (http://localhost:8000)
+### Web UI (http://localhost:9000)
 
 Five tabs:
 
@@ -93,7 +92,7 @@ Five tabs:
 
 **Journal** — Trade log. Record entries and exits, track actual P&L vs predicted, and see per-strategy performance over time.
 
-### API docs (http://localhost:8000/docs)
+### API docs (http://localhost:9000/docs)
 
 Full interactive Swagger UI. Every endpoint is documented and testable from the browser.
 
@@ -103,11 +102,15 @@ Full interactive Swagger UI. Every endpoint is documented and testable from the 
 
 | Command | What it does |
 |---|---|
-| `./start.sh` | Launch the full app on :8000 |
-| `./start.sh dev` | Launch with hot-reload (backend only) |
+| `./start.sh` | Launch the full app on :9000 |
+| `./start.sh dev` | Launch with hot-reload (foreground) |
 | `./start.sh scan SPY,QQQ --strategies` | One-off CLI scan |
 | `./start.sh backtest --strategy iron_condor --symbol SPY` | One-off backtest |
-| `./start.sh test` | Run the test suite (10 test files) |
+| `./start.sh collect SPY,QQQ,IWM` | Collect daily chain snapshots |
+| `./start.sh collect-stats` | Show snapshot DB statistics |
+| `./start.sh backfill SPY --start 2025-04-01` | Alpaca historical backfill |
+| `./start.sh backfill-theta` | ThetaData backfill (needs Theta Terminal) |
+| `./start.sh test` | Run the test suite (364 tests) |
 | `./start.sh shell` | Interactive dev shell inside Docker |
 | `./start.sh stop` | Stop all running containers |
 | `./start.sh logs` | Tail live app logs |
@@ -137,12 +140,12 @@ python scripts/scan.py SPY --top 10
 python scripts/scan.py SPY,QQQ,IWM --strategies --top 10
 
 # Run a backtest
-python scripts/backtest.py --strategy iron_condor --symbol SPY
-python scripts/backtest.py --compare --symbols SPY,QQQ --strategies iron_condor,credit_spread
+python scripts/run_backtest.py --strategy iron_condor --symbol SPY
+python scripts/run_backtest.py --compare --symbols SPY,QQQ --strategies iron_condor,credit_spread
 
 # Start the web app
 python -m uvicorn ui.app:app --host 0.0.0.0 --port 8000
-# Then open http://localhost:8000
+# Then open http://localhost:9000
 ```
 
 ---
@@ -230,8 +233,12 @@ Source: local (BS pricer + yfinance OHLCV)
 
 | Variable | Default | Description |
 |---|---|---|
+| `API_SECRET_KEY` | (empty) | API authentication key |
 | `TT_USERNAME` | (empty) | Tastytrade email/username |
 | `TT_PASSWORD` | (empty) | Tastytrade password |
+| `APCA_API_KEY_ID` | (empty) | Alpaca API key (historical backfill) |
+| `APCA_API_SECRET_KEY` | (empty) | Alpaca API secret |
+| `THETADATA_URL` | (empty) | ThetaData Terminal URL |
 | `FLASHALPHA_API_KEY` | (empty) | FlashAlpha API key for GEX data |
 | `ANTHROPIC_API_KEY` | (empty) | For AI narrative generation |
 | `OPTIONS_FUND_SIZE` | 10000 | Your fund size in dollars |
@@ -252,9 +259,11 @@ Source: local (BS pricer + yfinance OHLCV)
 
 | Source | What it provides | Cost | Credential needed |
 |---|---|---|---|
-| Tastytrade API | Live options chains, streaming Greeks, backtester (13yr history) | $0 (funded account) | `TT_USERNAME` + `TT_PASSWORD` |
 | yfinance | Historical prices, VIX term structure, options chains (delayed) | $0 | None |
-| FlashAlpha | GEX walls, gamma flip, dealer regime classification | $0 (5 calls/day) | `FLASHALPHA_API_KEY` |
+| Tastytrade API | Live options chains, streaming Greeks | $0 (funded account) | `TT_USERNAME` + `TT_PASSWORD` |
+| Alpaca | Historical options chain backfill | $0 (paper account) | `APCA_API_KEY_ID` + `APCA_API_SECRET_KEY` |
+| ThetaData | EOD greeks, OI, IV for 2020-2025 backfill | $40/mo (Value plan) | Theta Terminal on host |
+| FlashAlpha | GEX walls, gamma flip, dealer regime | $0 (5 calls/day) | `FLASHALPHA_API_KEY` |
 
 Without any credentials, the app runs on yfinance alone. Each data source you add improves the scanner's accuracy.
 
@@ -273,15 +282,12 @@ options_analyzer/
 ├── src/                     # All Python source code
 │   ├── models/              # Black-Scholes pricer + Greeks
 │   ├── monte_carlo/         # GBM, GARCH, jump-diffusion, American MC
-│   ├── analytics/           # Vol surface, scenario analysis, visualization
 │   ├── scanner/             # Chain scanner pipeline (providers → filter → score)
-│   │   └── providers/       # Data provider implementations (Tastytrade, yfinance)
-│   ├── regime/              # Market regime detection (VIX, term structure, calendar)
-│   ├── strategies/          # 9 multi-leg strategy definitions + registry
-│   ├── backtest/            # Backtesting engine (Tastytrade API + local)
-│   ├── risk/                # Position sizing, pre-trade risk rules
-│   ├── streaming/           # Live Greeks streaming via dxfeed WebSocket
-│   ├── execution/           # Tastytrade order placement
+│   │   └── providers/       # Data providers (Tastytrade, yfinance)
+│   ├── regime/              # Market regime detection (VIX, term structure)
+│   ├── strategies/          # 5 strategy implementations + deferred swing
+│   ├── backtest/            # BS-model + chain-replay backtesting
+│   ├── data/                # Chain storage, backfill pipelines, API clients
 │   └── ui/                  # FastAPI backend
 │
 ├── frontend/                # React frontend (Vite)
@@ -289,11 +295,14 @@ options_analyzer/
 │
 ├── scripts/                 # CLI entry points
 │   ├── scan.py              # Scanner CLI
-│   └── backtest.py          # Backtest CLI
+│   ├── run_backtest.py      # Backtest CLI
+│   ├── collect_chains.py    # Daily chain collector
+│   ├── backfill_chains.py   # Alpaca historical backfill
+│   └── backfill_thetadata.py# ThetaData historical backfill
 │
-├── tests/                   # 10 test files, ~150 tests
-├── config/                  # JSON config files
-└── data/                    # SQLite databases (backtest cache, trade journal)
+├── tests/                   # 364 tests
+├── config/                  # Agent profiles (agents.yaml)
+└── data/                    # SQLite databases (Docker volume)
 ```
 
 ---
@@ -308,12 +317,12 @@ Make sure Docker Desktop is running and has at least 4GB memory allocated. The n
 
 Check your `TT_USERNAME` and `TT_PASSWORD` in `.env`. The app works fine without them using yfinance as a fallback.
 
-**Port 8000 already in use**
+**Port 9000 already in use**
 
 ```bash
-# Find what's using port 8000
-lsof -i :8000
-# Or change the port in docker-compose.yml: ports: - "9000:8000"
+# Find what's using port 9000
+lsof -i :9000
+# Or change the port in docker-compose.yml: ports: - "9001:8000"
 ```
 
 **Frontend not loading / blank page**

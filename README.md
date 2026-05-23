@@ -1,18 +1,18 @@
 # Index Options Scanner
 
-0-14 DTE defined-risk options scanner with multi-agent paper trading orchestrator.
-Three-layer signal architecture. Docker deployment. FastAPI + React on `localhost:8000`.
+0-14 DTE defined-risk options scanner with three-layer signal architecture.
+Docker deployment. FastAPI + React on `localhost:9000`.
 
 ## What It Does
 
-Scans SPY, QQQ, IWM (configurable) for short-term options trades using a three-layer signal pipeline, then paper-trades them through independent agent profiles with portfolio-level risk guardrails.
+Scans SPY, QQQ, IWM (configurable) for short-term options trades using a three-layer signal pipeline, then validates strategies through a historical backtester.
 
 **Signal layers:**
 1. **Vol regime** — IV rank, VIX level, term structure → HIGH_IV / MODERATE_IV / LOW_IV / SPIKE
 2. **Directional bias** — EMA 9/21, RSI, MACD, momentum → STRONG_BULLISH to STRONG_BEARISH
 3. **Dealer positioning** — GEX, max pain, P/C ratio → LONG_GAMMA / SHORT_GAMMA
 
-**Pipeline:** MarketState (L1) → TradeGenerator (L2) → Sizing (L3) → shadow_store
+**Pipeline:** Watchlist → ChainProvider → [Vol Regime → Bias → Dealer] → Decision Matrix → Strategy + Conviction Score
 
 ## Strategies (defined-risk only)
 
@@ -25,141 +25,110 @@ Scans SPY, QQQ, IWM (configurable) for short-term options trades using a three-l
 | Butterfly | MODERATE/LOW_IV, pin at max pain | 0-7 |
 
 No naked options, calendars, diagonals, strangles, or straddles.
-
-## Multi-Agent Orchestrator
-
-Four independent agent profiles compete for a shared risk budget. Each agent applies different filters to the same pipeline output. A central orchestrator enforces portfolio-level safety limits.
-
-### Agent Profiles (`config/agents.yaml`)
-
-| Agent | Allocation | Min Score | Strategies | Filter |
-|---|---|---|---|---|
-| conservative | 35% | 80 | butterfly, short_put_spread | High conviction only |
-| momentum | 25% | 70 | long_call/put_spread | Bias strength >= 3 |
-| vol_harvester | 25% | 70 | short_put_spread, butterfly | HIGH_IV, IV-RV edge >= 5% |
-| opportunistic | 15% | 65 | all 4 | Broadest, smallest allocation |
-
-### Portfolio Guardrails
-
-| Parameter | Value | Purpose |
-|---|---|---|
-| max_total_positions | 12 | Hard cap across all agents |
-| max_positions_per_ticker | 4 | Diversification per underlying |
-| daily_drawdown_limit | 3% | Pause all new entries |
-| portfolio_kill_switch | 8% | Full stop on cumulative drawdown |
-| max_same_direction | 3 | Limits correlated directional bets |
-
-### Agent-Level Safety
-
-- **Daily loss pause**: Agent auto-pauses if daily loss exceeds its `max_daily_loss_pct`
-- **Drawdown pause**: Agent auto-pauses at cumulative drawdown threshold
-- **Position cap**: Each agent limited to `max_positions` open trades
-- **Conflict resolution**: Opposing directions on same ticker → higher confluence score wins
+Deferred strategies for a future swing module live in `src/strategies/_deferred/`.
 
 ## Quick Start
 
 ```bash
-# First run — creates .env, builds Docker images
+git clone https://github.com/fortySixand2-T/options_analyzer.git
+cd options_analyzer
 ./start.sh
-
-# Run the multi-agent orchestrator (one cycle)
-./start.sh orchestrator
-
-# Preview trades without logging
-./start.sh orchestrator --dry-run
-
-# Per-agent performance stats
-./start.sh orchestrator-stats
-
-# Pause/enable an agent
-./start.sh orchestrator --pause momentum
-./start.sh orchestrator --enable momentum
 ```
+
+Open **http://localhost:9000** in your browser. First run takes ~2-3 minutes to build Docker images.
+
+## Web UI
+
+Five tabs:
+
+- **Regime** — VIX level, term structure, IV rank, dealer positioning badge
+- **Scanner** — Conviction-scored trade setups with signal checklists
+- **Greeks** — Interactive options calculator (spot, strike, DTE, IV sliders)
+- **Backtest** — Historical strategy validation with compare mode, signal filters, equity curves, P&L distribution, regime/DTE breakdowns, and trade log. Supports BS Model (fast, synthetic) and Real Data (chain_replay) sources
+- **Journal** — Trade log with entry/exit tracking
 
 ## All Commands
 
 ```bash
-./start.sh                    # Launch app (detached, localhost:8000)
+./start.sh                    # Launch app (detached, localhost:9000)
 ./start.sh dev                # Foreground with hot-reload
-./start.sh test               # Run test suite
+./start.sh test               # Run test suite (364 tests)
 ./start.sh scan               # CLI scan: SPY, QQQ, IWM
 ./start.sh backtest           # Run backtest
-./start.sh orchestrator       # Multi-agent paper trading cycle
-./start.sh orchestrator-stats # Per-agent performance breakdown
-./start.sh shadow             # Shadow trade scan (single-agent legacy)
-./start.sh shadow-stats       # Shadow trade statistics
-./start.sh shadow-monitor     # Start exit monitor (5-min loop)
 ./start.sh collect            # Collect daily chain snapshots
 ./start.sh collect-stats      # Snapshot DB statistics
 ./start.sh backfill SPY ...   # Alpaca historical options backfill
+./start.sh backfill-status    # Show backfill progress
+./start.sh backfill-theta     # ThetaData backfill (needs Theta Terminal)
 ./start.sh shell              # Interactive dev shell
 ./start.sh logs               # Tail app logs
 ./start.sh stop               # Stop everything
+./start.sh build              # Rebuild Docker images
+./start.sh restart            # Stop + rebuild + start
 ./start.sh clean              # Stop + remove containers/images
 ```
+
+## Architecture
+
+```
+Watchlist → ChainProvider → [Vol Regime → Bias → Dealer] → Decision Matrix → Strategy + Score
+```
+
+The scanner evaluates all three signal layers independently, maps the combination to an appropriate strategy via the decision matrix, then scores the opportunity using weighted conviction scoring.
 
 ## Project Structure
 
 ```
 ├── config/
-│   └── agents.yaml              # Agent profiles + guardrails (user-editable)
+│   └── agents.yaml              # Agent profiles + guardrails (future use)
 ├── scripts/
-│   ├── run_orchestrator.py      # Orchestrator CLI entry point
-│   ├── shadow_check.py          # Shadow trade scanner
-│   ├── backfill_chains.py       # Alpaca historical backfill CLI
-│   ├── daily_collect.sh         # Cron: daily chain snapshots
-│   └── daily_collect_midday.sh  # Cron: midday chain snapshots
+│   ├── scan.py                  # Scanner CLI entry point
+│   ├── run_backtest.py          # Backtest CLI entry point
+│   ├── collect_chains.py        # Daily chain snapshot collector
+│   ├── backfill_chains.py       # Alpaca historical backfill
+│   ├── backfill_thetadata.py    # ThetaData historical backfill
+│   └── daily_collect.sh         # Cron: daily chain snapshots
 ├── src/
-│   ├── agents/                  # Multi-agent orchestrator
-│   │   ├── agent_config.py      # Pydantic v2 config models
-│   │   ├── orchestrator.py      # Core loop: build → filter → guardrails → log
-│   │   └── risk_ledger.py       # Per-agent + portfolio risk tracking
 │   ├── backtest/                # Backtesting engine
-│   │   ├── local_backtest.py    # Backtest runner with signal replay
-│   │   ├── analyzer.py          # Results analysis
-│   │   └── models.py            # Backtest data models
+│   │   ├── local_backtest.py    # BS-model backtest runner
+│   │   ├── chain_replay.py      # Real-data chain replay backtester
+│   │   ├── analyzer.py          # Results analysis + breakdowns
+│   │   └── models.py            # BacktestTrade, BacktestResult models
 │   ├── data/                    # Data layer
-│   │   ├── shadow_store.py      # SQLite shadow trade persistence
-│   │   ├── shadow_monitor.py    # Exit monitor (5-min loop)
-│   │   ├── chain_store.py       # Chain snapshot storage
-│   │   ├── alpaca_client.py     # Alpaca REST client for historical data
-│   │   └── backfill_pipeline.py # Historical backfill orchestrator
-│   ├── execution/               # Order management (Alpaca paper)
-│   │   └── order_manager.py     # Order bridge: candidate → order
+│   │   ├── chain_store.py       # Chain snapshot SQLite storage
+│   │   ├── alpaca_client.py     # Alpaca REST client
+│   │   ├── thetadata_client.py  # ThetaData REST client
+│   │   ├── thetadata_backfill.py# ThetaData backfill pipeline
+│   │   └── backfill_pipeline.py # Alpaca backfill orchestrator
 │   ├── regime/                  # Vol regime detection
 │   │   └── detector.py          # IV rank, VIX, term structure
 │   ├── scanner/                 # Chain scanning + scoring
 │   │   ├── scanner.py           # Scan orchestration
-│   │   ├── scorer.py            # Conviction scoring
+│   │   ├── scorer.py            # Conviction scoring (frozen)
 │   │   ├── strategy_mapper.py   # Decision matrix
-│   │   └── strategy_pricer.py   # Strike placement
+│   │   ├── strategy_pricer.py   # Strike placement
+│   │   └── providers/           # Data providers (TT, yfinance)
 │   ├── strategies/              # Strategy implementations
-│   │   ├── butterfly.py
+│   │   ├── iron_condor.py
 │   │   ├── credit_spread.py
 │   │   ├── debit_spread.py
-│   │   ├── iron_condor.py
-│   │   └── _deferred/          # Future swing strategies (14-60 DTE)
-│   ├── swing/                   # Swing trading module
+│   │   ├── butterfly.py
+│   │   └── _deferred/           # Future swing strategies (14-60 DTE)
+│   ├── models/                  # Black-Scholes pricer + Greeks (frozen)
+│   ├── monte_carlo/             # GBM, GARCH, jump-diffusion (frozen)
 │   ├── ui/
-│   │   └── app.py               # FastAPI backend (40+ endpoints)
-│   ├── market_state.py          # L1: signal aggregation
-│   ├── trade_generator.py       # L2: candidate generation + scoring
-│   ├── sizing.py                # L3: Kelly criterion sizing
+│   │   └── app.py               # FastAPI backend
 │   ├── bias_detector.py         # Directional bias signals
-│   ├── portfolio.py             # Portfolio engine
 │   └── config.py                # Conviction weights + config
 ├── frontend/src/
 │   ├── App.jsx                  # React app with tab navigation
 │   └── components/
-│       ├── Scanner.jsx          # Options scanner view
-│       ├── Backtest.jsx         # Backtesting UI with compare mode
-│       ├── TradingView.jsx      # L1→L2→L3 pipeline + order placement
 │       ├── RegimeDashboard.jsx  # Vol regime visualization
-│       ├── ShadowTrades.jsx     # Paper trade tracker
-│       ├── Portfolio.jsx        # Portfolio + charts (Recharts)
-│       ├── Journal.jsx          # Trade journal
-│       ├── SwingScanner.jsx     # Swing trade scanner
-│       └── GreeksExplorer.jsx   # Interactive Greeks calculator
+│       ├── Scanner.jsx          # Options scanner view
+│       ├── GreeksExplorer.jsx   # Interactive Greeks calculator
+│       ├── Backtest.jsx         # Backtest config + orchestration
+│       ├── BacktestParts.jsx    # Results views, charts, trade table
+│       └── Journal.jsx          # Trade journal
 ├── data/                        # SQLite databases (Docker volume)
 ├── docker-compose.yml
 ├── Dockerfile
@@ -167,34 +136,10 @@ Four independent agent profiles compete for a shared risk budget. Each agent app
 └── SIGNALS.md                   # Signal definitions (read first)
 ```
 
-## Architecture
-
-```
-Watchlist → ChainProvider → [Vol Regime → Bias → Dealer] → Decision Matrix → Strategy + Score
-                                                                                    │
-                                                        ┌───────────────────────────┘
-                                                        ▼
-                                                  agents.yaml
-                                                        │
-                                                  Orchestrator
-                                                        │
-                            ┌──────────┬────────────────┼────────────────┐
-                            ▼          ▼                ▼                ▼
-                       conservative  momentum      vol_harvester   opportunistic
-                            │          │                │                │
-                            └──────────┴────────────────┴────────────────┘
-                                                        │
-                                              Portfolio Guardrails
-                                                        │
-                                              shadow_store (SQLite)
-                                                        │
-                                              shadow_monitor (exits)
-```
-
 ## Security
 
 - Containers run as non-root user
-- API key authentication on all endpoints
+- API key authentication on mutating endpoints (`API_SECRET_KEY` in .env)
 - Input validation bounds on query parameters
 - Security headers (X-Content-Type-Options, X-Frame-Options, etc.)
 - Path traversal protection
@@ -204,24 +149,29 @@ Watchlist → ChainProvider → [Vol Regime → Bias → Dealer] → Decision Ma
 
 - Python 3.11+, FastAPI, Pydantic v2
 - React + Vite frontend
-- Docker Compose
+- Docker Compose (two images: `options_analyzer:prod` and `:dev`)
 - SQLite for all persistence
-- yfinance for chain data
-- Alpaca for paper trading + historical backfill
-- ruff for linting, pytest for tests (570+ tests)
+- yfinance for chain data (free, delayed)
+- Tastytrade API for live data (optional, free with funded account)
+- Alpaca for historical backfill (optional)
+- ThetaData for EOD greeks backfill (optional, $40/mo)
+- ruff for linting, pytest for tests
 
 ## Environment Variables
 
 Copy `.env.example` to `.env` and configure:
 
 ```
-TT_USERNAME=         # Tastytrade (optional)
+API_SECRET_KEY=      # API authentication key (protects mutating endpoints)
+TT_USERNAME=         # Tastytrade (optional, for live data)
 TT_PASSWORD=
-FLASHALPHA_API_KEY=  # FlashAlpha dealer data (optional, chain fallback works)
-APCA_API_KEY_ID=     # Alpaca paper trading
+APCA_API_KEY_ID=     # Alpaca (optional, for historical backfill)
 APCA_API_SECRET_KEY=
-API_KEY=             # API authentication key
+THETADATA_URL=       # ThetaData Terminal URL (optional)
+FLASHALPHA_API_KEY=  # FlashAlpha dealer data (optional, chain fallback works)
 ```
+
+Without any credentials, the app runs on yfinance alone.
 
 ## Key Documentation
 
@@ -229,6 +179,5 @@ API_KEY=             # API authentication key
 |---|---|
 | `SIGNALS.md` | Signal definitions, decision matrix, conviction weights |
 | `CLAUDE.md` | Development rules and frozen files |
-| `VALIDATION_RESULTS.md` | Backtest results from 6 validation runs |
 | `HOWTO.md` | User guide |
-| `config/agents.yaml` | Agent profiles and guardrails |
+| `VALIDATION_RESULTS.md` | Backtest results from 6 validation runs |

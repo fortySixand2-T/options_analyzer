@@ -124,15 +124,17 @@ All signals calibrated for 1-14 day moves. No SMA 200, no golden cross, no stoch
 
 ## Conviction score
 
-| Component | Weight |
-|---|---|
-| Vol regime alignment | 20% |
-| Directional conviction | 20% |
-| Dealer regime alignment | 20% |
-| GARCH edge magnitude | 15% |
-| IV rank in sweet spot | 10% |
-| Liquidity (spread + OI) | 10% |
-| Greeks quality (theta/vega) | 5% |
+Weights calibrated from 6 validation backtests (see VALIDATION_RESULTS.md).
+
+| Component | Weight | Notes |
+|---|---|---|
+| GARCH edge magnitude | 30% | Strongest predictor of trade outcome |
+| Vol regime alignment | 15% | |
+| IV rank in sweet spot | 15% | |
+| Liquidity (spread + OI) | 15% | |
+| Directional conviction | 10% | |
+| Greeks quality (theta/vega) | 10% | |
+| Dealer regime alignment | 5% | Low weight until OI data backfilled |
 
 Show if >= 60. Highlight if >= 75.
 

@@ -1,5 +1,9 @@
 # Changelog
 
+- [2026-05-23] Modified: start.sh — Remove commands for parked scripts (orchestrator, shadow, dolt, intraday, param-optimize); fix port to 9000; add backfill-theta command
+- [2026-05-23] Modified: README.md — Rewrite to reflect actual repo state: remove orchestrator section, fix port, fix API_SECRET_KEY, update project structure, correct test count
+- [2026-05-23] Modified: HOWTO.md — Fix port 8000→9000, fix backtest.py→run_backtest.py, update command table, add missing env vars, update project structure and data sources
+- [2026-05-23] Modified: SIGNALS.md — Sync conviction weights with actual config.py values (post-calibration)
 - [2026-05-22] Modified: src/backtest/models.py — Add dealer_regime field to BacktestTrade model
 - [2026-05-22] Modified: src/backtest/local_backtest.py — Capture and store dealer_regime at trade entry time
 - [2026-05-22] Modified: src/ui/app.py — Add dealer_regime to trade serialization
