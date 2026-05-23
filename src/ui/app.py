@@ -1,16 +1,18 @@
 """
 FastAPI backend for the Options Scanner web UI.
 
-Routes:
-    GET  /api/regime                  ��� current regime classification + VIX
-    GET  /api/scan                    — scanner results with checklists
-    GET  /api/chain/{symbol}          — options chain with Greeks
-    POST /api/greeks                  — compute Greeks for arbitrary inputs
-    GET  /api/backtest/{strategy}     — backtest results
-    GET  /api/journal                 — trade journal entries
-    POST /api/journal                 — log a trade
-
-Options Analytics Team — 2026-04
+Core routes (0-14 DTE scanner only):
+    GET  /api/regime                     — current regime + VIX + dealer
+    GET  /api/market-state               — full L1 market state snapshot
+    GET  /api/trade-candidates           — L1→L2→L3 pipeline
+    GET  /api/scan                       — scanner results with checklists
+    GET  /api/chain/{symbol}             — options chain with Greeks
+    POST /api/greeks                     — compute Greeks for arbitrary inputs
+    GET  /api/backtest/{strategy}        — backtest with signal filters
+    GET  /api/backtest/compare           — multi-strategy comparison
+    GET  /api/chain-snapshots/*          — stored chain snapshot data
+    GET  /api/journal                    — trade journal entries
+    POST /api/journal                    — log a trade
 """
 
 import logging
@@ -242,30 +244,6 @@ def get_portfolio():
         return pf.to_dict()
     except Exception as e:
         logger.exception("Failed to get portfolio")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@app.get("/api/portfolio/allocation")
-def get_allocation(
-    regime: str = Query("MODERATE_IV", description="Current market regime"),
-    vrp_rich: bool = Query(False, description="VRP exceeds threshold"),
-    vrp_pct: float = Query(0.0, description="VRP percentage"),
-    directional: bool = Query(False, description="Clear directional bias"),
-    swing_bias_score: int = Query(0, description="Swing bias score (-10 to 10)"),
-    portfolio_value: float = Query(100_000, description="Total portfolio value"),
-):
-    """Compute capital allocation between short-DTE and swing books."""
-    try:
-        from portfolio_allocator import compute_allocation
-        alloc = compute_allocation(
-            regime=regime, vrp_rich=vrp_rich, vrp_pct=vrp_pct,
-            directional=directional, swing_bias_score=swing_bias_score,
-        )
-        result = alloc.to_dict()
-        result["dollars"] = alloc.for_portfolio(portfolio_value)
-        return result
-    except Exception as e:
-        logger.exception("Failed to compute allocation")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -518,10 +496,12 @@ def get_backtest(
     edge_threshold: float = Query(0.0, ge=0.0, le=100.0),
     exit_rule: str = Query("50pct"),
     slippage_pct: float = Query(0.0, ge=0.0, le=1.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
+    source: str = Query("local", description="Pricing source: 'local' (BS) or 'chain_replay' (real data)"),
 ):
     """Run or retrieve cached backtest results with optional signal filters."""
     from backtest.models import BacktestRequest
     from backtest.local_backtest import run_local_backtest
+    from backtest.chain_replay import run_chain_replay
 
     try:
         end_date = date.fromisoformat(end) if end else date.today()
@@ -543,8 +523,12 @@ def get_backtest(
     )
 
     try:
-        result = run_local_backtest(req)
-        return _serialize_backtest(result, strategy, symbol, start_date, end_date)
+        runner = run_chain_replay if source == "chain_replay" else run_local_backtest
+        result = runner(req)
+        resp = _serialize_backtest(result, strategy, symbol, start_date, end_date)
+        if result.data_issues:
+            resp["data_issues"] = result.data_issues
+        return resp
     except Exception as e:
         logger.exception("Backtest failed")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -562,10 +546,12 @@ def compare_backtests(
     edge_threshold: float = Query(0.0, ge=0.0, le=100.0),
     exit_rule: str = Query("50pct"),
     slippage_pct: float = Query(0.0, ge=0.0, le=1.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
+    source: str = Query("local", description="Pricing source: 'local' (BS) or 'chain_replay' (real data)"),
 ):
     """Compare backtests across multiple strategies."""
     from backtest.models import BacktestRequest
     from backtest.local_backtest import run_local_backtest
+    from backtest.chain_replay import run_chain_replay
 
     try:
         end_date = date.fromisoformat(end) if end else date.today()
@@ -573,6 +559,7 @@ def compare_backtests(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
     strategy_list = [s.strip() for s in strategies.split(",") if s.strip()]
+    runner = run_chain_replay if source == "chain_replay" else run_local_backtest
 
     results = {}
     for strat in strategy_list:
@@ -589,8 +576,11 @@ def compare_backtests(
             slippage_pct=slippage_pct,
         )
         try:
-            result = run_local_backtest(req)
-            results[strat] = _serialize_backtest(result, strat, symbol, start_date, end_date)
+            result = runner(req)
+            resp = _serialize_backtest(result, strat, symbol, start_date, end_date)
+            if result.data_issues:
+                resp["data_issues"] = result.data_issues
+            results[strat] = resp
         except Exception as e:
             logger.warning("Backtest failed for %s: %s", strat, e)
             results[strat] = {"error": str(e)}
@@ -599,33 +589,6 @@ def compare_backtests(
 
 
 # ── Journal ───────────────────────────��──────────────────────────────────────
-
-@app.get("/api/params/best/{ticker}")
-def get_best_params_endpoint(ticker: str, pricing_mode: str = None):
-    """Get optimized parameters for a ticker."""
-    import sys as _sys
-    from pathlib import Path as _Path
-    _scripts = str(_Path(__file__).resolve().parent.parent.parent / "scripts")
-    if _scripts not in _sys.path:
-        _sys.path.insert(0, _scripts)
-    from param_optimizer import get_best_params
-    results = get_best_params(ticker.upper(), pricing_mode=pricing_mode)
-    if not results:
-        return {"ticker": ticker.upper(), "optimized": False, "params": []}
-    return {"ticker": ticker.upper(), "optimized": True, "params": results}
-
-
-@app.get("/api/params/best")
-def get_all_best_params_endpoint(pricing_mode: str = None):
-    """Get optimized parameters for all tickers."""
-    import sys as _sys
-    from pathlib import Path as _Path
-    _scripts = str(_Path(__file__).resolve().parent.parent.parent / "scripts")
-    if _scripts not in _sys.path:
-        _sys.path.insert(0, _scripts)
-    from param_optimizer import get_all_best_params
-    return {"tickers": get_all_best_params(pricing_mode=pricing_mode)}
-
 
 # Simple SQLite-backed journal
 _JOURNAL_DB = os.getenv("JOURNAL_DB", "data/journal.db")
@@ -684,260 +647,6 @@ def add_journal(entry: JournalEntry):
     finally:
         conn.close()
     return {"status": "ok"}
-
-
-# ── Streaming WebSocket ─────────────────────────────────────────────────────
-
-@app.websocket("/ws/greeks")
-async def ws_greeks(websocket):
-    """WebSocket endpoint for live streaming Greeks.
-
-    Client sends JSON: {"action": "subscribe", "symbols": ["SPY"], "max_dte": 14}
-    Server streams JSON: {symbol, bid, ask, mid, iv, delta, gamma, theta, vega, ...}
-    """
-    from starlette.websockets import WebSocketDisconnect
-
-    await websocket.accept()
-
-    try:
-        from streaming.dxfeed_streamer import DXFeedStreamer
-        from streaming.score_engine import LiveScoreEngine
-
-        streamer = DXFeedStreamer()
-        engine = LiveScoreEngine()
-
-        # Wait for subscription message from client
-        msg = await websocket.receive_json()
-        symbols = msg.get("symbols", ["SPY"])
-        max_dte = msg.get("max_dte", 14)
-
-        connected = await streamer.connect()
-        if not connected:
-            await websocket.send_json({"error": "Could not connect to streaming feed"})
-            await websocket.close()
-            return
-
-        count = await streamer.subscribe(symbols, max_dte=max_dte)
-        await websocket.send_json({"status": "subscribed", "contracts": count})
-
-        # Stream updates to client
-        async def on_update(update):
-            score = engine.on_quote_update(update)
-            if score:
-                try:
-                    await websocket.send_json({
-                        "symbol": score.symbol,
-                        "strike": score.strike,
-                        "option_type": score.option_type,
-                        "dte": score.dte,
-                        "spot": score.spot,
-                        "bid": score.bid,
-                        "ask": score.ask,
-                        "mid": score.mid,
-                        "iv": score.iv,
-                        "delta": score.delta,
-                        "gamma": score.gamma,
-                        "theta": score.theta,
-                        "vega": score.vega,
-                        "theo_price": score.theo_price,
-                        "edge_pct": score.edge_pct,
-                        "conviction": score.conviction,
-                    })
-                except Exception:
-                    pass
-
-        await streamer.listen(callback=on_update)
-
-    except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected")
-    except Exception as e:
-        logger.warning("WebSocket error: %s", e)
-        try:
-            await websocket.send_json({"error": str(e)})
-        except Exception:
-            pass
-    finally:
-        if 'streamer' in dir():
-            await streamer.disconnect()
-
-
-# ── Order Execution ──────────────────────────────────────────────────────────
-
-class CandidateOrderRequest(BaseModel):
-    symbol: str = "SPY"
-    portfolio_value: float = 100_000
-    candidate_index: int = 0  # which candidate from the scan result
-    order_type: str = "limit"
-    price_override: Optional[float] = None
-    dry_run: bool = True  # default to dry run for safety
-
-
-@app.post("/api/order/from-candidate", dependencies=[Depends(require_api_key)])
-def order_from_candidate(req: CandidateOrderRequest):
-    """Execution bridge: scan → pick candidate → build order → submit.
-
-    Runs the full L1→L2→L3 pipeline, picks the candidate at candidate_index,
-    builds a Tastytrade OrderRequest, and submits (or dry-runs).
-    """
-    from market_state import build_market_state
-    from trade_generator import generate_trades
-    from sizing import assess_execution
-    from execution.order_manager import (
-        OrderManager, build_order_from_candidate,
-    )
-
-    # Run L1→L2 pipeline
-    state = build_market_state(req.symbol.upper())
-    candidates = generate_trades(state)
-
-    if not candidates:
-        raise HTTPException(status_code=404, detail="No trade candidates found")
-    if req.candidate_index >= len(candidates):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Candidate index {req.candidate_index} out of range (0-{len(candidates)-1})",
-        )
-
-    tc = candidates[req.candidate_index]
-
-    # L3: execution assessment
-    execution = assess_execution(
-        trade_candidate=tc,
-        portfolio_value=req.portfolio_value,
-    )
-
-    if not execution.executable:
-        return {
-            "status": "blocked",
-            "reason": execution.reason,
-            "candidate": tc.to_dict(),
-            "execution": execution.to_dict(),
-        }
-
-    # Build order from candidate + execution result
-    try:
-        order_req = build_order_from_candidate(
-            trade_candidate=tc,
-            execution_result=execution,
-            order_type=req.order_type,
-            price=req.price_override,
-        )
-        order_req.dry_run = req.dry_run
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # Preview mode: return order details without submitting
-    if req.dry_run:
-        return {
-            "status": "preview",
-            "candidate": tc.to_dict(),
-            "execution": execution.to_dict(),
-            "order": {
-                "underlying": order_req.underlying,
-                "strategy": order_req.strategy,
-                "legs": [
-                    {
-                        "action": leg.action,
-                        "symbol": leg.symbol,
-                        "quantity": leg.quantity,
-                        "option_type": leg.option_type,
-                        "strike": leg.strike,
-                        "expiry": leg.expiry,
-                    }
-                    for leg in order_req.legs
-                ],
-                "order_type": order_req.order_type,
-                "price": order_req.price,
-                "contracts": execution.size.contracts,
-                "risk_dollars": execution.size.risk_dollars,
-            },
-            "message": "Dry run — review order details before submitting with dry_run=false",
-        }
-
-    # Live submission
-    mgr = OrderManager()
-    if not mgr.connect():
-        raise HTTPException(status_code=503, detail="Cannot connect to Tastytrade")
-
-    result = mgr.submit(order_req)
-
-    # Update portfolio after successful submission
-    if result.status.value in ("submitted", "filled"):
-        try:
-            pf = _get_portfolio()
-            from portfolio import Position
-            from datetime import datetime
-            import uuid
-            strikes = [leg.strike for leg in order_req.legs]
-            width = max(strikes) - min(strikes) if len(strikes) >= 2 else 5
-            pf.add_position(Position(
-                position_id=result.order_id or str(uuid.uuid4())[:8],
-                symbol=tc.symbol,
-                strategy=tc.strategy,
-                contracts=execution.size.contracts,
-                entry_price=order_req.price or 0,
-                is_credit=tc.is_credit,
-                max_loss=width * 100 * execution.size.contracts,
-                entry_time=datetime.now(),
-            ))
-        except Exception as e:
-            logger.warning("Portfolio update after order failed: %s", e)
-
-    return {
-        "status": result.status.value,
-        "order_id": result.order_id,
-        "message": result.message,
-        "is_paper": result.is_paper,
-        "candidate": tc.to_dict(),
-        "execution": execution.to_dict(),
-    }
-
-
-class PlaceOrderRequest(BaseModel):
-    underlying: str
-    strategy: str
-    legs: List[Dict]  # [{action, option_type, strike, quantity}]
-    order_type: str = "limit"
-    price: Optional[float] = None
-    dry_run: bool = True  # default to dry run for safety
-
-
-@app.post("/api/order", dependencies=[Depends(require_api_key)])
-def place_order(req: PlaceOrderRequest):
-    """Place an order via Tastytrade (paper by default)."""
-    from execution.order_manager import OrderManager, OrderRequest, OrderLeg
-
-    mgr = OrderManager()
-    if not mgr.connect():
-        raise HTTPException(status_code=503, detail="Cannot connect to Tastytrade")
-
-    legs = []
-    for leg in req.legs:
-        legs.append(OrderLeg(
-            action=leg.get("action", "buy_to_open"),
-            symbol=leg.get("symbol", ""),
-            quantity=int(leg.get("quantity", 1)),
-            option_type=leg.get("option_type", "call"),
-            strike=float(leg.get("strike", 0)),
-            expiry=leg.get("expiry", ""),
-        ))
-
-    order_req = OrderRequest(
-        underlying=req.underlying,
-        strategy=req.strategy,
-        legs=legs,
-        order_type=req.order_type,
-        price=req.price,
-        dry_run=req.dry_run,
-    )
-
-    result = mgr.submit(order_req)
-    return {
-        "status": result.status.value,
-        "order_id": result.order_id,
-        "message": result.message,
-        "is_paper": result.is_paper,
-    }
 
 
 # ── Chain Snapshots ──────────────────────────────────────────────────────────
@@ -1035,371 +744,6 @@ def iv_history(
     return {"symbol": symbol.upper(), "history": history, "count": len(history)}
 
 
-@app.get("/api/backtest/intraday/{strategy}")
-def get_intraday_backtest(
-    strategy: str,
-    symbol: str = Query("SPY", description="Ticker symbol"),
-    start_date: str = Query("", description="Start date YYYY-MM-DD"),
-    end_date: str = Query("", description="End date YYYY-MM-DD"),
-    entry_times: str = Query("10:00,10:30,11:00", description="Comma-separated entry times ET"),
-    exit_time: str = Query("15:45", description="Force exit time ET"),
-    day_type: str = Query("RANGE_DAY", description="Day-type filter (RANGE_DAY/TREND_DAY/none)"),
-    dealer_regime: str = Query("LONG_GAMMA", description="Dealer filter (LONG_GAMMA/SHORT_GAMMA/none)"),
-    wing_width: float = Query(5.0, description="Wing width in $"),
-    profit_target: float = Query(50.0, description="Profit target % of max profit"),
-    stop_loss: float = Query(200.0, description="Stop loss % of max profit"),
-):
-    """Run a 0 DTE intraday backtest using stored 5-min bars."""
-    from datetime import timedelta
-    from backtest.intraday_backtest import run_intraday_backtest
-    from backtest.intraday_models import IntradayBacktestRequest
-
-    end_dt = date.fromisoformat(end_date) if end_date else date.today()
-    start_dt = date.fromisoformat(start_date) if start_date else end_dt - timedelta(days=30)
-
-    request = IntradayBacktestRequest(
-        strategy=strategy,
-        symbol=symbol.upper(),
-        start_date=start_dt,
-        end_date=end_dt,
-        entry_windows=[t.strip() for t in entry_times.split(",")],
-        exit_time=exit_time,
-        day_type_filter=None if day_type.lower() == "none" else day_type,
-        dealer_filter=None if dealer_regime.lower() == "none" else dealer_regime,
-        wing_width=wing_width,
-        profit_target_pct=profit_target,
-        stop_loss_pct=stop_loss,
-    )
-
-    try:
-        result = run_intraday_backtest(request)
-        return result.model_dump()
-    except Exception as e:
-        logger.error("Intraday backtest failed: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@app.get("/api/positions")
-def get_positions():
-    """Get current account positions from Tastytrade."""
-    from execution.order_manager import OrderManager
-    mgr = OrderManager()
-    if not mgr.connect():
-        return {"positions": [], "error": "Not connected to Tastytrade"}
-    return {"positions": mgr.get_positions()}
-
-
-@app.get("/api/streamer/status")
-def streamer_status():
-    """Check if streaming is available."""
-    has_creds = bool(os.getenv("TT_USERNAME")) and bool(os.getenv("TT_PASSWORD"))
-    return {
-        "streaming_available": has_creds,
-        "credentials_set": has_creds,
-        "websocket_url": "/ws/greeks",
-    }
-
-
-# ── Swing Scanner ──────────────────────────────────────────────────────────
-
-@app.get("/api/swing/scan")
-def swing_scan(
-    symbols: str = Query("SPY", description="Comma-separated symbols"),
-    top: int = Query(20, ge=1, le=100, description="Max results"),
-):
-    """Run swing-timeframe strategy scanner (14-60 DTE)."""
-    tickers = [s.strip().upper() for s in symbols.split(",") if s.strip()]
-    if not tickers:
-        raise HTTPException(status_code=400, detail="No symbols provided")
-
-    try:
-        from swing.scanner import scan_swing_strategies
-        result = scan_swing_strategies(tickers=tickers, top=top)
-
-        regime = result["regime"]
-        dealer = result.get("dealer")
-
-        return {
-            "regime": {
-                "regime": regime.regime.value,
-                "rationale": regime.rationale,
-            },
-            "swing_bias": result["swing_bias"],
-            "dealer": {
-                "regime": dealer.dealer_regime,
-                "net_gex": dealer.net_gex,
-                "gamma_flip": dealer.gamma_flip,
-                "call_wall": dealer.call_wall,
-                "put_wall": dealer.put_wall,
-                "max_pain": dealer.max_pain,
-                "put_call_ratio": dealer.put_call_ratio,
-                "source": dealer.source,
-            } if dealer else None,
-            "vrp": result["vrp"],
-            "term_structure": result["term_structure"],
-            "earnings": result["earnings"],
-            "decision": result["decision"],
-            "strategies": [_serialize_strategy(s) for s in result["strategies"]],
-            "signals_count": result["signals_count"],
-        }
-    except Exception as e:
-        logger.exception("Swing scan failed")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@app.get("/api/swing/market-state")
-def swing_market_state(symbol: str = Query("SPY", description="Symbol")):
-    """Market state enriched with VRP, term structure, and earnings data."""
-    try:
-        from market_state import build_market_state
-        state = build_market_state(symbol.upper())
-        base = state.to_dict()
-
-        from swing.bias import detect_swing_bias
-        from scanner.providers import create_provider
-        import pandas as pd
-
-        provider = create_provider()
-        try:
-            history = provider.get_history(symbol.upper(), days=300)
-            if hasattr(history, 'closes') and len(history.closes) >= 50:
-                df = pd.DataFrame({
-                    "Close": history.closes,
-                    "High": history.highs if hasattr(history, 'highs') else history.closes * 1.005,
-                    "Low": history.lows if hasattr(history, 'lows') else history.closes * 0.995,
-                    "Open": history.opens if hasattr(history, 'opens') else history.closes,
-                    "Volume": history.volumes if hasattr(history, 'volumes') else [1_000_000] * len(history.closes),
-                })
-                swing_bias = detect_swing_bias(df)
-                base["swing_bias"] = {
-                    "label": swing_bias.label,
-                    "score": swing_bias.score,
-                    "atr_percentile": swing_bias.atr_percentile,
-                    "detail": swing_bias.detail,
-                }
-            else:
-                base["swing_bias"] = None
-        except Exception:
-            base["swing_bias"] = None
-
-        return base
-    except Exception as e:
-        logger.exception("Swing market state failed for %s", symbol)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@app.get("/api/swing/trade-candidates")
-def swing_trade_candidates(
-    symbol: str = Query("SPY", description="Symbol"),
-    portfolio_value: float = Query(100_000, description="Portfolio value for sizing"),
-):
-    """Swing L1→L2→L3 pipeline: market state → swing decision → sizing."""
-    try:
-        from swing.scanner import scan_swing_strategies
-
-        result = scan_swing_strategies(tickers=[symbol.upper()], top=10)
-
-        regime = result["regime"]
-        strategies = result["strategies"]
-
-        candidates = []
-        for strat_result in strategies:
-            candidates.append(_serialize_strategy(strat_result))
-
-        return {
-            "symbol": symbol.upper(),
-            "regime": regime.regime.value,
-            "swing_bias": result["swing_bias"],
-            "vrp": result["vrp"],
-            "term_structure": result["term_structure"],
-            "earnings": result["earnings"],
-            "decision": result["decision"],
-            "candidates": candidates,
-            "count": len(candidates),
-        }
-    except Exception as e:
-        logger.exception("Swing trade candidates failed for %s", symbol)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@app.get("/api/backtest/swing/{strategy}")
-def swing_backtest(
-    strategy: str,
-    symbol: str = Query("SPY"),
-    start: str = Query("2022-01-01"),
-    end: Optional[str] = Query(None),
-    regime_filter: bool = Query(False),
-    bias_filter: bool = Query(False),
-    edge_threshold: float = Query(0.0, ge=0.0, le=100.0),
-    exit_rule: str = Query("strategy"),
-    slippage_pct: float = Query(3.0, ge=0.0, le=100.0),
-):
-    """Run backtest for a swing strategy (14-60 DTE)."""
-    from backtest.models import BacktestRequest
-    from backtest.local_backtest import run_local_backtest
-
-    try:
-        end_date = date.fromisoformat(end) if end else date.today()
-        start_date = date.fromisoformat(start)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
-
-    swing_strategies = {"calendar_spread", "diagonal_spread", "iron_butterfly", "long_straddle"}
-    if strategy not in swing_strategies:
-        raise HTTPException(status_code=400, detail=f"Not a swing strategy: {strategy}")
-
-    req = BacktestRequest(
-        strategy=strategy,
-        symbol=symbol.upper(),
-        start_date=start_date,
-        end_date=end_date,
-        entry_dte_min=21,
-        entry_dte_max=45,
-        regime_filter=regime_filter,
-        bias_filter=bias_filter,
-        edge_threshold=edge_threshold,
-        exit_rule=exit_rule,
-        slippage_pct=slippage_pct,
-    )
-
-    try:
-        result = run_local_backtest(req)
-        return _serialize_backtest(result, strategy, symbol, start_date, end_date)
-    except Exception as e:
-        logger.exception("Swing backtest failed")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@app.get("/api/swing/signals/{symbol}")
-def swing_signal_history(
-    symbol: str,
-    start: str = Query("", description="Start date"),
-    end: str = Query("", description="End date"),
-):
-    """Historical swing signals from SQLite for backtester review."""
-    from data.chain_store import get_swing_signals
-    signals = get_swing_signals(symbol.upper(), start_date=start, end_date=end)
-    return {"symbol": symbol.upper(), "signals": signals, "count": len(signals)}
-
-
-# ── Shadow Paper Trading ────────────────────────────────────────────────────
-
-
-@app.get("/api/shadow-trades")
-def list_shadow_trades(
-    status: Optional[str] = Query(None, description="Filter: open, closed, all"),
-    symbol: Optional[str] = Query(None),
-    strategy: Optional[str] = Query(None),
-    limit: int = Query(100, ge=1, le=500),
-):
-    """List shadow paper trades with optional filters."""
-    from data.shadow_store import get_trades
-    trades = get_trades(
-        status=status if status != "all" else None,
-        symbol=symbol.upper() if symbol else None,
-        strategy=strategy,
-        limit=limit,
-    )
-    import json as _json
-    for t in trades:
-        t["legs"] = _json.loads(t["legs_json"]) if t.get("legs_json") else []
-        t["entry_leg_prices"] = _json.loads(t["entry_leg_prices_json"]) if t.get("entry_leg_prices_json") else []
-        if t.get("exit_leg_prices_json"):
-            t["exit_leg_prices"] = _json.loads(t["exit_leg_prices_json"])
-    return {"trades": trades, "count": len(trades)}
-
-
-@app.get("/api/shadow-trades/stats")
-def shadow_trade_stats():
-    """Aggregate shadow trading statistics."""
-    from data.shadow_store import get_stats
-    return get_stats()
-
-
-@app.post("/api/shadow-trades/scan-and-log", dependencies=[Depends(require_api_key)])
-def shadow_scan_and_log(
-    symbols: str = Query("SPY,QQQ,IWM", description="Comma-separated tickers"),
-):
-    """Scan tickers and log qualifying trades as shadow trades."""
-    from market_state import build_market_state
-    from trade_generator import generate_trades, DTE_RANGES
-    from data.shadow_store import log_shadow_trade
-    from scanner.providers.yfinance_provider import YFinanceProvider
-    from datetime import timedelta
-
-    tickers = [t.strip().upper() for t in symbols.split(",") if t.strip()]
-    results = {"scanned": 0, "candidates": 0, "logged": 0, "trades": [], "errors": []}
-    provider = YFinanceProvider(delay=0.5)
-
-    for ticker in tickers:
-        results["scanned"] += 1
-        try:
-            state = build_market_state(ticker)
-            candidates = generate_trades(state)
-
-            if not candidates:
-                continue
-
-            min_dte, max_dte = DTE_RANGES.get(candidates[0].strategy, (3, 14))
-            chain = provider.get_chain(ticker, min_dte=0, max_dte=max_dte + 5)
-
-            for tc in candidates:
-                results["candidates"] += 1
-                entry_legs = []
-                target_dte = tc.suggested_dte
-
-                for leg in tc.legs:
-                    mid = bid = ask = expiry = None
-                    best_dte_diff = 999
-                    for c in chain.contracts:
-                        if c.strike == leg["strike"] and c.option_type == leg["option_type"]:
-                            if c.mid and c.mid > 0:
-                                try:
-                                    from datetime import datetime as dt
-                                    exp_dt = dt.strptime(c.expiry, "%Y-%m-%d")
-                                    dte_diff = abs((exp_dt - dt.now()).days - target_dte)
-                                    if dte_diff < best_dte_diff:
-                                        best_dte_diff = dte_diff
-                                        mid, bid, ask, expiry = c.mid, c.bid, c.ask, c.expiry
-                                except ValueError:
-                                    continue
-                    entry_legs.append({
-                        "strike": leg["strike"],
-                        "expiry": tc.expiry or expiry,
-                        "option_type": leg["option_type"],
-                        "action": leg["action"],
-                        "mid": mid, "bid": bid, "ask": ask,
-                    })
-
-                if all(lp.get("mid") for lp in entry_legs):
-                    trade_id = log_shadow_trade(tc, entry_legs, state.spot)
-                    if trade_id:
-                        results["logged"] += 1
-                        results["trades"].append({
-                            "id": trade_id,
-                            "symbol": tc.symbol,
-                            "strategy": tc.strategy_label,
-                            "score": tc.confluence_score,
-                        })
-        except Exception as e:
-            results["errors"].append(f"{ticker}: {str(e)}")
-
-    return results
-
-
-@app.post("/api/shadow-trades/check", dependencies=[Depends(require_api_key)])
-def shadow_check_exits(dry_run: bool = Query(False)):
-    """Run exit rule check on all open shadow trades."""
-    from data.shadow_checker import run_daily_check
-    return run_daily_check(dry_run=dry_run)
-
-
-@app.get("/api/shadow-trades/{trade_id}/marks")
-def shadow_trade_marks(trade_id: int):
-    """Get mark-to-market history for a shadow trade."""
-    from data.shadow_store import get_trade_marks
-    marks = get_trade_marks(trade_id)
-    return {"trade_id": trade_id, "marks": marks}
 
 
 # ── Static Files (React build) ──────────────────────────────────────────────

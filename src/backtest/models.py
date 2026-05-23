@@ -89,4 +89,5 @@ class BacktestResult(BaseModel):
     dte_breakdown: Dict[str, Dict] = Field(default_factory=dict)
     pnl_distribution: List[Dict] = Field(default_factory=list)
     cached: bool = False
-    source: str = "local"                   # "local" or "tastytrade"
+    source: str = "local"                   # "local", "chain_replay", or "tastytrade"
+    data_issues: List[str] = Field(default_factory=list)

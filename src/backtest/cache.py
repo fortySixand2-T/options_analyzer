@@ -69,14 +69,14 @@ def _init_db(conn: sqlite3.Connection):
     conn.commit()
 
 
-def get_cached(request: BacktestRequest) -> Optional[BacktestResult]:
+def get_cached(request: BacktestRequest, key_suffix: str = "") -> Optional[BacktestResult]:
     """Look up cached backtest result. Returns None if not found."""
     try:
         db_path = _get_db_path()
         conn = sqlite3.connect(db_path)
         _init_db(conn)
 
-        key = _cache_key(request)
+        key = _cache_key(request) + key_suffix
         row = conn.execute(
             "SELECT result_json FROM backtest_cache WHERE cache_key = ?",
             (key,),
@@ -94,14 +94,14 @@ def get_cached(request: BacktestRequest) -> Optional[BacktestResult]:
         return None
 
 
-def store_cached(request: BacktestRequest, result: BacktestResult):
+def store_cached(request: BacktestRequest, result: BacktestResult, key_suffix: str = ""):
     """Store backtest result in cache."""
     try:
         db_path = _get_db_path()
         conn = sqlite3.connect(db_path)
         _init_db(conn)
 
-        key = _cache_key(request)
+        key = _cache_key(request) + key_suffix
         conn.execute(
             """INSERT OR REPLACE INTO backtest_cache
                (cache_key, strategy, symbol, created_at, result_json)

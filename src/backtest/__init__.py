@@ -1,8 +1,9 @@
 """
 Backtesting engine for options strategies.
 
-Supports both Tastytrade API backtesting (13 years of data)
-and local offline backtesting using historical OHLCV + BS pricer.
+Two backends:
+- local_backtest: BS-simulated pricing from OHLCV (fast, full date range)
+- chain_replay: real bid/ask/mid from chain_snapshots.db (accurate, data-limited)
 """
 
 from .models import BacktestRequest, BacktestTrade, BacktestResult
