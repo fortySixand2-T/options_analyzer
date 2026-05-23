@@ -344,24 +344,49 @@ def _serialize_strategy(s) -> Dict:
         "strategy_name": s.strategy_name,
         "strategy_label": s.strategy_label,
         "ticker": s.ticker,
-        "score": s.score,
+        "score": _safe_float(s.score),
         "regime": s.regime.value,
-        "checks_passed": s.checks_passed,
-        "checks_total": s.checks_total,
+        "checks_passed": int(s.checks_passed),
+        "checks_total": int(s.checks_total),
         "checklist": [
-            {"name": c.name, "passed": c.passed, "value": c.value}
+            {"name": c.name, "passed": bool(c.passed), "value": _to_json_safe(c.value)}
             for c in s.checklist
         ],
-        "legs": s.legs,
-        "entry": s.entry,
-        "is_credit": s.is_credit,
-        "max_profit": s.max_profit,
-        "max_loss": s.max_loss,
-        "risk_reward": s.risk_reward,
-        "prob_profit": s.prob_profit,
-        "suggested_dte": s.suggested_dte,
+        "legs": _to_json_safe(s.legs),
+        "entry": _to_json_safe(s.entry),
+        "is_credit": bool(s.is_credit) if s.is_credit is not None else None,
+        "max_profit": _safe_float(s.max_profit),
+        "max_loss": _safe_float(s.max_loss),
+        "risk_reward": _safe_float(s.risk_reward),
+        "prob_profit": _safe_float(s.prob_profit),
+        "suggested_dte": int(s.suggested_dte) if s.suggested_dte is not None else None,
         "rationale": s.rationale,
     }
+
+
+def _safe_float(val):
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def _to_json_safe(obj):
+    """Convert numpy types to native Python for JSON serialization."""
+    import numpy as np
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    if isinstance(obj, dict):
+        return {k: _to_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_json_safe(v) for v in obj]
+    return obj
 
 
 # ── Chain ─────────��──────────────────────────��───────────────────────────────

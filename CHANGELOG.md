@@ -1,5 +1,6 @@
 # Changelog
 
+- [2026-05-22] Modified: src/ui/app.py — Fix numpy/string serialization in strategy scan response (numpy.bool_, "N/A" risk_reward)
 - [2026-05-22] Modified: tests/test_thetadata.py — Fixed ConnectionError mocks to use requests.exceptions.ConnectionError
 - [2026-05-21] Created: tests/test_thetadata.py — Tests for ThetaData client, backfill pipeline, and greeks storage (conversions, mocked HTTP, schema migration, greeks map)
 - [2026-05-21] Created: scripts/backfill_thetadata.py — CLI entry point for ThetaData historical backfill (--dry-run, --status, --check-terminal, resume support)
