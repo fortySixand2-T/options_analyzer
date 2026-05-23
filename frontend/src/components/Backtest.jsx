@@ -16,6 +16,7 @@ const ACTIVE_STRATEGIES = [
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function Backtest() {
+  const [showGuide, setShowGuide] = useState(false);
   const [strategy, setStrategy] = useState('iron_condor');
   const [symbol, setSymbol] = useState('SPY');
   const [start, setStart] = useState('2024-01-01');
@@ -66,6 +67,14 @@ export default function Backtest() {
 
   return (
     <div className="bt">
+      {/* ── Guide ── */}
+      <div className="bt-guide-bar">
+        <button className="bt-guide-toggle" onClick={() => setShowGuide(!showGuide)}>
+          {showGuide ? 'Hide' : 'How to use'}
+        </button>
+      </div>
+      {showGuide && <Guide />}
+
       {/* ── Config Panel ── */}
       <div className="bt-config">
         <div className="bt-config-main">
@@ -466,6 +475,36 @@ function BreakdownTable({ title, data }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+
+function Guide() {
+  return (
+    <div className="bt-guide">
+      <div className="bt-guide-cols">
+        <div className="bt-guide-section">
+          <h4>Data Source</h4>
+          <p><strong>BS Model</strong> — Fast, synthetic prices from Black-Scholes. Good for quick iteration but can overestimate win rates since it assumes smooth pricing.</p>
+          <p><strong>Real Data</strong> — Actual bid/ask/mid from collected chain snapshots. Slower, limited to dates with data, but trustworthy. Use this for final validation.</p>
+        </div>
+        <div className="bt-guide-section">
+          <h4>Signal Filters</h4>
+          <p>Toggle <strong>Regime</strong>, <strong>Bias</strong>, <strong>Dealer</strong> to only take trades when that signal layer agrees. Run with and without each filter to see if it improves results.</p>
+          <p><strong>Edge &gt; N%</strong> — only trade when GARCH-estimated edge exceeds this threshold.</p>
+        </div>
+        <div className="bt-guide-section">
+          <h4>Charts</h4>
+          <p><strong>Equity Curve</strong> — X: trade number, Y: cumulative P&L ($). Tracks how your account grows or shrinks trade by trade.</p>
+          <p><strong>P&L Distribution</strong> — X: dollar P&L buckets, Y: trade count. Shows where wins and losses cluster.</p>
+        </div>
+        <div className="bt-guide-section">
+          <h4>Breakdowns</h4>
+          <p><strong>By Regime</strong> — Performance in each vol regime. Find which regimes the strategy works in and which it doesn't.</p>
+          <p><strong>By DTE</strong> — Performance by days-to-expiry at entry. Find the optimal DTE range for each strategy.</p>
+        </div>
+      </div>
     </div>
   );
 }

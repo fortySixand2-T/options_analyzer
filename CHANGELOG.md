@@ -1,5 +1,6 @@
 # Changelog
 
+- [2026-05-22] Modified: frontend/src/components/Backtest.jsx — Add collapsible "How to use" guide explaining data sources, filters, charts, and breakdowns
 - [2026-05-22] Modified: frontend/src/components/Backtest.jsx — Add Data Source toggle (BS Model vs Real Data) with source badge and data issue warnings
 - [2026-05-22] Modified: frontend/src/components/Dashboard.css — Add source badge styles (amber for simulated, green for real)
 - [2026-05-22] Modified: frontend/src/hooks/useApi.js — Fix loading state starting as true even in manual mode (caused "Running..." on mount)
