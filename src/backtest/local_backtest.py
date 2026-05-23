@@ -143,11 +143,29 @@ def _rolling_vol(returns: np.ndarray, window: int = 20) -> np.ndarray:
     return vol
 
 
-def _classify_regime(iv: float) -> str:
-    """Classify market regime based on rolling IV."""
+def _classify_regime(iv: float, rolling_vol: np.ndarray = None, idx: int = 0) -> str:
+    """Classify market regime using IV rank percentile (matching live scanner).
+
+    Uses a 252-day trailing window to compute IV rank, then applies the same
+    thresholds as iv_rank.py: >50th pctl → HIGH_IV, >30th → MODERATE_IV, else LOW_IV.
+    VIX spike proxy: if rolling vol > 0.30 → SPIKE (matches detector.py VIX > 30 rule).
+    """
     if iv > 0.30:
         return "SPIKE"
-    elif iv > 0.20:
+
+    if rolling_vol is not None and idx >= 252:
+        window = rolling_vol[max(0, idx - 252):idx + 1]
+        valid = window[window > 0]
+        if len(valid) > 20:
+            rank = float(np.sum(valid < iv) / len(valid) * 100)
+            if rank > 50:
+                return "HIGH_IV"
+            elif rank > 30:
+                return "MODERATE_IV"
+            else:
+                return "LOW_IV"
+
+    if iv > 0.20:
         return "HIGH_IV"
     elif iv > 0.15:
         return "MODERATE_IV"
@@ -206,38 +224,90 @@ def _compute_vrp_at_index(rolling_vol, idx: int) -> float:
     return (iv_proxy - rv) / iv_proxy * 100
 
 
-def _check_entry_filters(request, regime: str, bias_score=None, bias_label=None) -> bool:
+def _load_dealer_data(symbol: str, start_date, end_date) -> dict:
+    """Load historical P/C OI ratio from chain snapshots as dealer proxy.
+
+    Returns {date_str: "LONG_GAMMA" | "SHORT_GAMMA"} for dates with OI data.
+    P/C OI ratio > 1.0 → put-heavy → SHORT_GAMMA (dealers short gamma hedging puts).
+    P/C OI ratio <= 1.0 → call-heavy → LONG_GAMMA (dealers long gamma from call selling).
+    """
+    import sqlite3
+    import os
+
+    db_path = os.getenv("CHAIN_SNAPSHOTS_DB", "data/chain_snapshots.db")
+    if not os.path.exists(db_path):
+        return {}
+
+    try:
+        conn = sqlite3.connect(db_path, timeout=5)
+        cursor = conn.execute("""
+            SELECT cs.snapshot_date, cc.option_type, SUM(cc.open_interest)
+            FROM chain_contracts cc
+            JOIN chain_snapshots cs ON cc.snapshot_id = cs.id
+            WHERE cs.ticker = ? AND cs.snapshot_date BETWEEN ? AND ?
+              AND cc.open_interest > 0
+            GROUP BY cs.snapshot_date, cc.option_type
+        """, (symbol, str(start_date), str(end_date)))
+
+        oi_by_date = {}
+        for row in cursor.fetchall():
+            snap_date, opt_type, total_oi = row
+            if snap_date not in oi_by_date:
+                oi_by_date[snap_date] = {"call": 0, "put": 0}
+            oi_by_date[snap_date][opt_type] = total_oi
+
+        conn.close()
+
+        dealer_map = {}
+        for d, oi in oi_by_date.items():
+            if oi["call"] > 0:
+                pc_ratio = oi["put"] / oi["call"]
+                dealer_map[d] = "SHORT_GAMMA" if pc_ratio > 1.0 else "LONG_GAMMA"
+        return dealer_map
+    except Exception:
+        return {}
+
+
+def _check_entry_filters(request, regime: str, bias_score=None, bias_label=None,
+                         dealer_regime=None) -> bool:
     """Check if signal filters allow entry. Returns True if entry is allowed."""
     if request.regime_filter:
-        # Only enter when regime matches the strategy's ideal regime
         strategy_regimes = {
-            "iron_condor": {"HIGH_IV"},
-            "short_put_spread": {"HIGH_IV", "MODERATE_IV"},
-            "short_call_spread": {"HIGH_IV", "MODERATE_IV"},
+            "iron_condor": {"HIGH_IV", "SPIKE"},
+            "short_put_spread": {"HIGH_IV", "MODERATE_IV", "SPIKE"},
+            "short_call_spread": {"HIGH_IV", "SPIKE"},
             "long_call_spread": {"LOW_IV", "MODERATE_IV"},
             "long_put_spread": {"LOW_IV", "MODERATE_IV"},
             "butterfly": {"LOW_IV", "MODERATE_IV"},
-            "calendar_spread": {"HIGH_IV", "MODERATE_IV"},
-            "diagonal_spread": {"HIGH_IV", "MODERATE_IV"},
-            "iron_butterfly": {"HIGH_IV"},
-            "long_straddle": {"LOW_IV"},
         }
         allowed = strategy_regimes.get(request.strategy, set())
         if regime not in allowed:
             return False
 
+    if request.dealer_filter and dealer_regime is not None:
+        strategy_dealer = {
+            "iron_condor": "LONG_GAMMA",
+            "butterfly": "LONG_GAMMA",
+            "short_put_spread": None,
+            "short_call_spread": None,
+            "long_call_spread": "SHORT_GAMMA",
+            "long_put_spread": "SHORT_GAMMA",
+        }
+        required = strategy_dealer.get(request.strategy)
+        if required and dealer_regime != required:
+            return False
+
     if request.bias_filter and bias_score is not None:
-        # Check if directional bias aligns with strategy direction
         bullish_strategies = {"short_put_spread", "long_call_spread"}
         bearish_strategies = {"short_call_spread", "long_put_spread"}
         neutral_strategies = {"iron_condor", "butterfly"}
 
         if request.strategy in bullish_strategies and bias_score < 2:
-            return False  # need bullish bias
+            return False
         if request.strategy in bearish_strategies and bias_score > -2:
-            return False  # need bearish bias
+            return False
         if request.strategy in neutral_strategies and abs(bias_score) > 3:
-            return False  # need neutral bias
+            return False
 
     return True
 
@@ -300,6 +370,14 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
     entry_vrp = None
 
     is_swing = request.strategy in _SWING_STRATEGIES
+
+    # Load historical dealer data from chain snapshots (if dealer_filter is on)
+    dealer_map = {}
+    if request.dealer_filter:
+        dealer_map = _load_dealer_data(request.symbol, request.start_date, request.end_date)
+        if not dealer_map:
+            logger.warning("Dealer filter ON but no OI data in chain_snapshots for %s — "
+                           "filter will skip dates without data", request.symbol)
 
     # Entry frequency: swing trades need more spacing
     entry_interval = max(request.entry_dte_min, 14 if is_swing else 7)
@@ -377,7 +455,8 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
 
             if exit_reason:
                 regime = _classify_regime(
-                    rolling_vol[entry_idx] if entry_idx < len(rolling_vol) else 0.20
+                    rolling_vol[entry_idx] if entry_idx < len(rolling_vol) else 0.20,
+                    rolling_vol, entry_idx,
                 )
 
                 # Apply slippage to exit
@@ -423,8 +502,11 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
                 bias_score, bias_label = _compute_bias_at_index(ohlcv_df, i)
 
             # Check signal filters before entering
-            regime = _classify_regime(iv)
-            if not _check_entry_filters(request, regime, bias_score, bias_label):
+            regime = _classify_regime(iv, rolling_vol, i)
+            date_str = str(dates[i])
+            dealer_regime = dealer_map.get(date_str)
+            if not _check_entry_filters(request, regime, bias_score, bias_label,
+                                        dealer_regime=dealer_regime):
                 next_entry_idx = i + 1  # try again next day
                 continue
 

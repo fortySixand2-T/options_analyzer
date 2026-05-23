@@ -1,7 +1,7 @@
 """
 Options scanner configuration.
 All settings are read from environment variables with sensible defaults.
-Four DTE tiers: chain (0-14), swing (14-60), medium-term (30-90), long-term (90-180).
+Core tier: 0-14 DTE defined-risk strategies.
 """
 import os
 
@@ -39,90 +39,19 @@ CHAIN_SCANNER_CONFIG = {
         "history_days": 120,
         "min_returns": 30,
     },
+    # Calibrated from VALIDATION.md backtests (SPY 2022-2026):
+    #   garch_edge: only filter that flipped a strategy from losing to profitable
+    #   vol_regime: regime filter alone doesn't produce alpha, but HIGH_IV segments are better
+    #   directional: bias filter showed marginal/negative value
+    #   dealer_regime: filter had zero effect (implementation gap) — reduced until fixed
     "scoring_weights": {
-        "vol_regime": 0.20,
-        "directional": 0.20,
-        "dealer_regime": 0.20,
-        "garch_edge": 0.15,
-        "iv_rank": 0.10,
-        "liquidity": 0.10,
-        "greeks": 0.05,
-    },
-}
-
-# ── Swing scanner defaults (14-60 DTE) ──────────────────────────────────
-SWING_SCANNER_CONFIG = {
-    "filter": {
-        "min_dte": 14,
-        "max_dte": 60,
-        "min_delta": 0.10,
-        "max_delta": 0.50,
-        "min_open_interest": 200,
-        "max_spread_pct": 12.0,
-        "moneyness_range": [0.85, 1.15],
-    },
-    # Calibrated from Phase 5 regression (SPY 2022-2026):
-    #   iv_at_entry significant for calendar/diagonal (t~1.7)
-    #   swing_bias significant for iron_butterfly (t=1.69)
-    #   edge_pct significant for long_straddle (t=-2.04, negative = buy vol cheap)
-    #   VRP needs real chain data — keep weight but can't validate yet
-    "scoring_weights": {
-        "vol_regime": 0.25,
-        "vrp": 0.20,
-        "term_structure": 0.15,
-        "garch_edge": 0.15,
+        "garch_edge": 0.30,
+        "vol_regime": 0.15,
+        "iv_rank": 0.15,
+        "liquidity": 0.15,
         "directional": 0.10,
-        "dealer_regime": 0.10,
-        "liquidity": 0.05,
+        "greeks": 0.10,
+        "dealer_regime": 0.05,
     },
 }
 
-# ── Medium-term scanner (30-90 DTE) ────────────────────────────────────
-# VRP is the primary edge at this horizon (Sharpe 0.5-0.6, Carr & Wu 2009).
-# Skew and cross-asset signals become actionable here.
-MEDIUM_TERM_SCANNER_CONFIG = {
-    "filter": {
-        "min_dte": 30,
-        "max_dte": 90,
-        "min_delta": 0.10,
-        "max_delta": 0.50,
-        "min_open_interest": 500,
-        "max_spread_pct": 10.0,
-        "moneyness_range": [0.85, 1.15],
-    },
-    "scoring_weights": {
-        "vrp": 0.25,
-        "skew": 0.15,
-        "term_structure": 0.15,
-        "cross_asset": 0.10,
-        "flow": 0.10,
-        "vol_regime": 0.10,
-        "directional": 0.10,
-        "liquidity": 0.05,
-    },
-}
-
-# ── Long-term scanner (90-180 DTE) ─────────────────────────────────────
-# Correlation premium and cross-asset divergences dominate at this horizon.
-# VRP still relevant but slower-moving. Flow signals have longer lead times.
-LONG_TERM_SCANNER_CONFIG = {
-    "filter": {
-        "min_dte": 90,
-        "max_dte": 180,
-        "min_delta": 0.10,
-        "max_delta": 0.45,
-        "min_open_interest": 300,
-        "max_spread_pct": 8.0,
-        "moneyness_range": [0.85, 1.15],
-    },
-    "scoring_weights": {
-        "vrp": 0.20,
-        "cross_asset": 0.20,
-        "skew": 0.15,
-        "flow": 0.15,
-        "term_structure": 0.10,
-        "vol_regime": 0.10,
-        "directional": 0.05,
-        "liquidity": 0.05,
-    },
-}

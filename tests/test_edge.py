@@ -151,14 +151,16 @@ class TestVRP:
         assert len(result.buckets) == 0
 
     def test_realized_vol_helper(self):
-        from edge.vrp import _realized_vol
+        from edge.realized_vol import yang_zhang
 
-        prices = np.array([100 + i * 0.5 for i in range(30)])
-        rv = _realized_vol(prices, 20)
+        n = 35
+        closes = np.array([100 + i * 0.5 + np.sin(i) for i in range(n)])
+        opens = closes - 0.2
+        highs = closes + 0.5
+        lows = closes - 0.5
+        rv = yang_zhang(opens, highs, lows, closes, window=20)
         assert rv is not None
-        assert rv > 0
-
-        assert _realized_vol(np.array([100.0]), 5) is None
+        assert rv.annualized > 0
 
 
 # ── Term Structure Tests ──────────────────────────────────────────────────────

@@ -121,30 +121,25 @@ class TestPathTraversal:
 class TestApiKeyAuth:
     """Verify API key enforcement on mutating endpoints."""
 
-    def test_order_no_key_when_key_set(self, monkeypatch):
+    def test_mutating_no_key_when_key_set(self, monkeypatch):
         monkeypatch.setattr("ui.app._API_KEY", "test-secret-key-123")
-        resp = client.post("/api/order", json={
-            "underlying": "SPY", "strategy": "iron_condor", "legs": [],
-        })
+        resp = client.post("/api/chain-snapshots/collect?symbols=SPY")
         assert resp.status_code == 401
 
-    def test_order_wrong_key(self, monkeypatch):
+    def test_mutating_wrong_key(self, monkeypatch):
         monkeypatch.setattr("ui.app._API_KEY", "test-secret-key-123")
         resp = client.post(
-            "/api/order",
-            json={"underlying": "SPY", "strategy": "iron_condor", "legs": []},
+            "/api/chain-snapshots/collect?symbols=SPY",
             headers={"X-API-Key": "wrong-key"},
         )
         assert resp.status_code == 401
 
-    def test_order_correct_key(self, monkeypatch):
+    def test_mutating_correct_key(self, monkeypatch):
         monkeypatch.setattr("ui.app._API_KEY", "test-secret-key-123")
         resp = client.post(
-            "/api/order",
-            json={"underlying": "SPY", "strategy": "iron_condor", "legs": []},
+            "/api/chain-snapshots/collect?symbols=SPY",
             headers={"X-API-Key": "test-secret-key-123"},
         )
-        # Should pass auth (may fail on Tastytrade connect, but not 401)
         assert resp.status_code != 401
 
     def test_journal_no_key_when_key_set(self, monkeypatch):
