@@ -509,56 +509,6 @@ def _serialize_backtest(result, strategy, symbol, start_date, end_date):
     }
 
 
-@app.get("/api/backtest/{strategy}")
-def get_backtest(
-    strategy: str,
-    symbol: str = Query("SPY"),
-    start: str = Query("2022-01-01"),
-    end: Optional[str] = Query(None),
-    regime_filter: bool = Query(False),
-    bias_filter: bool = Query(False),
-    dealer_filter: bool = Query(False),
-    edge_threshold: float = Query(0.0, ge=0.0, le=100.0),
-    exit_rule: str = Query("50pct"),
-    slippage_pct: float = Query(0.0, ge=0.0, le=1.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
-    source: str = Query("local", description="Pricing source: 'local' (BS) or 'chain_replay' (real data)"),
-):
-    """Run or retrieve cached backtest results with optional signal filters."""
-    from backtest.models import BacktestRequest
-    from backtest.local_backtest import run_local_backtest
-    from backtest.chain_replay import run_chain_replay
-
-    try:
-        end_date = date.fromisoformat(end) if end else date.today()
-        start_date = date.fromisoformat(start)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
-
-    req = BacktestRequest(
-        strategy=strategy,
-        symbol=symbol.upper(),
-        start_date=start_date,
-        end_date=end_date,
-        regime_filter=regime_filter,
-        bias_filter=bias_filter,
-        dealer_filter=dealer_filter,
-        edge_threshold=edge_threshold,
-        exit_rule=exit_rule,
-        slippage_pct=slippage_pct,
-    )
-
-    try:
-        runner = run_chain_replay if source == "chain_replay" else run_local_backtest
-        result = runner(req)
-        resp = _serialize_backtest(result, strategy, symbol, start_date, end_date)
-        if result.data_issues:
-            resp["data_issues"] = result.data_issues
-        return resp
-    except Exception as e:
-        logger.exception("Backtest failed")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
 @app.get("/api/backtest/compare")
 def compare_backtests(
     strategies: str = Query("iron_condor,short_put_spread"),
@@ -611,6 +561,56 @@ def compare_backtests(
             results[strat] = {"error": str(e)}
 
     return {"strategies": results, "symbol": symbol, "period": {"start": str(start_date), "end": str(end_date)}}
+
+
+@app.get("/api/backtest/{strategy}")
+def get_backtest(
+    strategy: str,
+    symbol: str = Query("SPY"),
+    start: str = Query("2022-01-01"),
+    end: Optional[str] = Query(None),
+    regime_filter: bool = Query(False),
+    bias_filter: bool = Query(False),
+    dealer_filter: bool = Query(False),
+    edge_threshold: float = Query(0.0, ge=0.0, le=100.0),
+    exit_rule: str = Query("50pct"),
+    slippage_pct: float = Query(0.0, ge=0.0, le=1.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
+    source: str = Query("local", description="Pricing source: 'local' (BS) or 'chain_replay' (real data)"),
+):
+    """Run or retrieve cached backtest results with optional signal filters."""
+    from backtest.models import BacktestRequest
+    from backtest.local_backtest import run_local_backtest
+    from backtest.chain_replay import run_chain_replay
+
+    try:
+        end_date = date.fromisoformat(end) if end else date.today()
+        start_date = date.fromisoformat(start)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+
+    req = BacktestRequest(
+        strategy=strategy,
+        symbol=symbol.upper(),
+        start_date=start_date,
+        end_date=end_date,
+        regime_filter=regime_filter,
+        bias_filter=bias_filter,
+        dealer_filter=dealer_filter,
+        edge_threshold=edge_threshold,
+        exit_rule=exit_rule,
+        slippage_pct=slippage_pct,
+    )
+
+    try:
+        runner = run_chain_replay if source == "chain_replay" else run_local_backtest
+        result = runner(req)
+        resp = _serialize_backtest(result, strategy, symbol, start_date, end_date)
+        if result.data_issues:
+            resp["data_issues"] = result.data_issues
+        return resp
+    except Exception as e:
+        logger.exception("Backtest failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ── Journal ───────────────────────────��──────────────────────────────────────

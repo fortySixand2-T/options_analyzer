@@ -11,6 +11,11 @@ const STRATEGIES = [
   'long_call_spread', 'long_put_spread', 'butterfly',
 ];
 
+const ACTIVE_STRATEGIES = [
+  'iron_condor', 'short_put_spread',
+  'long_call_spread', 'butterfly',
+];
+
 const COLORS = ['var(--blue)', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 export default function Backtest() {
@@ -66,11 +71,11 @@ export default function Backtest() {
       <div className="controls-row">
         {!compareMode ? (
           <select className="input" value={strategy} onChange={e => setStrategy(e.target.value)}>
-            {STRATEGIES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+            {ACTIVE_STRATEGIES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </select>
         ) : (
           <div className="compare-picks">
-            {STRATEGIES.map(s => (
+            {ACTIVE_STRATEGIES.map(s => (
               <label key={s} className="checkbox-label">
                 <input type="checkbox" checked={compareStrategies.includes(s)}
                   onChange={() => toggleCompareStrategy(s)} />
