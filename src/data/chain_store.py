@@ -186,6 +186,11 @@ def _init_schema(conn: sqlite3.Connection):
         ("swing_signals", "move_vix_divergence", "REAL"),
         ("swing_signals", "flow_composite", "TEXT"),
         ("swing_signals", "correlation_premium", "REAL"),
+        ("chain_contracts", "delta", "REAL"),
+        ("chain_contracts", "gamma", "REAL"),
+        ("chain_contracts", "theta", "REAL"),
+        ("chain_contracts", "vega", "REAL"),
+        ("chain_contracts", "rho", "REAL"),
     ]
     for table, col, col_type in _migrate_columns:
         try:
@@ -262,6 +267,87 @@ def store_snapshot(chain: ChainSnapshot, label: str = "eod") -> int:
         conn.commit()
         logger.info(
             "Stored snapshot [%s]: %s %s — %d contracts, spot=%.2f",
+            label, chain.ticker, snapshot_date, len(chain.contracts), chain.spot,
+        )
+        return snapshot_id
+
+    except Exception as e:
+        conn.rollback()
+        logger.error("Failed to store snapshot for %s: %s", chain.ticker, e)
+        raise
+    finally:
+        conn.close()
+
+
+def store_snapshot_with_greeks(
+    chain: ChainSnapshot,
+    greeks_map: dict,
+    label: str = "eod",
+) -> int:
+    """Store a chain snapshot with per-contract greeks.
+
+    Same as store_snapshot but includes delta/gamma/theta/vega/rho columns.
+    greeks_map is keyed by (strike, expiry, option_type) tuples with dict values
+    containing any of: delta, gamma, theta, vega, rho.
+    """
+    import json
+
+    conn = _get_conn()
+    snapshot_date = chain.fetched_at.strftime("%Y-%m-%d")
+
+    try:
+        conn.execute("""
+            INSERT INTO chain_snapshots
+                (ticker, snapshot_date, label, spot, fetched_at, contracts_count, expiries_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ticker, snapshot_date, label) DO UPDATE SET
+                spot = excluded.spot,
+                fetched_at = excluded.fetched_at,
+                contracts_count = excluded.contracts_count,
+                expiries_json = excluded.expiries_json
+        """, (
+            chain.ticker,
+            snapshot_date,
+            label,
+            chain.spot,
+            chain.fetched_at.isoformat(),
+            len(chain.contracts),
+            json.dumps(chain.expiries),
+        ))
+
+        row = conn.execute(
+            "SELECT id FROM chain_snapshots WHERE ticker = ? AND snapshot_date = ? AND label = ?",
+            (chain.ticker, snapshot_date, label),
+        ).fetchone()
+        snapshot_id = row["id"]
+
+        conn.execute(
+            "DELETE FROM chain_contracts WHERE snapshot_id = ?",
+            (snapshot_id,),
+        )
+
+        for c in chain.contracts:
+            spread_pct = ((c.ask - c.bid) / c.mid * 100) if c.mid > 0 else None
+            key = (round(c.strike, 2), c.expiry, c.option_type)
+            greeks = greeks_map.get(key, {})
+            conn.execute("""
+                INSERT INTO chain_contracts
+                    (snapshot_id, ticker, strike, expiry, option_type,
+                     bid, ask, mid, last, volume, open_interest,
+                     implied_volatility, spread_pct,
+                     delta, gamma, theta, vega, rho)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                snapshot_id, chain.ticker, c.strike, c.expiry, c.option_type,
+                c.bid, c.ask, c.mid, c.last, c.volume, c.open_interest,
+                c.implied_volatility, spread_pct,
+                greeks.get("delta"), greeks.get("gamma"),
+                greeks.get("theta"), greeks.get("vega"), greeks.get("rho"),
+            ))
+
+        conn.commit()
+        logger.info(
+            "Stored snapshot+greeks [%s]: %s %s — %d contracts, spot=%.2f",
             label, chain.ticker, snapshot_date, len(chain.contracts), chain.spot,
         )
         return snapshot_id

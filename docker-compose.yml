@@ -25,7 +25,7 @@ services:
       context: .
       target: dev
     image: options_analyzer:dev
-    command: python -m pytest tests/ -v
+    command: python -m pytest tests/ -v --ignore=tests/_parked
 
   # CLI scanner (one-off runs)
   scan:
@@ -40,14 +40,6 @@ services:
     volumes:
       - ./data:/app/data
     command: python scripts/run_backtest.py --strategy iron_condor --symbol SPY
-
-  # Intraday data collector (0 DTE support)
-  collect-intraday:
-    image: options_analyzer:prod
-    env_file: .env
-    volumes:
-      - ./data:/app/data
-    command: python scripts/collect_intraday.py loop
 
   # Daily chain snapshot collector
   collect:
@@ -65,32 +57,15 @@ services:
       - ./data:/app/data
     command: python scripts/backfill_chains.py SPY --start 2025-04-01 --end 2025-05-01
 
-  # Shadow trade monitor — checks exits every 5 min during market hours
-  shadow-monitor:
+  # ThetaData historical options backfill (requires Theta Terminal on host)
+  backfill-theta:
     image: options_analyzer:prod
     env_file: .env
     volumes:
       - ./data:/app/data
-    restart: unless-stopped
-    command: python scripts/shadow_monitor.py
-
-  # Multi-agent paper trading orchestrator
-  orchestrator:
-    image: options_analyzer:prod
-    env_file: .env
-    volumes:
-      - ./data:/app/data
-      - ./config/agents.yaml:/app/config/agents.yaml:ro
-    command: python scripts/run_orchestrator.py
-
-  # Agent backtester — replay historical chains through agent filters
-  agent-backtest:
-    image: options_analyzer:prod
-    env_file: .env
-    volumes:
-      - ./data:/app/data
-      - ./config/agents.yaml:/app/config/agents.yaml:ro
-    command: python scripts/backtest_agents.py --tickers SPY,QQQ,IWM
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: python scripts/backfill_thetadata.py --start 2020-01-01 --end 2025-12-31
 
   # Interactive shell with full dev environment
   shell:

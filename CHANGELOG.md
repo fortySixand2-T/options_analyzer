@@ -1,5 +1,39 @@
 # Changelog
 
+- [2026-05-22] Modified: tests/test_thetadata.py — Fixed ConnectionError mocks to use requests.exceptions.ConnectionError
+- [2026-05-21] Created: tests/test_thetadata.py — Tests for ThetaData client, backfill pipeline, and greeks storage (conversions, mocked HTTP, schema migration, greeks map)
+- [2026-05-21] Created: scripts/backfill_thetadata.py — CLI entry point for ThetaData historical backfill (--dry-run, --status, --check-terminal, resume support)
+- [2026-05-21] Created: src/data/thetadata_backfill.py — ThetaData backfill pipeline: backfill_date, backfill_range, IV summary storage, business day generation
+- [2026-05-21] Created: src/data/thetadata_client.py — REST client for Theta Terminal (health check, EOD spot, EOD greeks, strike/expiry normalization, retry with backoff)
+- [2026-05-21] Modified: src/data/chain_store.py — Added greek columns (delta, gamma, theta, vega, rho) to schema migration; added store_snapshot_with_greeks()
+- [2026-05-21] Modified: docker-compose.yml — Added backfill-theta service with host.docker.internal mapping
+- [2026-05-21] Modified: .env.example — Added THETADATA_URL config
+- [2026-05-21] Created: docs/thetadata_api_research.md — ThetaData REST API research for bulk backfill planning (endpoints, plans, rate limits, contract ID)
+- [2026-05-21] Modified: DATA_ISSUES.md — Added fix plan for each issue with exact backfill commands, priority order, and effort estimates
+- [2026-05-21] Created: DATA_ISSUES.md — Quantified audit of all chain_snapshots.db limitations with data provenance (Dolt 2020-2024, Alpaca 2025+)
+- [2026-05-21] Created: src/backtest/chain_replay.py — Chain-replay backtester using real bid/ask/mid from chain_snapshots.db instead of BS pricing; same interface as local_backtest
+- [2026-05-21] Created: tests/test_chain_replay.py — 27 tests validating chain replay against real SPY data (data availability, strike selection, P&L math, full backtests, cross-source comparison)
+- [2026-05-21] Modified: src/backtest/models.py — Added data_issues field to BacktestResult for reporting chain data gaps
+- [2026-05-21] Modified: src/backtest/cache.py — Added key_suffix parameter to get_cached/store_cached to separate BS and chain_replay caches
+- [2026-05-21] Modified: src/backtest/__init__.py — Updated module docstring to document both backends
+- [2026-05-21] Modified: src/ui/app.py — Added source parameter to backtest endpoints (local vs chain_replay); surfaces data_issues in response
+- [2026-05-21] Modified: src/backtest/local_backtest.py — Fixed regime classifier to use IV rank percentile (matching live scanner); implemented dealer_filter using chain snapshot OI data; tightened strategy regime gates (IC→HIGH_IV+SPIKE, SCS→HIGH_IV+SPIKE)
+- [2026-05-21] Modified: VALIDATION.md — Updated with corrected regime results, cross-asset validation (QQQ/IWM), and applied strategy gating
+- [2026-05-21] Modified: tests/test_edge.py — Fixed test_realized_vol_helper to use yang_zhang API instead of removed _realized_vol
+- [2026-05-20] Created: VALIDATION.md — Results of 6 SIGNALS.md backtests with analysis and weight calibration recommendations
+- [2026-05-20] Modified: src/config.py — Recalibrated scoring weights (garch_edge 15%→30%, dealer 20%→5%, directional 20%→10%) based on validation results; removed parked tier configs
+- [2026-05-20] Created: pytest.ini — Exclude _parked directories from test collection
+- [2026-05-20] Modified: docker-compose.yml — Added --ignore=tests/_parked to test command
+- [2026-05-20] Modified: src/strategies/registry.py — Stripped to core 0-14 DTE registry only; removed swing/medium-term/long-term registries and deferred imports
+- [2026-05-20] Modified: src/ui/app.py — Removed streaming, execution, intraday, swing, shadow, and param_optimizer endpoints
+- [2026-05-20] Modified: frontend/src/App.jsx — Reduced to 5 core tabs: Regime, Scanner, Greeks, Backtest, Journal
+- [2026-05-20] Modified: docker-compose.yml — Removed collect-intraday, shadow-monitor, orchestrator, agent-backtest services
+- [2026-05-20] Moved: src/strategies/medium_term/, src/strategies/long_term/, src/swing/, src/agents/, src/streaming/, src/signals/, src/execution/ → src/_parked/
+- [2026-05-20] Moved: src/data/shadow_*.py, src/data/intraday_*.py → src/_parked/
+- [2026-05-20] Moved: src/backtest/intraday_backtest.py, agent_backtest.py, tt_backtest.py, real_pricer.py → src/_parked/
+- [2026-05-20] Moved: 17 one-off scripts → scripts/_parked/
+- [2026-05-20] Moved: frontend SwingScanner, TradingView, Portfolio, ShadowTrades → frontend/src/components/_parked/
+- [2026-05-20] Moved: tests for swing, agents, streaming, execution, trade_generator, portfolio_allocator, data_pipeline, real_pricing → tests/_parked/
 - [2026-05-20] Created: tests/test_real_pricing.py — 18 unit tests for P&L formula, spread leg pricing, calendar entry net, and reprice_spread (expired legs, live legs, end-to-end flows)
 - [2026-05-20] Modified: src/backtest/agent_backtest.py — Remove dead _remap_candidates() and remap dictionaries (_SW_REMAP, _MT_REMAP, _LT_REMAP), superseded by _build_candidates_on_the_fly()
 - [2026-05-20] Created: docs/pricing_validation_report.md — Summary of all pricing bugs found and validated backtest results
