@@ -4,7 +4,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export function useApi(path, options = {}) {
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!options.manual);
   const [error, setError] = useState(null);
 
   const fetchData = useCallback(async () => {

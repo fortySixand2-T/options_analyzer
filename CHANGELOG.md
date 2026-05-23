@@ -1,5 +1,6 @@
 # Changelog
 
+- [2026-05-22] Modified: frontend/src/hooks/useApi.js — Fix loading state starting as true even in manual mode (caused "Running..." on mount)
 - [2026-05-22] Modified: frontend/src/components/Backtest.jsx — Rework backtest UI: proper config panel with labeled sections, strategy pills for compare mode, filter chips, responsive grid layout, better charts and tables
 - [2026-05-22] Modified: frontend/src/components/Dashboard.css — Add dedicated backtest styles (bt-* classes) with responsive breakpoints
 - [2026-05-22] Modified: src/ui/app.py — Fix compare endpoint route ordering (must come before {strategy} path param); fix numpy/string serialization
