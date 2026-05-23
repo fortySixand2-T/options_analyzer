@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-22] Modified: frontend/src/components/Backtest.jsx — Rework backtest UI: proper config panel with labeled sections, strategy pills for compare mode, filter chips, responsive grid layout, better charts and tables
+- [2026-05-22] Modified: frontend/src/components/Dashboard.css — Add dedicated backtest styles (bt-* classes) with responsive breakpoints
 - [2026-05-22] Modified: src/ui/app.py — Fix compare endpoint route ordering (must come before {strategy} path param); fix numpy/string serialization
 - [2026-05-22] Modified: frontend/src/components/Backtest.jsx — Trim strategy dropdowns to 4 active strategies per frontend rules
 - [2026-05-22] Modified: tests/test_thetadata.py — Fixed ConnectionError mocks to use requests.exceptions.ConnectionError
