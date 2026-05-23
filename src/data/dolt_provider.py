@@ -55,7 +55,7 @@ def _dolt_query(sql: str, dolt_path: Optional[str] = None) -> List[Dict]:
         cwd=path,
         capture_output=True,
         text=True,
-        timeout=300,
+        timeout=600,
     )
     if result.returncode != 0:
         logger.error("Dolt query failed: %s", result.stderr.strip())
