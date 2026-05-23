@@ -101,13 +101,19 @@ When rebuild is NOT needed:
 - App running in Docker on localhost:9000
 - Regime dashboard live with VIX data
 - Chain-based GEX fallback committed (no FlashAlpha key needed)
-- Dealer positioning may show "unavailable" — rebuild with `docker compose build --no-cache app`
+- Dealer positioning displays correctly (source: chain)
+- Backtest UI: compare mode, signal filters, DTE breakdown, P&L distribution, trade table — all working
+- Chain-replay backtester available (source=chain_replay) alongside BS backtester
+- ThetaData backfill pipeline ready (needs Theta Terminal on host)
+- Validation backtests complete, scoring weights recalibrated
 
 ## What's next
 
 See `.claude/rules/` for path-scoped implementation details.
 Priority order:
-1. Verify dealer data displays after Docker rebuild
-2. Verify regime classification thresholds (63rd pctl → HIGH_IV?)
-3. Build backtest UI with compare mode, signal filter toggles, DTE breakdown
-4. Run 6 validation backtests from SIGNALS.md
+1. ~~Verify dealer data displays after Docker rebuild~~ ✓
+2. ~~Verify regime classification thresholds~~ ✓
+3. ~~Build backtest UI with compare mode, signal filter toggles, DTE breakdown~~ ✓
+4. ~~Run 6 validation backtests from SIGNALS.md~~ ✓
+5. Run ThetaData backfill when Theta Terminal is available
+6. Backtest on ThetaData (chain_replay with real greeks)
