@@ -59,6 +59,7 @@ class BacktestTrade(BaseModel):
     swing_bias_score: Optional[int] = None  # SMA 20/50/200 bias score
     swing_bias_label: Optional[str] = None
     vrp_at_entry: Optional[float] = None    # VRP % at entry
+    dealer_regime: Optional[str] = None     # LONG_GAMMA / SHORT_GAMMA at entry
 
 
 class BacktestStats(BaseModel):

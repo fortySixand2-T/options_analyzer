@@ -8,7 +8,8 @@ React + Vite app. Served by FastAPI in Docker.
 |---|---|---|
 | RegimeDashboard.jsx | VIX, term structure, IV rank, dealer regime badge | Live, needs GEX display |
 | Scanner.jsx | Scan results with checklist, bias, dealer regime | Built, needs dealer data |
-| Backtest.jsx | Backtest runner + results | Built, needs major expansion |
+| Backtest.jsx | Backtest config panel + orchestration | Built |
+| BacktestParts.jsx | Results views, charts, trade table, guide | Built |
 | GreeksExplorer.jsx | Interactive greeks visualization | Built |
 | Journal.jsx | Trade journal | Built |
 

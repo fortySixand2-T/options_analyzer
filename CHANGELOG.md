@@ -1,5 +1,11 @@
 # Changelog
 
+- [2026-05-22] Modified: src/backtest/models.py — Add dealer_regime field to BacktestTrade model
+- [2026-05-22] Modified: src/backtest/local_backtest.py — Capture and store dealer_regime at trade entry time
+- [2026-05-22] Modified: src/ui/app.py — Add dealer_regime to trade serialization
+- [2026-05-22] Created: frontend/src/components/BacktestParts.jsx — Extract SingleView, CompareView, Guide, BreakdownTable from Backtest.jsx (400-line limit)
+- [2026-05-22] Modified: frontend/src/components/Backtest.jsx — Refactor to import from BacktestParts; add bias_label and dealer_regime columns to trade table
+- [2026-05-22] Modified: frontend/CLAUDE.md — Update Backtest component status and add BacktestParts.jsx entry
 - [2026-05-22] Modified: frontend/src/components/Backtest.jsx — Add collapsible "How to use" guide explaining data sources, filters, charts, and breakdowns
 - [2026-05-22] Modified: frontend/src/components/Backtest.jsx — Add Data Source toggle (BS Model vs Real Data) with source badge and data issue warnings
 - [2026-05-22] Modified: frontend/src/components/Dashboard.css — Add source badge styles (amber for simulated, green for real)

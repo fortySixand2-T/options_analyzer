@@ -502,6 +502,7 @@ def _serialize_backtest(result, strategy, symbol, start_date, end_date):
                 "bias_label": t.bias_label,
                 "edge_pct": t.edge_pct,
                 "iv_at_entry": t.iv_at_entry,
+                "dealer_regime": t.dealer_regime,
             }
             for t in (result.trades or [])
         ],

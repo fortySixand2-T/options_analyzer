@@ -368,6 +368,7 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
     entry_swing_bias_score = None
     entry_swing_bias_label = None
     entry_vrp = None
+    entry_dealer_regime = None
 
     is_swing = request.strategy in _SWING_STRATEGIES
 
@@ -489,6 +490,7 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
                     swing_bias_score=entry_swing_bias_score,
                     swing_bias_label=entry_swing_bias_label,
                     vrp_at_entry=round(entry_vrp, 2) if entry_vrp is not None else None,
+                    dealer_regime=entry_dealer_regime,
                 )
                 trades.append(trade)
                 in_trade = False
@@ -578,6 +580,7 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
                 entry_spot = spot
                 entry_bias_score = bias_score
                 entry_bias_label = bias_label
+                entry_dealer_regime = dealer_regime
                 # Capture swing signals at entry
                 if is_swing:
                     sb_s, sb_l = _compute_swing_bias_at_index(ohlcv_df, i)
