@@ -164,39 +164,61 @@
 .tv-input:focus, .tv-select:focus { border-color: var(--blue); }
 .tv-input.sm { width: 72px; padding: 6px 8px; }
 
-/* Toggle group */
-.tv-toggle-group { display: inline-flex; }
-.tv-toggle {
+/* Toggle group — small segmented control, not tabs */
+.tv-toggle-group {
+  display: inline-flex;
   background: var(--bg-primary);
-  color: var(--text-secondary);
   border: 1px solid var(--border);
-  padding: 6px 14px;
-  cursor: pointer;
-  font-size: 12px;
-  font-family: var(--font-sans);
-  transition: all 0.15s;
+  border-radius: var(--radius);
+  padding: 2px;
+  gap: 2px;
 }
-.tv-toggle:first-child { border-radius: var(--radius) 0 0 var(--radius); }
-.tv-toggle:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
-.tv-toggle:not(:first-child) { border-left: none; }
-.tv-toggle:hover { color: var(--text-primary); }
-.tv-toggle.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+.tv-toggle {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  padding: 4px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  transition: all 0.15s;
+  letter-spacing: 0.3px;
+}
+.tv-toggle:hover { color: var(--text-primary); background: var(--bg-hover); }
+.tv-toggle.active { background: var(--blue); color: #fff; }
 
 /* Slider */
-.tv-slider { width: 100%; accent-color: var(--blue); }
-.tv-slider::-webkit-slider-runnable-track {
+.tv-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
   height: 4px;
   background: var(--bg-hover);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.tv-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  background: linear-gradient(90deg, var(--blue), var(--bg-hover));
   border-radius: 2px;
 }
 .tv-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--blue);
-  margin-top: -5px;
+  border: 2px solid var(--bg-secondary);
+  margin-top: -6px;
   cursor: pointer;
+  box-shadow: 0 0 6px rgba(41, 98, 255, 0.4);
+  transition: box-shadow 0.15s;
+}
+.tv-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 10px rgba(41, 98, 255, 0.6);
 }
 
 /* Chips / pills */
@@ -242,14 +264,18 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 16px 16px 8px;
 }
 .tv-chart h3 {
-  font-size: var(--h3);
-  color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
   margin-bottom: 12px;
   font-weight: 500;
 }
+.tv-chart .recharts-cartesian-grid line { stroke: #1e222d; }
+.tv-chart .recharts-tooltip-wrapper { z-index: 10; }
 
 /* Score badge (inline number pill) */
 .tv-score {

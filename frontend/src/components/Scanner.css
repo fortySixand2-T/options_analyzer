@@ -5,7 +5,8 @@
   gap: 12px;
 }
 
-.scanner-toolbar .tv-input { width: 200px; }
+.scanner-toolbar .tv-input { width: 180px; }
+.scanner-toolbar .tv-input.sm { width: 56px; }
 
 /* Signal context bar */
 .scanner-context {

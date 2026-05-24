@@ -38,7 +38,7 @@ export default function GreeksExplorer() {
             val={dte} onChange={setDte} />
           <Slider label="IV" value={`${(iv * 100).toFixed(0)}%`} min={5} max={150} step={1}
             val={iv * 100} onChange={v => setIv(v / 100)} />
-          <div className="tv-toggle-group">
+          <div className="tv-toggle-group" style={{ alignSelf: 'flex-start' }}>
             <button className={`tv-toggle ${optionType === 'call' ? 'active' : ''}`}
               onClick={() => setOptionType('call')}>Call</button>
             <button className={`tv-toggle ${optionType === 'put' ? 'active' : ''}`}
@@ -55,15 +55,15 @@ export default function GreeksExplorer() {
               <div className="greeks-price-label">Option Price</div>
               <div className="greeks-price-value">${result.price?.toFixed(4)}</div>
             </div>
-            <div className="tv-panel">
+            <div className="tv-panel greeks-grid-wrap">
               <div className="tv-panel-header">
                 <span className="tv-panel-title">Greeks</span>
               </div>
               <div className="greeks-grid">
                 {Object.entries(result.greeks || {}).map(([k, v]) => (
-                  <div key={k} className="tv-stat-inline">
-                    <span className="stat-label">{k.charAt(0).toUpperCase() + k.slice(1)}</span>
-                    <span className="stat-value mono">{v?.toFixed(6)}</span>
+                  <div key={k} className="greeks-cell">
+                    <div className="greeks-cell-label">{k}</div>
+                    <div className="greeks-cell-value">{v?.toFixed(6)}</div>
                   </div>
                 ))}
               </div>

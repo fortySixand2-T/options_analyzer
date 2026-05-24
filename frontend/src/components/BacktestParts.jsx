@@ -1,16 +1,21 @@
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis,
   Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from 'recharts';
 
 const COLORS = ['#2962ff', '#26a69a', '#ff9800', '#ef5350'];
 
 const tooltipStyle = {
-  background: '#1e222d',
+  background: '#131722',
   border: '1px solid #363c4e',
   borderRadius: 4,
-  fontSize: 13,
+  fontSize: 12,
+  padding: '8px 12px',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
 };
+
+const axisStyle = { stroke: '#363c4e', fontSize: 10, fontFamily: 'var(--font-mono)' };
+const gridStyle = { stroke: '#1e222d', strokeDasharray: 'none' };
 
 
 export function SingleView({ data, sortCol, setSortCol, sortAsc, setSortAsc }) {
@@ -30,6 +35,8 @@ export function SingleView({ data, sortCol, setSortCol, sortAsc, setSortAsc }) {
   });
 
   const isReal = data.source === 'chain_replay';
+  const lastEquity = equityData.length > 0 ? equityData[equityData.length - 1]?.equity : 0;
+  const equityColor = lastEquity >= 0 ? '#26a69a' : '#ef5350';
 
   return (
     <div className="bt-results">
@@ -59,15 +66,22 @@ export function SingleView({ data, sortCol, setSortCol, sortAsc, setSortAsc }) {
         {equityData.length > 1 && (
           <div className="tv-chart">
             <h3>Equity Curve</h3>
-            <ResponsiveContainer width="100%" height={340}>
-              <LineChart data={equityData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#363c4e" />
-                <XAxis dataKey="trade" stroke="#545862" fontSize={11} tickLine={false} />
-                <YAxis stroke="#545862" fontSize={11} tickFormatter={v => `$${v}`} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} formatter={v => [`$${v.toFixed(0)}`, 'Equity']} />
-                <ReferenceLine y={0} stroke="#545862" strokeDasharray="3 3" />
-                <Line type="monotone" dataKey="equity" stroke="#2962ff" dot={false} strokeWidth={2} />
-              </LineChart>
+            <ResponsiveContainer width="100%" height={360}>
+              <AreaChart data={equityData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={equityColor} stopOpacity={0.3} />
+                    <stop offset="100%" stopColor={equityColor} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="trade" {...axisStyle} tickLine={false} axisLine={{ stroke: '#2a2e39' }} />
+                <YAxis {...axisStyle} tickFormatter={v => `$${v}`} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: '#363c4e' }}
+                  formatter={v => [`$${v.toFixed(0)}`, 'Equity']} />
+                <ReferenceLine y={0} stroke="#363c4e" strokeDasharray="4 4" />
+                <Area type="monotone" dataKey="equity" stroke={equityColor}
+                  fill="url(#eqGrad)" strokeWidth={2} dot={false} />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         )}
@@ -75,13 +89,17 @@ export function SingleView({ data, sortCol, setSortCol, sortAsc, setSortAsc }) {
         {data.pnl_distribution?.length > 0 && (
           <div className="tv-chart">
             <h3>P&L Distribution</h3>
-            <ResponsiveContainer width="100%" height={340}>
-              <BarChart data={data.pnl_distribution}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#363c4e" />
-                <XAxis dataKey="bin_start" stroke="#545862" fontSize={10} tickFormatter={v => `$${v}`} tickLine={false} />
-                <YAxis stroke="#545862" fontSize={11} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} formatter={v => [v, 'Trades']} labelFormatter={v => `$${v}`} />
-                <Bar dataKey="count" fill="#2962ff" radius={[2, 2, 0, 0]} />
+            <ResponsiveContainer width="100%" height={360}>
+              <BarChart data={data.pnl_distribution} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                <XAxis dataKey="bin_start" {...axisStyle} tickFormatter={v => `$${v}`} tickLine={false} axisLine={{ stroke: '#2a2e39' }} />
+                <YAxis {...axisStyle} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(41, 98, 255, 0.08)' }}
+                  formatter={v => [v, 'Trades']} labelFormatter={v => `$${v}`} />
+                <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+                  {data.pnl_distribution.map((entry, i) => (
+                    <rect key={i} fill={entry.bin_start >= 0 ? '#26a69a' : '#ef5350'} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -207,14 +225,14 @@ export function CompareView({ data }) {
       {combinedEquity.length > 1 && (
         <div className="tv-chart">
           <h3>Equity Curves</h3>
-          <ResponsiveContainer width="100%" height={340}>
-            <LineChart data={combinedEquity}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#363c4e" />
-              <XAxis dataKey="trade" stroke="#545862" fontSize={11} tickLine={false} />
-              <YAxis stroke="#545862" fontSize={11} tickFormatter={v => `$${v}`} tickLine={false} />
-              <Tooltip contentStyle={tooltipStyle} formatter={v => [`$${v?.toFixed(0)}`, '']} />
-              <ReferenceLine y={0} stroke="#545862" strokeDasharray="3 3" />
-              <Legend wrapperStyle={{ fontSize: 13, paddingTop: 8 }} />
+          <ResponsiveContainer width="100%" height={380}>
+            <LineChart data={combinedEquity} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <XAxis dataKey="trade" {...axisStyle} tickLine={false} axisLine={{ stroke: '#2a2e39' }} />
+              <YAxis {...axisStyle} tickFormatter={v => `$${v}`} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: '#363c4e' }}
+                formatter={v => [`$${v?.toFixed(0)}`, '']} />
+              <ReferenceLine y={0} stroke="#363c4e" strokeDasharray="4 4" />
+              <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8, color: '#787b86' }} />
               {names.map((n, i) => (
                 <Line key={n} type="monotone" dataKey={n}
                   stroke={COLORS[i % COLORS.length]}

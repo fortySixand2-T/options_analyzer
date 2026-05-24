@@ -1,5 +1,12 @@
 # Changelog
 
+- [2026-05-23] Modified: frontend/src/styles/components.css — Restyle toggles as compact segmented pills (not tab-looking buttons), polish slider with glow thumb, refine chart container
+- [2026-05-23] Modified: frontend/src/components/BacktestParts.jsx — Upgrade charts: area chart with gradient fill for equity curve, color-coded P&L bars, refined tooltip/axis styling, remove grid dashes
+- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Bigger price display with gradient background, grid cells for Greeks instead of inline rows
+- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.css — Fill available width, larger price, grid cells with visual weight
+- [2026-05-23] Modified: frontend/src/components/RegimeDashboard.css — Larger VIX values, glow effect on gauge bars
+- [2026-05-23] Modified: frontend/src/components/Scanner.css — Narrower DTE input in toolbar
+- [2026-05-23] Modified: frontend/src/components/Backtest.css — Refine mode toggle button sizing
 - [2026-05-23] Created: frontend/src/styles/variables.css — TradingView-inspired CSS custom properties (new color palette, typography scale)
 - [2026-05-23] Created: frontend/src/styles/reset.css — Global reset, scrollbar, utility classes
 - [2026-05-23] Created: frontend/src/styles/shell.css — Sidebar navigation, topbar, app grid layout

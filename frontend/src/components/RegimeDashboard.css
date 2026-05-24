@@ -49,12 +49,13 @@
 }
 .vix-value {
   font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 6px;
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
 }
 .vix-bar {
-  height: 4px;
+  height: 3px;
   background: var(--bg-hover);
   border-radius: 2px;
   overflow: hidden;
@@ -63,6 +64,7 @@
   height: 100%;
   border-radius: 2px;
   transition: width 0.3s;
+  box-shadow: 0 0 6px currentColor;
 }
 
 /* Bottom two-column layout */

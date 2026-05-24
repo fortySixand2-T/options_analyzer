@@ -1,8 +1,8 @@
 /* Greeks Explorer */
 .greeks {
   display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 12px;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
   align-items: start;
 }
 @media (max-width: 800px) {
@@ -12,13 +12,13 @@
 .greeks-controls {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .greeks-slider {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 .greeks-slider-header {
   display: flex;
@@ -29,41 +29,59 @@
 }
 .greeks-slider-value {
   font-family: var(--font-mono);
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .greeks-results {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .greeks-price {
   text-align: center;
-  padding: 20px;
+  padding: 32px 20px;
+  background: linear-gradient(135deg, rgba(41, 98, 255, 0.06), rgba(38, 166, 154, 0.04));
 }
 .greeks-price-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.greeks-price-value {
+  font-family: var(--font-mono);
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -1px;
+}
+
+.greeks-grid-wrap {
+  padding: 0;
+}
+.greeks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+.greeks-cell {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+}
+.greeks-cell-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-muted);
   margin-bottom: 4px;
 }
-.greeks-price-value {
+.greeks-cell-value {
   font-family: var(--font-mono);
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--text-primary);
-}
-
-.greeks-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 0;
-}
-.greeks-grid .tv-stat-inline {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-subtle);
-  border-right: 1px solid var(--border-subtle);
 }
