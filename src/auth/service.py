@@ -10,12 +10,19 @@ from jose import JWTError, jwt
 from src.auth import config as auth_config
 
 
+def _prepare_password(password: str) -> bytes:
+    """Pre-hash with SHA-256 to handle passwords > 72 bytes (bcrypt limit)."""
+    import base64
+    digest = hashlib.sha256(password.encode()).digest()
+    return base64.b64encode(digest)
+
+
 def get_password_hash(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return bcrypt.hashpw(_prepare_password(password), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode(), hashed.encode())
+    return bcrypt.checkpw(_prepare_password(plain), hashed.encode())
 
 
 def create_access_token(user_id: int, email: str) -> str:

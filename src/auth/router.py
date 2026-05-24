@@ -37,12 +37,13 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(body: UserCreate):
     """Create a new user account and return tokens."""
-    existing = get_user_by_email(body.email)
+    email = body.email.lower()
+    existing = get_user_by_email(email)
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
 
     password_hash = get_password_hash(body.password)
-    user = create_user(body.email, password_hash, body.display_name)
+    user = create_user(email, password_hash, body.display_name)
 
     access_token = create_access_token(user["id"], user["email"])
     refresh_token = create_refresh_token(user["id"], user["email"])
@@ -57,7 +58,8 @@ def register(body: UserCreate):
 @router.post("/login", response_model=TokenResponse)
 def login(body: UserLogin):
     """Authenticate with email/password and return tokens."""
-    user = get_user_by_email(body.email)
+    email = body.email.lower()
+    user = get_user_by_email(email)
     if user is None or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
