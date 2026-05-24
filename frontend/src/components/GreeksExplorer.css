@@ -1,0 +1,69 @@
+/* Greeks Explorer */
+.greeks {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .greeks { grid-template-columns: 1fr; }
+}
+
+.greeks-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.greeks-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.greeks-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.greeks-slider-value {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.greeks-results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.greeks-price {
+  text-align: center;
+  padding: 20px;
+}
+.greeks-price-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.greeks-price-value {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.greeks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0;
+}
+.greeks-grid .tv-stat-inline {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+}

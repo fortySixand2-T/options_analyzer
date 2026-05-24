@@ -1,0 +1,81 @@
+/* Regime Dashboard */
+.regime {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Header strip */
+.regime-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+.regime-strip .tv-badge { font-size: 12px; padding: 4px 14px; }
+.regime-rationale {
+  color: var(--text-secondary);
+  font-size: 13px;
+  flex: 1;
+}
+.regime-refresh {
+  margin-left: auto;
+}
+
+/* VIX strip */
+.vix-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.vix-cell {
+  padding: 12px 16px;
+  border-right: 1px solid var(--border-subtle);
+}
+.vix-cell:last-child { border-right: none; }
+.vix-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.vix-value {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.vix-bar {
+  height: 4px;
+  background: var(--bg-hover);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.vix-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+/* Bottom two-column layout */
+.regime-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 800px) {
+  .regime-panels { grid-template-columns: 1fr; }
+  .vix-strip { grid-template-columns: repeat(2, 1fr); }
+}
+
+.regime-panel-body {
+  padding: 12px 16px;
+}

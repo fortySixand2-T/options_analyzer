@@ -3,17 +3,17 @@ import {
   Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from 'recharts';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+const COLORS = ['#2962ff', '#26a69a', '#ff9800', '#ef5350'];
 
 const tooltipStyle = {
-  background: 'var(--bg-card)',
-  border: '1px solid var(--border)',
-  borderRadius: 6,
+  background: '#1e222d',
+  border: '1px solid #363c4e',
+  borderRadius: 4,
   fontSize: 13,
 };
 
 
-export function SingleView({ data, showTrades, setShowTrades, sortCol, setSortCol, sortAsc, setSortAsc }) {
+export function SingleView({ data, sortCol, setSortCol, sortAsc, setSortAsc }) {
   const s = data.stats;
   const equityData = data.equity_curve?.map((v, i) => ({ trade: i, equity: v })) || [];
 
@@ -44,58 +44,44 @@ export function SingleView({ data, showTrades, setShowTrades, sortCol, setSortCo
         )}
       </div>
 
-      <div className="bt-stats">
-        <Stat label="Win Rate" value={`${s.win_rate?.toFixed(1)}%`}
-          positive={s.win_rate > 50} />
-        <Stat label="Total P&L" value={`$${s.total_pnl?.toFixed(0)}`}
-          positive={s.total_pnl > 0} />
-        <Stat label="Trades" value={s.total_trades} neutral />
-        <Stat label="Profit Factor" value={s.profit_factor?.toFixed(2)}
-          positive={s.profit_factor > 1} />
-        <Stat label="Sharpe" value={s.sharpe_ratio?.toFixed(2)}
-          positive={s.sharpe_ratio > 0} />
-        <Stat label="Max DD" value={`$${s.max_drawdown?.toFixed(0)}`}
-          positive={false} />
-        <Stat label="Avg Win" value={`$${s.avg_win?.toFixed(0)}`}
-          positive={true} />
-        <Stat label="Avg Loss" value={`$${s.avg_loss?.toFixed(0)}`}
-          positive={false} />
+      <div className="bt-stat-strip">
+        <StatCell label="Win Rate" value={`${s.win_rate?.toFixed(1)}%`} positive={s.win_rate > 50} />
+        <StatCell label="Total P&L" value={`$${s.total_pnl?.toFixed(0)}`} positive={s.total_pnl > 0} />
+        <StatCell label="Trades" value={s.total_trades} neutral />
+        <StatCell label="Profit Factor" value={s.profit_factor?.toFixed(2)} positive={s.profit_factor > 1} />
+        <StatCell label="Sharpe" value={s.sharpe_ratio?.toFixed(2)} positive={s.sharpe_ratio > 0} />
+        <StatCell label="Max DD" value={`$${s.max_drawdown?.toFixed(0)}`} positive={false} />
+        <StatCell label="Avg Win" value={`$${s.avg_win?.toFixed(0)}`} positive={true} />
+        <StatCell label="Avg Loss" value={`$${s.avg_loss?.toFixed(0)}`} positive={false} />
       </div>
 
       <div className="bt-charts-row">
         {equityData.length > 1 && (
-          <div className="bt-chart bt-chart-wide">
+          <div className="tv-chart">
             <h3>Equity Curve</h3>
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={340}>
               <LineChart data={equityData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="trade" stroke="var(--text-muted)" fontSize={11}
-                  tickLine={false} />
-                <YAxis stroke="var(--text-muted)" fontSize={11}
-                  tickFormatter={v => `$${v}`} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle}
-                  formatter={v => [`$${v.toFixed(0)}`, 'Equity']} />
-                <ReferenceLine y={0} stroke="var(--text-muted)" strokeDasharray="3 3" />
-                <Line type="monotone" dataKey="equity" stroke="#3b82f6"
-                  dot={false} strokeWidth={2} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#363c4e" />
+                <XAxis dataKey="trade" stroke="#545862" fontSize={11} tickLine={false} />
+                <YAxis stroke="#545862" fontSize={11} tickFormatter={v => `$${v}`} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} formatter={v => [`$${v.toFixed(0)}`, 'Equity']} />
+                <ReferenceLine y={0} stroke="#545862" strokeDasharray="3 3" />
+                <Line type="monotone" dataKey="equity" stroke="#2962ff" dot={false} strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         )}
 
         {data.pnl_distribution?.length > 0 && (
-          <div className="bt-chart">
+          <div className="tv-chart">
             <h3>P&L Distribution</h3>
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={340}>
               <BarChart data={data.pnl_distribution}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="bin_start" stroke="var(--text-muted)" fontSize={10}
-                  tickFormatter={v => `$${v}`} tickLine={false} />
-                <YAxis stroke="var(--text-muted)" fontSize={11} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle}
-                  formatter={(v) => [v, 'Trades']}
-                  labelFormatter={v => `$${v}`} />
-                <Bar dataKey="count" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#363c4e" />
+                <XAxis dataKey="bin_start" stroke="#545862" fontSize={10} tickFormatter={v => `$${v}`} tickLine={false} />
+                <YAxis stroke="#545862" fontSize={11} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} formatter={v => [v, 'Trades']} labelFormatter={v => `$${v}`} />
+                <Bar dataKey="count" fill="#2962ff" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -111,57 +97,49 @@ export function SingleView({ data, showTrades, setShowTrades, sortCol, setSortCo
         )}
       </div>
 
-      <div className="bt-trades-section">
-        <button className="bt-trades-toggle" onClick={() => setShowTrades(!showTrades)}>
-          {showTrades ? 'Hide' : 'Show'} Trade Log
-          <span className="bt-trades-count">{data.trades_count || 0}</span>
-        </button>
-        {showTrades && sortedTrades.length > 0 && (
-          <div className="bt-trades-wrap">
-            <table className="bt-table">
-              <thead>
-                <tr>
-                  {[
-                    ['entry_date', 'Entry'],
-                    ['exit_date', 'Exit'],
-                    ['entry_price', 'Entry $'],
-                    ['exit_price', 'Exit $'],
-                    ['pnl', 'P&L'],
-                    ['pnl_pct', 'P&L %'],
-                    ['dte_at_entry', 'DTE'],
-                    ['regime', 'Regime'],
-                    ['bias_label', 'Bias'],
-                    ['dealer_regime', 'Dealer'],
-                    ['exit_reason', 'Reason'],
-                  ].map(([col, label]) => (
-                    <th key={col} onClick={() => handleSort(col)}>
-                      {label}
-                      {sortCol === col && <span className="bt-sort-arrow">{sortAsc ? ' ▲' : ' ▼'}</span>}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sortedTrades.map((t, i) => (
-                  <tr key={i}>
-                    <td>{t.entry_date}</td>
-                    <td>{t.exit_date}</td>
-                    <td>${t.entry_price?.toFixed(2)}</td>
-                    <td>${t.exit_price?.toFixed(2)}</td>
-                    <td className={t.pnl > 0 ? 'green' : 'red'}>${t.pnl?.toFixed(0)}</td>
-                    <td className={t.pnl_pct > 0 ? 'green' : 'red'}>{t.pnl_pct?.toFixed(1)}%</td>
-                    <td>{t.dte_at_entry}</td>
-                    <td><span className="bt-regime-tag">{t.regime}</span></td>
-                    <td>{t.bias_label || '--'}</td>
-                    <td>{t.dealer_regime || '--'}</td>
-                    <td className="muted">{t.exit_reason}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {sortedTrades.length > 0 && (
+        <div className="bt-trades-section">
+          <div className="bt-trades-header">
+            <h3>Trade Log</h3>
+            <span className="bt-trades-count">{data.trades_count || sortedTrades.length}</span>
           </div>
-        )}
-      </div>
+          <table className="tv-table">
+            <thead>
+              <tr>
+                {[
+                  ['entry_date', 'Entry'], ['exit_date', 'Exit'],
+                  ['entry_price', 'Entry $'], ['exit_price', 'Exit $'],
+                  ['pnl', 'P&L'], ['pnl_pct', 'P&L %'], ['dte_at_entry', 'DTE'],
+                  ['regime', 'Regime'], ['bias_label', 'Bias'],
+                  ['dealer_regime', 'Dealer'], ['exit_reason', 'Reason'],
+                ].map(([col, label]) => (
+                  <th key={col} onClick={() => handleSort(col)}>
+                    {label}
+                    {sortCol === col && <span className="sort-arrow">{sortAsc ? ' ▲' : ' ▼'}</span>}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedTrades.map((t, i) => (
+                <tr key={i}>
+                  <td>{t.entry_date}</td>
+                  <td>{t.exit_date}</td>
+                  <td>${t.entry_price?.toFixed(2)}</td>
+                  <td>${t.exit_price?.toFixed(2)}</td>
+                  <td className={t.pnl > 0 ? 'green' : 'red'}>${t.pnl?.toFixed(0)}</td>
+                  <td className={t.pnl_pct > 0 ? 'green' : 'red'}>{t.pnl_pct?.toFixed(1)}%</td>
+                  <td>{t.dte_at_entry}</td>
+                  <td><span className="bt-regime-tag">{t.regime}</span></td>
+                  <td>{t.bias_label || '--'}</td>
+                  <td>{t.dealer_regime || '--'}</td>
+                  <td className="muted">{t.exit_reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -185,7 +163,7 @@ export function CompareView({ data }) {
   return (
     <div className="bt-results">
       <div className="bt-compare-table-wrap">
-        <table className="bt-table bt-compare-table">
+        <table className="tv-table bt-compare-table">
           <thead>
             <tr>
               <th>Metric</th>
@@ -227,17 +205,15 @@ export function CompareView({ data }) {
       </div>
 
       {combinedEquity.length > 1 && (
-        <div className="bt-chart">
+        <div className="tv-chart">
           <h3>Equity Curves</h3>
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={340}>
             <LineChart data={combinedEquity}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="trade" stroke="var(--text-muted)" fontSize={11} tickLine={false} />
-              <YAxis stroke="var(--text-muted)" fontSize={11}
-                tickFormatter={v => `$${v}`} tickLine={false} />
-              <Tooltip contentStyle={tooltipStyle}
-                formatter={v => [`$${v?.toFixed(0)}`, '']} />
-              <ReferenceLine y={0} stroke="var(--text-muted)" strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#363c4e" />
+              <XAxis dataKey="trade" stroke="#545862" fontSize={11} tickLine={false} />
+              <YAxis stroke="#545862" fontSize={11} tickFormatter={v => `$${v}`} tickLine={false} />
+              <Tooltip contentStyle={tooltipStyle} formatter={v => [`$${v?.toFixed(0)}`, '']} />
+              <ReferenceLine y={0} stroke="#545862" strokeDasharray="3 3" />
               <Legend wrapperStyle={{ fontSize: 13, paddingTop: 8 }} />
               {names.map((n, i) => (
                 <Line key={n} type="monotone" dataKey={n}
@@ -254,12 +230,12 @@ export function CompareView({ data }) {
 }
 
 
-function Stat({ label, value, positive, neutral }) {
+function StatCell({ label, value, positive, neutral }) {
   const cls = neutral ? '' : positive ? 'green' : 'red';
   return (
-    <div className="bt-stat">
-      <div className="bt-stat-label">{label}</div>
-      <div className={`bt-stat-value ${cls}`}>{value}</div>
+    <div className="stat">
+      <div className="stat-label">{label}</div>
+      <div className={`stat-value ${cls}`}>{value}</div>
     </div>
   );
 }
@@ -267,9 +243,11 @@ function Stat({ label, value, positive, neutral }) {
 
 function BreakdownTable({ title, data }) {
   return (
-    <div className="bt-breakdown">
-      <h3>{title}</h3>
-      <table className="bt-table">
+    <div className="tv-panel">
+      <div className="tv-panel-header">
+        <span className="tv-panel-title">{title}</span>
+      </div>
+      <table className="tv-table">
         <thead>
           <tr>
             <th>{title.replace('By ', '')}</th>
@@ -296,29 +274,35 @@ function BreakdownTable({ title, data }) {
 }
 
 
-export function Guide() {
+export function Guide({ onClose }) {
   return (
-    <div className="bt-guide">
-      <div className="bt-guide-cols">
-        <div className="bt-guide-section">
-          <h4>Data Source</h4>
-          <p><strong>BS Model</strong> — Fast, synthetic prices from Black-Scholes. Good for quick iteration but can overestimate win rates since it assumes smooth pricing.</p>
-          <p><strong>Real Data</strong> — Actual bid/ask/mid from collected chain snapshots. Slower, limited to dates with data, but trustworthy. Use this for final validation.</p>
+    <div className="bt-guide-backdrop" onClick={onClose}>
+      <div className="bt-guide" onClick={e => e.stopPropagation()}>
+        <div className="bt-guide-header">
+          <h3>Backtest Guide</h3>
+          <button className="bt-guide-close" onClick={onClose}>✕</button>
         </div>
-        <div className="bt-guide-section">
-          <h4>Signal Filters</h4>
-          <p>Toggle <strong>Regime</strong>, <strong>Bias</strong>, <strong>Dealer</strong> to only take trades when that signal layer agrees. Run with and without each filter to see if it improves results.</p>
-          <p><strong>Edge &gt; N%</strong> — only trade when GARCH-estimated edge exceeds this threshold.</p>
-        </div>
-        <div className="bt-guide-section">
-          <h4>Charts</h4>
-          <p><strong>Equity Curve</strong> — X: trade number, Y: cumulative P&L ($). Tracks how your account grows or shrinks trade by trade.</p>
-          <p><strong>P&L Distribution</strong> — X: dollar P&L buckets, Y: trade count. Shows where wins and losses cluster.</p>
-        </div>
-        <div className="bt-guide-section">
-          <h4>Breakdowns</h4>
-          <p><strong>By Regime</strong> — Performance in each vol regime. Find which regimes the strategy works in and which it doesn't.</p>
-          <p><strong>By DTE</strong> — Performance by days-to-expiry at entry. Find the optimal DTE range for each strategy.</p>
+        <div className="bt-guide-cols">
+          <div className="bt-guide-section">
+            <h4>Data Source</h4>
+            <p><strong>BS Model</strong> — Fast, synthetic prices from Black-Scholes. Good for quick iteration but can overestimate win rates.</p>
+            <p><strong>Real Data</strong> — Actual bid/ask/mid from collected chain snapshots. Slower, limited to dates with data, but trustworthy.</p>
+          </div>
+          <div className="bt-guide-section">
+            <h4>Signal Filters</h4>
+            <p>Toggle <strong>Regime</strong>, <strong>Bias</strong>, <strong>Dealer</strong> to only take trades when that signal layer agrees.</p>
+            <p><strong>Edge &gt; N%</strong> — only trade when GARCH-estimated edge exceeds this threshold.</p>
+          </div>
+          <div className="bt-guide-section">
+            <h4>Charts</h4>
+            <p><strong>Equity Curve</strong> — Cumulative P&L trade by trade.</p>
+            <p><strong>P&L Distribution</strong> — Where wins and losses cluster.</p>
+          </div>
+          <div className="bt-guide-section">
+            <h4>Breakdowns</h4>
+            <p><strong>By Regime</strong> — Performance in each vol regime.</p>
+            <p><strong>By DTE</strong> — Performance by days-to-expiry at entry.</p>
+          </div>
         </div>
       </div>
     </div>

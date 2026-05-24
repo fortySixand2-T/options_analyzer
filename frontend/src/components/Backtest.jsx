@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { SingleView, CompareView, Guide } from './BacktestParts';
-import './Dashboard.css';
+import './Backtest.css';
 
 const ACTIVE_STRATEGIES = [
   { value: 'iron_condor', label: 'Iron Condor' },
@@ -24,7 +24,6 @@ export default function Backtest() {
   const [source, setSource] = useState('local');
   const [compareMode, setCompareMode] = useState(false);
   const [compareStrategies, setCompareStrategies] = useState(['iron_condor', 'butterfly']);
-  const [showTrades, setShowTrades] = useState(false);
   const [sortCol, setSortCol] = useState('entry_date');
   const [sortAsc, setSortAsc] = useState(false);
   const [queryPath, setQueryPath] = useState(null);
@@ -62,19 +61,12 @@ export default function Backtest() {
 
   return (
     <div className="bt">
-      <div className="bt-guide-bar">
-        <button className="bt-guide-toggle" onClick={() => setShowGuide(!showGuide)}>
-          {showGuide ? 'Hide' : 'How to use'}
-        </button>
-      </div>
-      {showGuide && <Guide />}
-
       <div className="bt-config">
         <div className="bt-config-main">
           <div className="bt-field">
-            <label className="bt-label">Strategy</label>
+            <label className="tv-label">Strategy</label>
             {!compareMode ? (
-              <select className="bt-select" value={strategy}
+              <select className="tv-select" value={strategy}
                 onChange={e => setStrategy(e.target.value)}>
                 {ACTIVE_STRATEGIES.map(s =>
                   <option key={s.value} value={s.value}>{s.label}</option>
@@ -94,93 +86,89 @@ export default function Backtest() {
           </div>
 
           <div className="bt-field">
-            <label className="bt-label">Symbol</label>
-            <input className="bt-input" value={symbol}
-              onChange={e => setSymbol(e.target.value.toUpperCase())}
-              style={{ width: 80 }} />
+            <label className="tv-label">Symbol</label>
+            <input className="tv-input sm" value={symbol}
+              onChange={e => setSymbol(e.target.value.toUpperCase())} />
           </div>
 
           <div className="bt-field">
-            <label className="bt-label">Start Date</label>
-            <input className="bt-input" type="date" value={start}
+            <label className="tv-label">Start Date</label>
+            <input className="tv-input" type="date" value={start}
               onChange={e => setStart(e.target.value)} />
           </div>
 
           <div className="bt-field">
-            <label className="bt-label">Data Source</label>
-            <div className="bt-toggle-group">
-              <button className={`bt-toggle ${source === 'local' ? 'active' : ''}`}
+            <label className="tv-label">Data Source</label>
+            <div className="tv-toggle-group">
+              <button className={`tv-toggle ${source === 'local' ? 'active' : ''}`}
                 onClick={() => setSource('local')}>BS Model</button>
-              <button className={`bt-toggle ${source === 'chain_replay' ? 'active' : ''}`}
+              <button className={`tv-toggle ${source === 'chain_replay' ? 'active' : ''}`}
                 onClick={() => setSource('chain_replay')}>Real Data</button>
             </div>
           </div>
 
           <div className="bt-field">
-            <label className="bt-label">Exit Rule</label>
-            <div className="bt-toggle-group">
-              {[
-                ['50pct', '50% TP'],
-                ['hold', 'Hold'],
-                ['strategy', 'Auto'],
-              ].map(([val, label]) => (
+            <label className="tv-label">Exit Rule</label>
+            <div className="tv-toggle-group">
+              {[['50pct', '50% TP'], ['hold', 'Hold'], ['strategy', 'Auto']].map(([val, label]) => (
                 <button key={val}
-                  className={`bt-toggle ${exitRule === val ? 'active' : ''}`}
+                  className={`tv-toggle ${exitRule === val ? 'active' : ''}`}
                   onClick={() => setExitRule(val)}>{label}</button>
               ))}
             </div>
           </div>
 
           <div className="bt-field bt-field-actions">
-            <label className="bt-label">&nbsp;</label>
+            <label className="tv-label">&nbsp;</label>
             <div className="bt-actions">
               <button className={`bt-mode-toggle ${compareMode ? 'active' : ''}`}
-                onClick={() => setCompareMode(!compareMode)}>
-                Compare
-              </button>
-              <button className="bt-run" onClick={handleRun} disabled={loading}>
+                onClick={() => setCompareMode(!compareMode)}>Compare</button>
+              <button className="tv-btn-primary" onClick={handleRun} disabled={loading}>
                 {loading ? 'Running...' : 'Run'}
               </button>
+              <button className="tv-btn" onClick={() => setShowGuide(true)}
+                title="Help">?</button>
             </div>
           </div>
         </div>
 
         <div className="bt-filters">
-          <span className="bt-filters-label">Signal Filters</span>
+          <span className="tv-label">Filters</span>
           <div className="bt-filter-chips">
-            <button className={`bt-chip ${regimeFilter ? 'active' : ''}`}
+            <button className={`tv-chip ${regimeFilter ? 'active' : ''}`}
               onClick={() => setRegimeFilter(!regimeFilter)}>Regime</button>
-            <button className={`bt-chip ${biasFilter ? 'active' : ''}`}
+            <button className={`tv-chip ${biasFilter ? 'active' : ''}`}
               onClick={() => setBiasFilter(!biasFilter)}>Bias</button>
-            <button className={`bt-chip ${dealerFilter ? 'active' : ''}`}
+            <button className={`tv-chip ${dealerFilter ? 'active' : ''}`}
               onClick={() => setDealerFilter(!dealerFilter)}>Dealer</button>
           </div>
           <div className="bt-filter-inputs">
-            <label className="bt-inline-label">
+            <div className="tv-field">
               Edge &gt;
-              <input className="bt-input bt-input-sm" type="number" value={edgeThreshold}
+              <input className="tv-input sm" type="number" value={edgeThreshold}
                 onChange={e => setEdgeThreshold(+e.target.value)} min={0} step={1} />
-              <span className="bt-unit">%</span>
-            </label>
-            <label className="bt-inline-label">
+              <span className="muted">%</span>
+            </div>
+            <div className="tv-field">
               Slippage
-              <input className="bt-input bt-input-sm" type="number" value={slippage}
+              <input className="tv-input sm" type="number" value={slippage}
                 onChange={e => setSlippage(+e.target.value)} min={0} max={10} step={0.5} />
-              <span className="bt-unit">%</span>
-            </label>
+              <span className="muted">%</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {error && <div className="bt-error">Error: {error}</div>}
+      {error && <div className="tv-error">Error: {error}</div>}
 
       {isCompare && <CompareView data={data} />}
       {!isCompare && data && data.stats && (
         <SingleView data={data}
-          showTrades={showTrades} setShowTrades={setShowTrades}
           sortCol={sortCol} setSortCol={setSortCol}
           sortAsc={sortAsc} setSortAsc={setSortAsc} />
       )}
+
+      {showGuide && <Guide onClose={() => setShowGuide(false)} />}
     </div>
   );
 }

@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useApi } from '../hooks/useApi';
-import './Dashboard.css';
+import './Scanner.css';
 
 export default function Scanner() {
   const [symbols, setSymbols] = useState('SPY,QQQ,IWM');
   const [maxDte, setMaxDte] = useState(14);
   const [withStrategies, setWithStrategies] = useState(false);
   const [queryPath, setQueryPath] = useState(null);
+  const [sortCol, setSortCol] = useState(null);
+  const [sortAsc, setSortAsc] = useState(true);
 
-  const { data, loading, error, refetch } = useApi(queryPath, { manual: !queryPath });
+  const { data, loading, error } = useApi(queryPath, { manual: !queryPath });
 
   function handleScan() {
     const params = new URLSearchParams({
@@ -17,44 +19,71 @@ export default function Scanner() {
     setQueryPath(`/api/scan?${params}`);
   }
 
+  function toggleSort(col) {
+    if (sortCol === col) setSortAsc(!sortAsc);
+    else { setSortCol(col); setSortAsc(true); }
+  }
+
+  const sortedSignals = useMemo(() => {
+    if (!data?.signals || !sortCol) return data?.signals || [];
+    return [...data.signals].sort((a, b) => {
+      const av = a[sortCol], bv = b[sortCol];
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return sortAsc ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+    });
+  }, [data?.signals, sortCol, sortAsc]);
+
+  const SortTh = ({ col, children }) => (
+    <th onClick={() => toggleSort(col)}>
+      {children}
+      {sortCol === col && <span className="sort-arrow">{sortAsc ? ' ▲' : ' ▼'}</span>}
+    </th>
+  );
+
   return (
-    <div className="dashboard">
-      <div className="controls-row">
-        <input
-          className="input"
-          value={symbols}
-          onChange={e => setSymbols(e.target.value)}
-          placeholder="SPY,QQQ,IWM"
-        />
-        <label className="input-label">
-          Max DTE
-          <input className="input small" type="number" value={maxDte}
+    <div className="scanner">
+      <div className="tv-toolbar scanner-toolbar">
+        <input className="tv-input" value={symbols}
+          onChange={e => setSymbols(e.target.value)} placeholder="SPY,QQQ,IWM" />
+        <div className="tv-field">
+          <span className="tv-label">DTE</span>
+          <input className="tv-input sm" type="number" value={maxDte}
             onChange={e => setMaxDte(+e.target.value)} />
-        </label>
-        <label className="checkbox-label">
-          <input type="checkbox" checked={withStrategies}
-            onChange={e => setWithStrategies(e.target.checked)} />
-          Strategies
-        </label>
-        <button className="btn-primary" onClick={handleScan} disabled={loading}>
+        </div>
+        <div className="tv-toggle-group">
+          <button className={`tv-toggle ${!withStrategies ? 'active' : ''}`}
+            onClick={() => setWithStrategies(false)}>Signals</button>
+          <button className={`tv-toggle ${withStrategies ? 'active' : ''}`}
+            onClick={() => setWithStrategies(true)}>Strategies</button>
+        </div>
+        <button className="tv-btn-primary" onClick={handleScan} disabled={loading}>
           {loading ? 'Scanning...' : 'Scan'}
         </button>
       </div>
 
-      {error && <div className="panel error">Error: {error}</div>}
+      {error && <div className="tv-error">Error: {error}</div>}
 
       {data && !withStrategies && data.signals && (
-        <div className="table-wrap">
-          <table className="data-table">
+        <div className="tv-panel" style={{ overflow: 'auto' }}>
+          <table className="tv-table">
             <thead>
               <tr>
-                <th>Ticker</th><th>Strike</th><th>Type</th><th>DTE</th>
-                <th>Mid</th><th>IV Rank</th><th>Edge%</th><th>Dir</th>
-                <th>Delta</th><th>Theta</th><th>Score</th>
+                <SortTh col="ticker">Ticker</SortTh>
+                <SortTh col="strike">Strike</SortTh>
+                <th>Type</th>
+                <SortTh col="dte">DTE</SortTh>
+                <SortTh col="mid">Mid</SortTh>
+                <SortTh col="iv_rank">IV Rank</SortTh>
+                <SortTh col="edge_pct">Edge%</SortTh>
+                <th>Dir</th>
+                <SortTh col="delta">Delta</SortTh>
+                <SortTh col="theta">Theta</SortTh>
+                <SortTh col="conviction">Score</SortTh>
               </tr>
             </thead>
             <tbody>
-              {data.signals.map((s, i) => (
+              {sortedSignals.map((s, i) => (
                 <tr key={i}>
                   <td className="mono">{s.ticker}</td>
                   <td className="mono">{s.strike}</td>
@@ -78,20 +107,20 @@ export default function Scanner() {
 
       {data && withStrategies && data.strategies && (
         <>
-          {data.regime && (
-            <div className="regime-banner">
-              Regime: <strong>{data.regime.regime}</strong> — {data.regime.rationale}
-            </div>
-          )}
-          {(data.bias || data.dealer) && (
-            <div className="signal-context">
+          {(data.regime || data.bias || data.dealer) && (
+            <div className="scanner-context">
+              {data.regime && (
+                <span className="tv-badge muted">
+                  {data.regime.regime?.replace(/_/g, ' ')}
+                </span>
+              )}
               {data.bias && (
-                <span className={`bias-badge ${data.bias.label?.includes('BULLISH') ? 'green' : data.bias.label?.includes('BEARISH') ? 'red' : 'muted'}`}>
+                <span className={`tv-badge ${data.bias.label?.includes('BULLISH') ? 'green' : data.bias.label?.includes('BEARISH') ? 'red' : 'muted'}`}>
                   Bias: {data.bias.label?.replace(/_/g, ' ')} ({data.bias.score > 0 ? '+' : ''}{data.bias.score})
                 </span>
               )}
               {data.dealer && (
-                <span className={`dealer-badge ${data.dealer.regime === 'LONG_GAMMA' ? 'green' : 'red'}`}>
+                <span className={`tv-badge ${data.dealer.regime === 'LONG_GAMMA' ? 'green' : 'red'}`}>
                   Dealer: {data.dealer.regime?.replace(/_/g, ' ')}
                 </span>
               )}
@@ -103,10 +132,20 @@ export default function Scanner() {
               )}
             </div>
           )}
-          <div className="strategies-list">
-            {data.strategies.map((s, i) => (
-              <StrategyCard key={i} strategy={s} />
-            ))}
+          <div className="tv-panel" style={{ overflow: 'auto' }}>
+            <table className="tv-table">
+              <thead>
+                <tr>
+                  <th>Ticker</th><th>Strategy</th><th>Score</th>
+                  <th>Checks</th><th>DTE</th><th>Entry</th><th>R:R</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.strategies.map((s, i) => (
+                  <StrategyRow key={i} strategy={s} />
+                ))}
+              </tbody>
+            </table>
           </div>
         </>
       )}
@@ -114,41 +153,46 @@ export default function Scanner() {
   );
 }
 
-function StrategyCard({ strategy: s }) {
+function StrategyRow({ strategy: s }) {
   const [open, setOpen] = useState(false);
+  const scoreBg = s.score >= 70 ? 'var(--green)' : s.score >= 50 ? 'var(--amber)' : 'var(--red)';
   return (
-    <div className="strategy-card" onClick={() => setOpen(!open)}>
-      <div className="strategy-header">
-        <span className="strategy-name">{s.strategy_label}</span>
-        <span className="mono">{s.ticker}</span>
-        <span className="score-badge" style={{
-          background: s.score >= 70 ? 'var(--green-dim)' : s.score >= 50 ? '#92400e' : 'var(--red-dim)',
-        }}>
-          {s.score?.toFixed(0)}
-        </span>
-        <span className="muted">{s.checks_passed}/{s.checks_total} checks</span>
-        <span className="muted">{s.suggested_dte}d DTE</span>
-      </div>
+    <>
+      <tr className="strategy-row" onClick={() => setOpen(!open)}>
+        <td className="mono">{s.ticker}</td>
+        <td>{s.strategy_label}</td>
+        <td>
+          <span className="tv-score" style={{ background: scoreBg }}>
+            {s.score?.toFixed(0)}
+          </span>
+        </td>
+        <td className="muted">{s.checks_passed}/{s.checks_total}</td>
+        <td className="mono">{s.suggested_dte}d</td>
+        <td className="mono">{s.is_credit ? 'Cr' : 'Dr'} ${s.entry?.toFixed(2)}</td>
+        <td className="mono">{s.risk_reward}</td>
+      </tr>
       {open && (
-        <div className="strategy-detail">
-          <div className="checklist">
-            {s.checklist?.map((c, j) => (
-              <div key={j} className={`check-item ${c.passed ? 'passed' : 'failed'}`}>
-                <span>{c.passed ? '\u2713' : '\u2717'}</span>
-                <span>{c.name}</span>
-                {c.value && <span className="mono muted">{c.value}</span>}
+        <tr className="strategy-detail-row">
+          <td colSpan={7}>
+            <div className="strategy-detail-content">
+              <div className="strategy-checklist">
+                {s.checklist?.map((c, j) => (
+                  <div key={j} className={`strategy-check ${c.passed ? 'passed' : 'failed'}`}>
+                    <span>{c.passed ? '✓' : '✗'}</span>
+                    <span className="check-name">{c.name}</span>
+                    {c.value && <span className="check-val">{c.value}</span>}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="strategy-meta">
-            <span>{s.is_credit ? 'Credit' : 'Debit'}: ${s.entry?.toFixed(2)}</span>
-            {s.max_profit != null && <span>Max profit: ${s.max_profit?.toFixed(0)}</span>}
-            {s.max_loss != null && <span>Max loss: ${s.max_loss?.toFixed(0)}</span>}
-            <span>R:R {s.risk_reward}</span>
-          </div>
-          <div className="rationale muted">{s.rationale}</div>
-        </div>
+              <div className="strategy-meta">
+                {s.max_profit != null && <span>Max profit: ${s.max_profit?.toFixed(0)}</span>}
+                {s.max_loss != null && <span>Max loss: ${s.max_loss?.toFixed(0)}</span>}
+              </div>
+              {s.rationale && <div className="strategy-rationale">{s.rationale}</div>}
+            </div>
+          </td>
+        </tr>
       )}
-    </div>
+    </>
   );
 }

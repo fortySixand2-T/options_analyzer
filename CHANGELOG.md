@@ -1,5 +1,25 @@
 # Changelog
 
+- [2026-05-23] Created: frontend/src/styles/variables.css — TradingView-inspired CSS custom properties (new color palette, typography scale)
+- [2026-05-23] Created: frontend/src/styles/reset.css — Global reset, scrollbar, utility classes
+- [2026-05-23] Created: frontend/src/styles/shell.css — Sidebar navigation, topbar, app grid layout
+- [2026-05-23] Created: frontend/src/styles/components.css — Shared tv-* component patterns (panel, table, badge, button, input, toggle, slider, stat-strip)
+- [2026-05-23] Created: frontend/src/components/Sidebar.jsx — Collapsible sidebar navigation with inline SVG icons
+- [2026-05-23] Modified: frontend/src/App.jsx — Rewrite to sidebar + topbar layout with hash-based routing
+- [2026-05-23] Modified: frontend/src/main.jsx — Import new split style files instead of index.css
+- [2026-05-23] Modified: frontend/src/index.css — Emptied; styles moved to styles/ directory
+- [2026-05-23] Modified: frontend/src/App.css — Emptied; styles moved to styles/shell.css
+- [2026-05-23] Created: frontend/src/components/RegimeDashboard.css — Regime-specific styles (VIX strip, panels)
+- [2026-05-23] Modified: frontend/src/components/RegimeDashboard.jsx — Redesign: compact header strip, horizontal VIX gauges, two-column panels for market structure and dealer
+- [2026-05-23] Created: frontend/src/components/GreeksExplorer.css — Greeks-specific styles (side-by-side layout, custom sliders)
+- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Redesign: side-by-side controls/results layout with tv-* components
+- [2026-05-23] Created: frontend/src/components/Scanner.css — Scanner-specific styles (toolbar, expandable strategy rows)
+- [2026-05-23] Modified: frontend/src/components/Scanner.jsx — Redesign: compact toolbar, sortable table, strategy rows instead of cards
+- [2026-05-23] Created: frontend/src/components/Journal.css — Journal-specific styles (slide-out drawer, zebra table)
+- [2026-05-23] Modified: frontend/src/components/Journal.jsx — Redesign: slide-out form panel, dense table with strategy dropdown
+- [2026-05-23] Created: frontend/src/components/Backtest.css — Backtest-specific styles (stat strip, guide modal, always-visible trade log)
+- [2026-05-23] Modified: frontend/src/components/Backtest.jsx — Redesign: compact config, help button opens modal, uses tv-* components
+- [2026-05-23] Modified: frontend/src/components/BacktestParts.jsx — Redesign: stat strip instead of card grid, always-visible trade log, updated chart colors, guide as modal overlay
 - [2026-05-23] Modified: start.sh — Remove commands for parked scripts (orchestrator, shadow, dolt, intraday, param-optimize); fix port to 9000; add backfill-theta command
 - [2026-05-23] Modified: README.md — Rewrite to reflect actual repo state: remove orchestrator section, fix port, fix API_SECRET_KEY, update project structure, correct test count
 - [2026-05-23] Modified: HOWTO.md — Fix port 8000→9000, fix backtest.py→run_backtest.py, update command table, add missing env vars, update project structure and data sources
