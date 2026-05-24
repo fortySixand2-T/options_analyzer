@@ -22,6 +22,8 @@ from typing import Dict, List, Optional
 
 import secrets
 
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
@@ -29,21 +31,34 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from src.auth.database import init_auth_db
+from src.auth.router import router as auth_router
+
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_auth_db()
+    yield
+
 
 app = FastAPI(
     title="Options Scanner API",
     description="Index Options Scanner — regime detection, strategy scoring, backtesting",
     version="1.0.0",
+    lifespan=lifespan,
 )
+
+app.include_router(auth_router)
 
 # CORS for React dev server
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Key"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
 # ── Security Headers ────────────────────────────────────────────────────────

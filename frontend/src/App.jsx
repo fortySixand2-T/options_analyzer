@@ -1,60 +1,38 @@
-import { useState, useEffect, useCallback } from 'react';
-import Sidebar, { TABS } from './components/Sidebar';
-import RegimeDashboard from './components/RegimeDashboard';
-import Scanner from './components/Scanner';
-import GreeksExplorer from './components/GreeksExplorer';
-import Backtest from './components/Backtest';
-import Journal from './components/Journal';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
+import DashboardPage from './pages/DashboardPage';
 
-function getInitialTab() {
-  const hash = window.location.hash.slice(1);
-  if (TABS.some(t => t.id === hash)) return hash;
-  return 'regime';
+function ProtectedRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
-function App() {
-  const [tab, setTab] = useState(getInitialTab);
-  const [sidebarExpanded, setSidebarExpanded] = useState(() => {
-    try { return localStorage.getItem('sidebar-expanded') === 'true'; } catch { return false; }
-  });
+function PublicOnlyRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <Navigate to="/app" replace /> : children;
+}
 
-  useEffect(() => {
-    const onHash = () => {
-      const hash = window.location.hash.slice(1);
-      if (TABS.some(t => t.id === hash)) setTab(hash);
-    };
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
-  }, []);
-
-  const handleTabChange = useCallback((id) => {
-    setTab(id);
-    window.location.hash = id;
-  }, []);
-
-  const handleSidebarToggle = useCallback((expanded) => {
-    setSidebarExpanded(expanded);
-  }, []);
-
-  const pageTitle = TABS.find(t => t.id === tab)?.label || '';
-
+function AppRoutes() {
   return (
-    <div className="app">
-      <Sidebar activeTab={tab} onTabChange={handleTabChange} onToggle={handleSidebarToggle} />
-      <div className={`app-content ${sidebarExpanded ? 'sidebar-expanded' : ''}`}>
-        <div className="topbar">
-          <div className="topbar-title">{pageTitle}</div>
-        </div>
-        <main className="app-main">
-          {tab === 'regime' && <RegimeDashboard />}
-          {tab === 'scanner' && <Scanner />}
-          {tab === 'greeks' && <GreeksExplorer />}
-          {tab === 'backtest' && <Backtest />}
-          {tab === 'journal' && <Journal />}
-        </main>
-      </div>
-    </div>
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+      <Route path="/signup" element={<PublicOnlyRoute><SignupPage /></PublicOnlyRoute>} />
+      <Route path="/app" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}

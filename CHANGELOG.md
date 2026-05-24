@@ -1,5 +1,28 @@
 # Changelog
 
+- [2026-05-24] Created: src/auth/__init__.py — Auth package exports
+- [2026-05-24] Created: src/auth/config.py — JWT and DB path configuration
+- [2026-05-24] Created: src/auth/models.py — Pydantic models for auth requests/responses
+- [2026-05-24] Created: src/auth/database.py — SQLite user and refresh token storage
+- [2026-05-24] Created: src/auth/service.py — Password hashing (bcrypt) and JWT creation/validation
+- [2026-05-24] Created: src/auth/dependencies.py — FastAPI get_current_user dependency
+- [2026-05-24] Created: src/auth/router.py — Auth endpoints: register, login, refresh, logout, me
+- [2026-05-24] Modified: src/ui/app.py — Mount auth router, add lifespan DB init, update CORS headers
+- [2026-05-24] Modified: requirements.txt — Add bcrypt, python-jose, pydantic[email]
+- [2026-05-24] Modified: .env.example — Add JWT_SECRET_KEY
+- [2026-05-24] Created: frontend/src/context/AuthContext.jsx — React auth context with login/register/logout/refresh
+- [2026-05-24] Created: frontend/src/pages/LoginPage.jsx — Login page with split-panel layout
+- [2026-05-24] Created: frontend/src/pages/SignupPage.jsx — Registration page
+- [2026-05-24] Created: frontend/src/pages/LandingPage.jsx — Public landing page with feature overview
+- [2026-05-24] Created: frontend/src/pages/DashboardPage.jsx — Authenticated app shell (extracted from App.jsx)
+- [2026-05-24] Modified: frontend/src/App.jsx — Rewrote with react-router-dom, ProtectedRoute, PublicOnlyRoute
+- [2026-05-24] Modified: frontend/src/hooks/useApi.js — Added auth headers and auto-refresh on 401
+- [2026-05-24] Modified: frontend/src/main.jsx — Import auth and landing CSS
+- [2026-05-24] Created: frontend/src/styles/auth.css — Login/signup page styles
+- [2026-05-24] Created: frontend/src/styles/landing.css — Landing page and topbar user styles
+- [2026-05-24] Modified: frontend/package.json — Add react-router-dom dependency
+- [2026-05-24] Created: tests/test_auth.py — Unit tests for auth service (password, JWT, DB operations)
+- [2026-05-24] Created: tests/test_auth_api.py — Integration tests for auth API endpoints
 - [2026-05-23] Modified: frontend/src/components/Backtest.jsx — Flexible compare: compare by Strategy, Option Style, Exit Rule, or Data Source with multi-select pills
 - [2026-05-23] Modified: frontend/src/components/Backtest.css — Add compare dimension bar styles
 - [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Add European/American (LSMC) toggle with early exercise premium display
