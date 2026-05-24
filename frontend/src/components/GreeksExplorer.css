@@ -1,24 +1,27 @@
 /* Greeks Explorer */
 .greeks {
   display: grid;
-  grid-template-columns: 300px 1fr;
-  gap: 16px;
-  align-items: start;
+  grid-template-columns: 280px 1fr;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
 }
 @media (max-width: 800px) {
   .greeks { grid-template-columns: 1fr; }
+  .greeks-chart-panel { grid-column: 1; }
 }
+
+.greeks-params { grid-row: 1; grid-column: 1; }
 
 .greeks-controls {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .greeks-slider {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 .greeks-slider-header {
   display: flex;
@@ -35,14 +38,18 @@
 }
 
 .greeks-results {
+  grid-row: 1;
+  grid-column: 2;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
+.greeks-price-row { display: flex; }
 .greeks-price {
+  flex: 1;
   text-align: center;
-  padding: 32px 20px;
+  padding: 16px 20px;
   background: linear-gradient(135deg, rgba(41, 98, 255, 0.06), rgba(38, 166, 154, 0.04));
 }
 .greeks-price-label {
@@ -50,41 +57,42 @@
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .greeks-price-value {
   font-family: var(--font-mono);
-  font-size: 36px;
+  font-size: 32px;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -1px;
 }
 
-.greeks-grid-wrap {
-  padding: 0;
-}
+.greeks-grid-wrap { padding: 0; }
 .greeks-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(5, 1fr);
 }
 .greeks-cell {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 12px 14px;
   border-right: 1px solid var(--border-subtle);
 }
+.greeks-cell:last-child { border-right: none; }
 .greeks-cell-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 .greeks-cell-value {
   font-family: var(--font-mono);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.greeks-chart-panel { padding: 0; }
+.greeks-chart-panel {
+  grid-column: 1 / -1;
+  padding: 0;
+}
 .greeks-chart-body { padding: 16px 8px 8px 0; }

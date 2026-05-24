@@ -88,7 +88,7 @@ export default function GreeksExplorer() {
 
   return (
     <div className="greeks">
-      <div className="tv-panel">
+      <div className="greeks-params tv-panel">
         <div className="tv-panel-header">
           <span className="tv-panel-title">Parameters</span>
         </div>
@@ -114,14 +114,13 @@ export default function GreeksExplorer() {
         {error && <div className="tv-error">{error}</div>}
         {result && (
           <>
-            <div className="tv-panel greeks-price">
-              <div className="greeks-price-label">Option Price</div>
-              <div className="greeks-price-value">${result.price?.toFixed(4)}</div>
+            <div className="greeks-price-row">
+              <div className="tv-panel greeks-price">
+                <div className="greeks-price-label">Option Price</div>
+                <div className="greeks-price-value">${result.price?.toFixed(4)}</div>
+              </div>
             </div>
             <div className="tv-panel greeks-grid-wrap">
-              <div className="tv-panel-header">
-                <span className="tv-panel-title">Greeks</span>
-              </div>
               <div className="greeks-grid">
                 {Object.entries(result.greeks || {}).map(([k, v]) => (
                   <div key={k} className="greeks-cell">
@@ -133,53 +132,53 @@ export default function GreeksExplorer() {
             </div>
           </>
         )}
+      </div>
 
-        <div className="tv-panel greeks-chart-panel">
-          <div className="tv-panel-header">
-            <span className="tv-panel-title">P&L Profile</span>
-            <div className="tv-toggle-group">
-              {['price', 'delta', 'gamma', 'theta', 'vega'].map(m => (
-                <button key={m} className={`tv-toggle ${chartMode === m ? 'active' : ''}`}
-                  onClick={() => setChartMode(m)}>{m.charAt(0).toUpperCase() + m.slice(1)}</button>
-              ))}
-            </div>
+      <div className="tv-panel greeks-chart-panel">
+        <div className="tv-panel-header">
+          <span className="tv-panel-title">P&L Profile</span>
+          <div className="tv-toggle-group">
+            {['price', 'delta', 'gamma', 'theta', 'vega'].map(m => (
+              <button key={m} className={`tv-toggle ${chartMode === m ? 'active' : ''}`}
+                onClick={() => setChartMode(m)}>{m.charAt(0).toUpperCase() + m.slice(1)}</button>
+            ))}
           </div>
-          <div className="greeks-chart-body">
-            <ResponsiveContainer width="100%" height={300}>
-              {chartMode === 'price' ? (
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="gkPrice" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#2962ff" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#2962ff" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="spot" tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
-                    axisLine={{ stroke: '#2a2e39' }} tickFormatter={v => `$${v}`} />
-                  <YAxis tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
-                    axisLine={{ stroke: '#2a2e39' }} tickFormatter={v => `$${v}`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [`$${v}`, n === 'price' ? 'Option Price' : 'Intrinsic']}
-                    labelFormatter={v => `Spot: $${v}`} />
-                  <ReferenceLine x={spot} stroke="#ff9800" strokeDasharray="4 4" label={{ value: 'Current', fill: '#ff9800', fontSize: 10, position: 'top' }} />
-                  <ReferenceLine x={strike} stroke="#545862" strokeDasharray="3 3" />
-                  <Area type="monotone" dataKey="intrinsic" stroke="#545862" strokeDasharray="4 4" fill="none" dot={false} />
-                  <Area type="monotone" dataKey="price" stroke="#2962ff" strokeWidth={2} fill="url(#gkPrice)" dot={false} />
-                </AreaChart>
-              ) : (
-                <LineChart data={chartData}>
-                  <XAxis dataKey="spot" tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
-                    axisLine={{ stroke: '#2a2e39' }} tickFormatter={v => `$${v}`} />
-                  <YAxis tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
-                    axisLine={{ stroke: '#2a2e39' }} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => [v, chartMode.charAt(0).toUpperCase() + chartMode.slice(1)]}
-                    labelFormatter={v => `Spot: $${v}`} />
-                  <ReferenceLine x={spot} stroke="#ff9800" strokeDasharray="4 4" label={{ value: 'Current', fill: '#ff9800', fontSize: 10, position: 'top' }} />
-                  <ReferenceLine x={strike} stroke="#545862" strokeDasharray="3 3" />
-                  <Line type="monotone" dataKey={chartMode} stroke="#26a69a" strokeWidth={2} dot={false} />
-                </LineChart>
-              )}
-            </ResponsiveContainer>
-          </div>
+        </div>
+        <div className="greeks-chart-body">
+          <ResponsiveContainer width="100%" height={340}>
+            {chartMode === 'price' ? (
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="gkPrice" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2962ff" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#2962ff" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="spot" tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
+                  axisLine={{ stroke: '#2a2e39' }} tickFormatter={v => `$${v}`} />
+                <YAxis tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
+                  axisLine={{ stroke: '#2a2e39' }} tickFormatter={v => `$${v}`} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [`$${v}`, n === 'price' ? 'Option Price' : 'Intrinsic']}
+                  labelFormatter={v => `Spot: $${v}`} />
+                <ReferenceLine x={spot} stroke="#ff9800" strokeDasharray="4 4" label={{ value: 'Current', fill: '#ff9800', fontSize: 10, position: 'top' }} />
+                <ReferenceLine x={strike} stroke="#545862" strokeDasharray="3 3" />
+                <Area type="monotone" dataKey="intrinsic" stroke="#545862" strokeDasharray="4 4" fill="none" dot={false} />
+                <Area type="monotone" dataKey="price" stroke="#2962ff" strokeWidth={2} fill="url(#gkPrice)" dot={false} />
+              </AreaChart>
+            ) : (
+              <LineChart data={chartData}>
+                <XAxis dataKey="spot" tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
+                  axisLine={{ stroke: '#2a2e39' }} tickFormatter={v => `$${v}`} />
+                <YAxis tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
+                  axisLine={{ stroke: '#2a2e39' }} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [v, chartMode.charAt(0).toUpperCase() + chartMode.slice(1)]}
+                  labelFormatter={v => `Spot: $${v}`} />
+                <ReferenceLine x={spot} stroke="#ff9800" strokeDasharray="4 4" label={{ value: 'Current', fill: '#ff9800', fontSize: 10, position: 'top' }} />
+                <ReferenceLine x={strike} stroke="#545862" strokeDasharray="3 3" />
+                <Line type="monotone" dataKey={chartMode} stroke="#26a69a" strokeWidth={2} dot={false} />
+              </LineChart>
+            )}
+          </ResponsiveContainer>
         </div>
       </div>
     </div>

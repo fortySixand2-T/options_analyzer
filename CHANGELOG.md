@@ -1,7 +1,7 @@
 # Changelog
 
-- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Add P&L profile chart with Price/Delta/Gamma/Theta/Vega toggles, client-side Black-Scholes computation
-- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.css — Add chart panel and body styles
+- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Restructure layout: chart spans full width below params+results row
+- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.css — Grid layout with full-width chart, compact horizontal Greeks strip, tighter spacing
 - [2026-05-23] Modified: frontend/src/styles/components.css — Restyle toggles as compact segmented pills (not tab-looking buttons), polish slider with glow thumb, refine chart container
 - [2026-05-23] Modified: frontend/src/components/BacktestParts.jsx — Upgrade charts: area chart with gradient fill for equity curve, color-coded P&L bars, refined tooltip/axis styling, remove grid dashes
 - [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Bigger price display with gradient background, grid cells for Greeks instead of inline rows
