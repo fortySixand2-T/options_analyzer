@@ -89,6 +89,7 @@ class GreeksRequest(BaseModel):
     iv: float
     r: Optional[float] = None
     option_type: str = "call"
+    option_style: str = "european"
 
 
 class JournalEntry(BaseModel):
@@ -453,19 +454,31 @@ def get_quote(symbol: str):
 
 @app.post("/api/greeks")
 def compute_greeks(req: GreeksRequest):
-    """Compute BS price + Greeks for arbitrary inputs."""
+    """Compute option price + Greeks. Supports European (BS) and American (LSMC)."""
     from models.black_scholes import black_scholes_price, calculate_greeks
     from config import RISK_FREE_RATE
 
     r = req.r if req.r is not None else RISK_FREE_RATE
     T = max(req.dte / 365.0, 1 / 365.0)
 
-    price = black_scholes_price(req.spot, req.strike, T, r, req.iv, req.option_type)
     greeks = calculate_greeks(req.spot, req.strike, T, r, req.iv, req.option_type)
 
-    return {
+    if req.option_style == "american":
+        from monte_carlo.gbm_simulator import simulate_gbm_paths
+        from monte_carlo.american_mc import price_american_lsmc
+        paths = simulate_gbm_paths(req.spot, r, req.iv, T, num_paths=10000, num_steps=max(req.dte, 30), seed=42)
+        price, std_error = price_american_lsmc(paths, req.strike, r, T, req.option_type)
+        bs_price = black_scholes_price(req.spot, req.strike, T, r, req.iv, req.option_type)
+        early_exercise_premium = max(price - bs_price, 0)
+    else:
+        price = black_scholes_price(req.spot, req.strike, T, r, req.iv, req.option_type)
+        std_error = None
+        early_exercise_premium = None
+
+    resp = {
         "price": round(price, 4),
         "greeks": {k: round(v, 6) for k, v in greeks.items()},
+        "option_style": req.option_style,
         "inputs": {
             "spot": req.spot,
             "strike": req.strike,
@@ -475,6 +488,10 @@ def compute_greeks(req: GreeksRequest):
             "option_type": req.option_type,
         },
     }
+    if std_error is not None:
+        resp["std_error"] = round(std_error, 6)
+        resp["early_exercise_premium"] = round(early_exercise_premium, 4)
+    return resp
 
 
 # ── Backtest ──────────────────��──────────────────────────────────────────────
@@ -545,6 +562,7 @@ def compare_backtests(
     exit_rule: str = Query("50pct"),
     slippage_pct: float = Query(0.0, ge=0.0, le=1.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
     source: str = Query("local", description="Pricing source: 'local' (BS) or 'chain_replay' (real data)"),
+    option_style: str = Query("european", description="Option style: 'european' (BS) or 'american' (LSMC)"),
 ):
     """Compare backtests across multiple strategies."""
     from backtest.models import BacktestRequest
@@ -572,6 +590,7 @@ def compare_backtests(
             edge_threshold=edge_threshold,
             exit_rule=exit_rule,
             slippage_pct=slippage_pct,
+            option_style=option_style,
         )
         try:
             result = runner(req)
@@ -599,6 +618,7 @@ def get_backtest(
     exit_rule: str = Query("50pct"),
     slippage_pct: float = Query(0.0, ge=0.0, le=1.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
     source: str = Query("local", description="Pricing source: 'local' (BS) or 'chain_replay' (real data)"),
+    option_style: str = Query("european", description="Option style: 'european' (BS) or 'american' (LSMC)"),
 ):
     """Run or retrieve cached backtest results with optional signal filters."""
     from backtest.models import BacktestRequest
@@ -622,6 +642,7 @@ def get_backtest(
         edge_threshold=edge_threshold,
         exit_rule=exit_rule,
         slippage_pct=slippage_pct,
+        option_style=option_style,
     )
 
     try:

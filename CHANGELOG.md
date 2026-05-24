@@ -1,5 +1,11 @@
 # Changelog
 
+- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Add European/American (LSMC) toggle with early exercise premium display
+- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.css — Add toggle row and early exercise premium styles
+- [2026-05-23] Modified: src/ui/app.py — Add option_style param to /api/greeks and backtest endpoints, MC pricing for American
+- [2026-05-23] Modified: src/backtest/models.py — Add option_style field to BacktestRequest
+- [2026-05-23] Modified: src/backtest/local_backtest.py — Add _price_american helper, pass pricer to _price_strategy
+- [2026-05-23] Modified: frontend/src/components/Backtest.jsx — Add European/American toggle to backtest config panel
 - [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Add click-to-edit input on all params, enforce whole-number strikes
 - [2026-05-23] Modified: frontend/src/components/GreeksExplorer.css — Add editable param input styles with hover border hint
 - [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Add ticker input to load real spot price + ATM IV, dynamic slider ranges

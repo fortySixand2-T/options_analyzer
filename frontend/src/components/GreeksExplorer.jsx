@@ -58,6 +58,7 @@ export default function GreeksExplorer() {
   const [dte, setDte] = useState(30);
   const [iv, setIv] = useState(0.25);
   const [optionType, setOptionType] = useState('call');
+  const [optionStyle, setOptionStyle] = useState('european');
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
@@ -88,14 +89,14 @@ export default function GreeksExplorer() {
   async function compute() {
     setError(null);
     try {
-      const data = await postApi('/api/greeks', { spot, strike, dte, iv, option_type: optionType });
+      const data = await postApi('/api/greeks', { spot, strike, dte, iv, option_type: optionType, option_style: optionStyle });
       setResult(data);
     } catch (e) {
       setError(e.message);
     }
   }
 
-  useEffect(() => { compute(); }, [spot, strike, dte, iv, optionType]);
+  useEffect(() => { compute(); }, [spot, strike, dte, iv, optionType, optionStyle]);
 
   const [chartMode, setChartMode] = useState('price');
 
@@ -136,11 +137,19 @@ export default function GreeksExplorer() {
             onChange={setDte} />
           <Param label="IV" suffix="%" value={+(iv * 100).toFixed(1)} min={1} max={200} step={0.5}
             onChange={v => setIv(v / 100)} />
-          <div className="tv-toggle-group" style={{ alignSelf: 'flex-start' }}>
-            <button className={`tv-toggle ${optionType === 'call' ? 'active' : ''}`}
-              onClick={() => setOptionType('call')}>Call</button>
-            <button className={`tv-toggle ${optionType === 'put' ? 'active' : ''}`}
-              onClick={() => setOptionType('put')}>Put</button>
+          <div className="greeks-toggles">
+            <div className="tv-toggle-group">
+              <button className={`tv-toggle ${optionType === 'call' ? 'active' : ''}`}
+                onClick={() => setOptionType('call')}>Call</button>
+              <button className={`tv-toggle ${optionType === 'put' ? 'active' : ''}`}
+                onClick={() => setOptionType('put')}>Put</button>
+            </div>
+            <div className="tv-toggle-group">
+              <button className={`tv-toggle ${optionStyle === 'european' ? 'active' : ''}`}
+                onClick={() => setOptionStyle('european')}>EU</button>
+              <button className={`tv-toggle ${optionStyle === 'american' ? 'active' : ''}`}
+                onClick={() => setOptionStyle('american')}>US</button>
+            </div>
           </div>
         </div>
       </div>
@@ -151,8 +160,16 @@ export default function GreeksExplorer() {
           <>
             <div className="greeks-price-row">
               <div className="tv-panel greeks-price">
-                <div className="greeks-price-label">Option Price</div>
+                <div className="greeks-price-label">
+                  Option Price{result.option_style === 'american' ? ' (LSMC)' : ''}
+                </div>
                 <div className="greeks-price-value">${result.price?.toFixed(4)}</div>
+                {result.early_exercise_premium > 0 && (
+                  <div className="greeks-eep">
+                    Early exercise premium: ${result.early_exercise_premium?.toFixed(4)}
+                    {result.std_error != null && <span className="muted"> (SE: ±{result.std_error?.toFixed(4)})</span>}
+                  </div>
+                )}
               </div>
             </div>
             <div className="tv-panel greeks-grid-wrap">

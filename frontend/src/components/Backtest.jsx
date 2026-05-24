@@ -22,6 +22,7 @@ export default function Backtest() {
   const [edgeThreshold, setEdgeThreshold] = useState(0);
   const [slippage, setSlippage] = useState(3);
   const [source, setSource] = useState('local');
+  const [optionStyle, setOptionStyle] = useState('european');
   const [compareMode, setCompareMode] = useState(false);
   const [compareStrategies, setCompareStrategies] = useState(['iron_condor', 'butterfly']);
   const [sortCol, setSortCol] = useState('entry_date');
@@ -38,6 +39,7 @@ export default function Backtest() {
     if (edgeThreshold > 0) p.set('edge_threshold', edgeThreshold);
     if (slippage > 0) p.set('slippage_pct', (slippage / 100).toFixed(4));
     if (source !== 'local') p.set('source', source);
+    if (optionStyle !== 'european') p.set('option_style', optionStyle);
     return p;
   }
 
@@ -104,6 +106,16 @@ export default function Backtest() {
                 onClick={() => setSource('local')}>BS Model</button>
               <button className={`tv-toggle ${source === 'chain_replay' ? 'active' : ''}`}
                 onClick={() => setSource('chain_replay')}>Real Data</button>
+            </div>
+          </div>
+
+          <div className="bt-field">
+            <label className="tv-label">Option Style</label>
+            <div className="tv-toggle-group">
+              <button className={`tv-toggle ${optionStyle === 'european' ? 'active' : ''}`}
+                onClick={() => setOptionStyle('european')}>European</button>
+              <button className={`tv-toggle ${optionStyle === 'american' ? 'active' : ''}`}
+                onClick={() => setOptionStyle('american')}>American</button>
             </div>
           </div>
 

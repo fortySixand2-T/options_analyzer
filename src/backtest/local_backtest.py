@@ -15,6 +15,15 @@ import numpy as np
 
 from models.black_scholes import black_scholes_price
 from config import RISK_FREE_RATE
+
+def _price_american(spot, strike, T, r, iv, option_type, num_paths=2000, num_steps=50):
+    """Price a single American option leg via Longstaff-Schwartz MC."""
+    from monte_carlo.gbm_simulator import simulate_gbm_paths
+    from monte_carlo.american_mc import price_american_lsmc
+    steps = max(int(T * 252), 10)
+    paths = simulate_gbm_paths(spot, r, iv, T, num_paths=num_paths, num_steps=min(steps, num_steps))
+    price, _ = price_american_lsmc(paths, strike, r, T, option_type)
+    return price
 from .models import BacktestRequest, BacktestResult, BacktestTrade
 from .analyzer import (
     analyze_results, compute_regime_breakdown,
@@ -372,6 +381,8 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
 
     is_swing = request.strategy in _SWING_STRATEGIES
 
+    pricer = _price_american if getattr(request, 'option_style', 'european') == 'american' else None
+
     # Load historical dealer data from chain snapshots (if dealer_filter is on)
     dealer_map = {}
     if request.dealer_filter:
@@ -407,7 +418,7 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
             T_remaining = max(dte_remaining / 365.0, 1 / 365.0)
             current_value = _price_strategy(
                 spot, entry_spot, iv, T_remaining, r,
-                request.strategy, is_credit,
+                request.strategy, is_credit, pricer=pricer,
             )
 
             if is_credit:
@@ -566,7 +577,7 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
                 trade_dte = request.entry_dte_max
 
             T = trade_dte / 365.0
-            raw_price = _price_strategy(spot, spot, iv, T, r, request.strategy, is_credit)
+            raw_price = _price_strategy(spot, spot, iv, T, r, request.strategy, is_credit, pricer=pricer)
 
             # Apply slippage to entry
             if slippage_pct > 0 and raw_price > 0:
@@ -614,67 +625,66 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
     return trades
 
 
-def _price_strategy(spot, entry_spot, iv, T, r, strategy, is_credit) -> float:
-    """Simplified BS pricing for a strategy position."""
+def _price_strategy(spot, entry_spot, iv, T, r, strategy, is_credit, pricer=None) -> float:
+    """Price a strategy position using the given pricer function."""
     if T <= 0:
         return 0.0
 
+    price_fn = pricer or black_scholes_price
     inc = 5.0 if spot >= 100 else (2.5 if spot >= 50 else 1.0)
     atm = round(entry_spot / inc) * inc
 
     try:
         if strategy in ("iron_condor",):
-            # Sell call spread + sell put spread
-            sell_call = black_scholes_price(spot, atm + inc, T, r, iv, "call")
-            buy_call = black_scholes_price(spot, atm + 2 * inc, T, r, iv, "call")
-            sell_put = black_scholes_price(spot, atm - inc, T, r, iv, "put")
-            buy_put = black_scholes_price(spot, atm - 2 * inc, T, r, iv, "put")
+            sell_call = price_fn(spot, atm + inc, T, r, iv, "call")
+            buy_call = price_fn(spot, atm + 2 * inc, T, r, iv, "call")
+            sell_put = price_fn(spot, atm - inc, T, r, iv, "put")
+            buy_put = price_fn(spot, atm - 2 * inc, T, r, iv, "put")
             return (sell_call - buy_call) + (sell_put - buy_put)
 
         elif strategy in ("short_put_spread",):
-            sell = black_scholes_price(spot, atm - inc, T, r, iv, "put")
-            buy = black_scholes_price(spot, atm - 2 * inc, T, r, iv, "put")
+            sell = price_fn(spot, atm - inc, T, r, iv, "put")
+            buy = price_fn(spot, atm - 2 * inc, T, r, iv, "put")
             return sell - buy
 
         elif strategy in ("short_call_spread",):
-            sell = black_scholes_price(spot, atm + inc, T, r, iv, "call")
-            buy = black_scholes_price(spot, atm + 2 * inc, T, r, iv, "call")
+            sell = price_fn(spot, atm + inc, T, r, iv, "call")
+            buy = price_fn(spot, atm + 2 * inc, T, r, iv, "call")
             return sell - buy
 
         elif strategy in ("short_strangle",):
-            sell_call = black_scholes_price(spot, atm + inc, T, r, iv, "call")
-            sell_put = black_scholes_price(spot, atm - inc, T, r, iv, "put")
+            sell_call = price_fn(spot, atm + inc, T, r, iv, "call")
+            sell_put = price_fn(spot, atm - inc, T, r, iv, "put")
             return sell_call + sell_put
 
         elif strategy in ("long_call_spread",):
-            buy = black_scholes_price(spot, atm, T, r, iv, "call")
-            sell = black_scholes_price(spot, atm + inc, T, r, iv, "call")
+            buy = price_fn(spot, atm, T, r, iv, "call")
+            sell = price_fn(spot, atm + inc, T, r, iv, "call")
             return buy - sell
 
         elif strategy in ("long_put_spread",):
-            buy = black_scholes_price(spot, atm, T, r, iv, "put")
-            sell = black_scholes_price(spot, atm - inc, T, r, iv, "put")
+            buy = price_fn(spot, atm, T, r, iv, "put")
+            sell = price_fn(spot, atm - inc, T, r, iv, "put")
             return buy - sell
 
         elif strategy in ("long_straddle",):
-            call = black_scholes_price(spot, atm, T, r, iv, "call")
-            put = black_scholes_price(spot, atm, T, r, iv, "put")
+            call = price_fn(spot, atm, T, r, iv, "call")
+            put = price_fn(spot, atm, T, r, iv, "put")
             return call + put
 
         elif strategy in ("iron_butterfly",):
             wing_width = inc * 5
-            sell_call = black_scholes_price(spot, atm, T, r, iv, "call")
-            buy_call = black_scholes_price(spot, atm + wing_width, T, r, iv, "call")
-            sell_put = black_scholes_price(spot, atm, T, r, iv, "put")
-            buy_put = black_scholes_price(spot, atm - wing_width, T, r, iv, "put")
+            sell_call = price_fn(spot, atm, T, r, iv, "call")
+            buy_call = price_fn(spot, atm + wing_width, T, r, iv, "call")
+            sell_put = price_fn(spot, atm, T, r, iv, "put")
+            buy_put = price_fn(spot, atm - wing_width, T, r, iv, "put")
             return (sell_call - buy_call) + (sell_put - buy_put)
 
         elif strategy in ("naked_put_1dte",):
-            return black_scholes_price(spot, atm - inc, T, r, iv, "put")
+            return price_fn(spot, atm - inc, T, r, iv, "put")
 
         else:
-            # Default: single option
-            return black_scholes_price(spot, atm, T, r, iv, "call")
+            return price_fn(spot, atm, T, r, iv, "call")
 
     except Exception:
         return 0.0

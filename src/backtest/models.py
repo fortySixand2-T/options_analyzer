@@ -35,6 +35,7 @@ class BacktestRequest(BaseModel):
     vrp_filter: bool = False                # only enter when VRP > vrp_threshold
     vrp_threshold: float = 3.0             # min VRP % for swing credit strategies
     swing_bias_filter: bool = False         # use swing bias (SMA 20/50/200) instead of short-term
+    option_style: str = "european"         # "european" (BS) or "american" (LSMC MC)
 
 
 class BacktestTrade(BaseModel):
