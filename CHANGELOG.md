@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-23] Modified: frontend/src/components/Backtest.jsx — Flexible compare: compare by Strategy, Option Style, Exit Rule, or Data Source with multi-select pills
+- [2026-05-23] Modified: frontend/src/components/Backtest.css — Add compare dimension bar styles
 - [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Add European/American (LSMC) toggle with early exercise premium display
 - [2026-05-23] Modified: frontend/src/components/GreeksExplorer.css — Add toggle row and early exercise premium styles
 - [2026-05-23] Modified: src/ui/app.py — Add option_style param to /api/greeks and backtest endpoints, MC pricing for American

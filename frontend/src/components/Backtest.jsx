@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
 import { SingleView, CompareView, Guide } from './BacktestParts';
 import './Backtest.css';
@@ -9,6 +9,20 @@ const ACTIVE_STRATEGIES = [
   { value: 'long_call_spread', label: 'Debit Spread' },
   { value: 'butterfly', label: 'Butterfly' },
 ];
+
+const COMPARE_DIMS = [
+  { key: 'strategy', label: 'Strategy' },
+  { key: 'option_style', label: 'Option Style' },
+  { key: 'exit_rule', label: 'Exit Rule' },
+  { key: 'source', label: 'Data Source' },
+];
+
+const DIM_OPTIONS = {
+  strategy: ACTIVE_STRATEGIES.map(s => ({ value: s.value, label: s.label })),
+  option_style: [{ value: 'european', label: 'European' }, { value: 'american', label: 'American' }],
+  exit_rule: [{ value: '50pct', label: '50% TP' }, { value: 'hold', label: 'Hold' }, { value: 'strategy', label: 'Auto' }],
+  source: [{ value: 'local', label: 'BS Model' }, { value: 'chain_replay', label: 'Real Data' }],
+};
 
 export default function Backtest() {
   const [showGuide, setShowGuide] = useState(false);
@@ -24,42 +38,90 @@ export default function Backtest() {
   const [source, setSource] = useState('local');
   const [optionStyle, setOptionStyle] = useState('european');
   const [compareMode, setCompareMode] = useState(false);
-  const [compareStrategies, setCompareStrategies] = useState(['iron_condor', 'butterfly']);
+  const [compareDim, setCompareDim] = useState('strategy');
+  const [compareSelections, setCompareSelections] = useState({
+    strategy: ['iron_condor', 'butterfly'],
+    option_style: ['european', 'american'],
+    exit_rule: ['50pct', 'hold'],
+    source: ['local', 'chain_replay'],
+  });
   const [sortCol, setSortCol] = useState('entry_date');
   const [sortAsc, setSortAsc] = useState(false);
   const [queryPath, setQueryPath] = useState(null);
+  const [multiData, setMultiData] = useState(null);
+  const [multiLoading, setMultiLoading] = useState(false);
+  const [multiError, setMultiError] = useState(null);
 
-  const { data, loading, error } = useApi(queryPath, { manual: !queryPath });
+  const { data: singleData, loading: singleLoading, error: singleError } = useApi(queryPath, { manual: !queryPath });
 
-  function buildFilterParams() {
-    const p = new URLSearchParams({ symbol, start, exit_rule: exitRule });
-    if (regimeFilter) p.set('regime_filter', 'true');
-    if (biasFilter) p.set('bias_filter', 'true');
-    if (dealerFilter) p.set('dealer_filter', 'true');
-    if (edgeThreshold > 0) p.set('edge_threshold', edgeThreshold);
-    if (slippage > 0) p.set('slippage_pct', (slippage / 100).toFixed(4));
-    if (source !== 'local') p.set('source', source);
-    if (optionStyle !== 'european') p.set('option_style', optionStyle);
+  const data = compareMode ? multiData : singleData;
+  const loading = compareMode ? multiLoading : singleLoading;
+  const error = compareMode ? multiError : singleError;
+
+  function buildBaseParams() {
+    const p = { symbol, start, exit_rule: exitRule, source, option_style: optionStyle };
+    if (regimeFilter) p.regime_filter = 'true';
+    if (biasFilter) p.bias_filter = 'true';
+    if (dealerFilter) p.dealer_filter = 'true';
+    if (edgeThreshold > 0) p.edge_threshold = edgeThreshold;
+    if (slippage > 0) p.slippage_pct = (slippage / 100).toFixed(4);
     return p;
   }
 
-  function handleRun() {
-    const p = buildFilterParams();
-    if (compareMode) {
-      p.set('strategies', compareStrategies.join(','));
-      setQueryPath(`/api/backtest/compare?${p}`);
-    } else {
+  const handleRun = useCallback(async () => {
+    if (!compareMode) {
+      const p = new URLSearchParams(buildBaseParams());
       setQueryPath(`/api/backtest/${strategy}?${p}`);
+      return;
     }
+
+    const selected = compareSelections[compareDim];
+    if (selected.length < 2) return;
+
+    if (compareDim === 'strategy') {
+      const p = new URLSearchParams(buildBaseParams());
+      p.set('strategies', selected.join(','));
+      setQueryPath(`/api/backtest/compare?${p}`);
+      setMultiData(null);
+      return;
+    }
+
+    setMultiLoading(true);
+    setMultiError(null);
+    setQueryPath(null);
+    try {
+      const base = buildBaseParams();
+      const results = {};
+      for (const val of selected) {
+        const params = { ...base, [compareDim]: val };
+        const p = new URLSearchParams(params);
+        const strat = compareDim === 'strategy' ? val : strategy;
+        const res = await fetch(`/api/backtest/${strat}?${p}`);
+        if (!res.ok) throw new Error(`Failed for ${val}`);
+        const d = await res.json();
+        const label = DIM_OPTIONS[compareDim].find(o => o.value === val)?.label || val;
+        results[label] = d;
+      }
+      setMultiData({ strategies: results, symbol, period: { start } });
+    } catch (e) {
+      setMultiError(e.message);
+    } finally {
+      setMultiLoading(false);
+    }
+  }, [compareMode, compareDim, compareSelections, strategy, symbol, start, exitRule, source, optionStyle, regimeFilter, biasFilter, dealerFilter, edgeThreshold, slippage]);
+
+  function toggleSelection(dim, val) {
+    setCompareSelections(prev => {
+      const cur = prev[dim];
+      const next = cur.includes(val) ? cur.filter(x => x !== val) : [...cur, val];
+      if (next.length < 1) return prev;
+      return { ...prev, [dim]: next };
+    });
   }
 
-  function toggleCompareStrategy(s) {
-    setCompareStrategies(prev =>
-      prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s].slice(0, 3)
-    );
-  }
+  const isCompare = compareMode && (data?.strategies || (compareDim === 'strategy' && singleData?.strategies));
 
-  const isCompare = compareMode && data?.strategies;
+  const isCompareDim = (dim) => compareMode && compareDim === dim;
 
   return (
     <div className="bt">
@@ -67,23 +129,23 @@ export default function Backtest() {
         <div className="bt-config-main">
           <div className="bt-field">
             <label className="tv-label">Strategy</label>
-            {!compareMode ? (
+            {isCompareDim('strategy') ? (
+              <div className="bt-strategy-pills">
+                {ACTIVE_STRATEGIES.map(s => (
+                  <button key={s.value}
+                    className={`bt-pill ${compareSelections.strategy.includes(s.value) ? 'active' : ''}`}
+                    onClick={() => toggleSelection('strategy', s.value)}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
               <select className="tv-select" value={strategy}
                 onChange={e => setStrategy(e.target.value)}>
                 {ACTIVE_STRATEGIES.map(s =>
                   <option key={s.value} value={s.value}>{s.label}</option>
                 )}
               </select>
-            ) : (
-              <div className="bt-strategy-pills">
-                {ACTIVE_STRATEGIES.map(s => (
-                  <button key={s.value}
-                    className={`bt-pill ${compareStrategies.includes(s.value) ? 'active' : ''}`}
-                    onClick={() => toggleCompareStrategy(s.value)}>
-                    {s.label}
-                  </button>
-                ))}
-              </div>
             )}
           </div>
 
@@ -101,33 +163,69 @@ export default function Backtest() {
 
           <div className="bt-field">
             <label className="tv-label">Data Source</label>
-            <div className="tv-toggle-group">
-              <button className={`tv-toggle ${source === 'local' ? 'active' : ''}`}
-                onClick={() => setSource('local')}>BS Model</button>
-              <button className={`tv-toggle ${source === 'chain_replay' ? 'active' : ''}`}
-                onClick={() => setSource('chain_replay')}>Real Data</button>
-            </div>
+            {isCompareDim('source') ? (
+              <div className="bt-strategy-pills">
+                {DIM_OPTIONS.source.map(o => (
+                  <button key={o.value}
+                    className={`bt-pill ${compareSelections.source.includes(o.value) ? 'active' : ''}`}
+                    onClick={() => toggleSelection('source', o.value)}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="tv-toggle-group">
+                <button className={`tv-toggle ${source === 'local' ? 'active' : ''}`}
+                  onClick={() => setSource('local')}>BS Model</button>
+                <button className={`tv-toggle ${source === 'chain_replay' ? 'active' : ''}`}
+                  onClick={() => setSource('chain_replay')}>Real Data</button>
+              </div>
+            )}
           </div>
 
           <div className="bt-field">
             <label className="tv-label">Option Style</label>
-            <div className="tv-toggle-group">
-              <button className={`tv-toggle ${optionStyle === 'european' ? 'active' : ''}`}
-                onClick={() => setOptionStyle('european')}>European</button>
-              <button className={`tv-toggle ${optionStyle === 'american' ? 'active' : ''}`}
-                onClick={() => setOptionStyle('american')}>American</button>
-            </div>
+            {isCompareDim('option_style') ? (
+              <div className="bt-strategy-pills">
+                {DIM_OPTIONS.option_style.map(o => (
+                  <button key={o.value}
+                    className={`bt-pill ${compareSelections.option_style.includes(o.value) ? 'active' : ''}`}
+                    onClick={() => toggleSelection('option_style', o.value)}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="tv-toggle-group">
+                <button className={`tv-toggle ${optionStyle === 'european' ? 'active' : ''}`}
+                  onClick={() => setOptionStyle('european')}>European</button>
+                <button className={`tv-toggle ${optionStyle === 'american' ? 'active' : ''}`}
+                  onClick={() => setOptionStyle('american')}>American</button>
+              </div>
+            )}
           </div>
 
           <div className="bt-field">
             <label className="tv-label">Exit Rule</label>
-            <div className="tv-toggle-group">
-              {[['50pct', '50% TP'], ['hold', 'Hold'], ['strategy', 'Auto']].map(([val, label]) => (
-                <button key={val}
-                  className={`tv-toggle ${exitRule === val ? 'active' : ''}`}
-                  onClick={() => setExitRule(val)}>{label}</button>
-              ))}
-            </div>
+            {isCompareDim('exit_rule') ? (
+              <div className="bt-strategy-pills">
+                {DIM_OPTIONS.exit_rule.map(o => (
+                  <button key={o.value}
+                    className={`bt-pill ${compareSelections.exit_rule.includes(o.value) ? 'active' : ''}`}
+                    onClick={() => toggleSelection('exit_rule', o.value)}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="tv-toggle-group">
+                {[['50pct', '50% TP'], ['hold', 'Hold'], ['strategy', 'Auto']].map(([val, label]) => (
+                  <button key={val}
+                    className={`tv-toggle ${exitRule === val ? 'active' : ''}`}
+                    onClick={() => setExitRule(val)}>{label}</button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="bt-field bt-field-actions">
@@ -143,6 +241,19 @@ export default function Backtest() {
             </div>
           </div>
         </div>
+
+        {compareMode && (
+          <div className="bt-compare-dim-bar">
+            <span className="tv-label">Compare by</span>
+            <div className="tv-toggle-group">
+              {COMPARE_DIMS.map(d => (
+                <button key={d.key}
+                  className={`tv-toggle ${compareDim === d.key ? 'active' : ''}`}
+                  onClick={() => setCompareDim(d.key)}>{d.label}</button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="bt-filters">
           <span className="tv-label">Filters</span>

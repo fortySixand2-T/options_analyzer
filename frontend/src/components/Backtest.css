@@ -60,6 +60,15 @@
   color: var(--purple);
 }
 
+/* Compare dimension bar */
+.bt-compare-dim-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
 /* Filter bar */
 .bt-filters {
   display: flex;
