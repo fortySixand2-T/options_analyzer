@@ -85,3 +85,6 @@
   font-weight: 600;
   color: var(--text-primary);
 }
+
+.greeks-chart-panel { padding: 0; }
+.greeks-chart-body { padding: 16px 8px 8px 0; }

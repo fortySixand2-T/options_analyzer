@@ -1,6 +1,53 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  AreaChart, Area, LineChart, Line, XAxis, YAxis,
+  Tooltip, ResponsiveContainer, ReferenceLine,
+} from 'recharts';
 import { postApi } from '../hooks/useApi';
 import './GreeksExplorer.css';
+
+const tooltipStyle = {
+  background: '#131722',
+  border: '1px solid #363c4e',
+  borderRadius: 4,
+  fontSize: 12,
+  padding: '8px 12px',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+};
+
+function cdf(x) {
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x) / Math.SQRT2;
+  const t = 1 / (1 + p * x);
+  const y = 1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return 0.5 * (1 + sign * y);
+}
+
+function pdf(x) {
+  return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+}
+
+function bs(s, k, t, sigma, type) {
+  if (t <= 0 || sigma <= 0) return { price: Math.max(type === 'call' ? s - k : k - s, 0), delta: 0, gamma: 0, theta: 0, vega: 0 };
+  const sqrtT = Math.sqrt(t);
+  const d1 = (Math.log(s / k) + 0.5 * sigma * sigma * t) / (sigma * sqrtT);
+  const d2 = d1 - sigma * sqrtT;
+  const nd1 = cdf(d1), nd2 = cdf(d2), pd1 = pdf(d1);
+  let price, delta;
+  if (type === 'call') {
+    price = s * nd1 - k * Math.exp(0) * nd2;
+    delta = nd1;
+  } else {
+    price = k * Math.exp(0) * cdf(-d2) - s * cdf(-d1);
+    delta = nd1 - 1;
+  }
+  const gamma = pd1 / (s * sigma * sqrtT);
+  const theta = -(s * pd1 * sigma) / (2 * sqrtT) / 365;
+  const vega = s * pd1 * sqrtT / 100;
+  return { price, delta, gamma, theta, vega };
+}
 
 export default function GreeksExplorer() {
   const [spot, setSpot] = useState(100);
@@ -22,6 +69,22 @@ export default function GreeksExplorer() {
   }
 
   useEffect(() => { compute(); }, [spot, strike, dte, iv, optionType]);
+
+  const [chartMode, setChartMode] = useState('price');
+
+  const chartData = useMemo(() => {
+    const lo = Math.max(strike * 0.7, 1);
+    const hi = strike * 1.3;
+    const step = Math.max((hi - lo) / 80, 0.5);
+    const t = dte / 365;
+    const pts = [];
+    for (let s = lo; s <= hi; s += step) {
+      const r = bs(s, strike, t, iv, optionType);
+      const intrinsic = Math.max(optionType === 'call' ? s - strike : strike - s, 0);
+      pts.push({ spot: +s.toFixed(1), price: +r.price.toFixed(4), intrinsic: +intrinsic.toFixed(2), delta: +r.delta.toFixed(4), gamma: +r.gamma.toFixed(6), theta: +r.theta.toFixed(4), vega: +r.vega.toFixed(4) });
+    }
+    return pts;
+  }, [strike, dte, iv, optionType]);
 
   return (
     <div className="greeks">
@@ -70,6 +133,54 @@ export default function GreeksExplorer() {
             </div>
           </>
         )}
+
+        <div className="tv-panel greeks-chart-panel">
+          <div className="tv-panel-header">
+            <span className="tv-panel-title">P&L Profile</span>
+            <div className="tv-toggle-group">
+              {['price', 'delta', 'gamma', 'theta', 'vega'].map(m => (
+                <button key={m} className={`tv-toggle ${chartMode === m ? 'active' : ''}`}
+                  onClick={() => setChartMode(m)}>{m.charAt(0).toUpperCase() + m.slice(1)}</button>
+              ))}
+            </div>
+          </div>
+          <div className="greeks-chart-body">
+            <ResponsiveContainer width="100%" height={300}>
+              {chartMode === 'price' ? (
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="gkPrice" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#2962ff" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#2962ff" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="spot" tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
+                    axisLine={{ stroke: '#2a2e39' }} tickFormatter={v => `$${v}`} />
+                  <YAxis tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
+                    axisLine={{ stroke: '#2a2e39' }} tickFormatter={v => `$${v}`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [`$${v}`, n === 'price' ? 'Option Price' : 'Intrinsic']}
+                    labelFormatter={v => `Spot: $${v}`} />
+                  <ReferenceLine x={spot} stroke="#ff9800" strokeDasharray="4 4" label={{ value: 'Current', fill: '#ff9800', fontSize: 10, position: 'top' }} />
+                  <ReferenceLine x={strike} stroke="#545862" strokeDasharray="3 3" />
+                  <Area type="monotone" dataKey="intrinsic" stroke="#545862" strokeDasharray="4 4" fill="none" dot={false} />
+                  <Area type="monotone" dataKey="price" stroke="#2962ff" strokeWidth={2} fill="url(#gkPrice)" dot={false} />
+                </AreaChart>
+              ) : (
+                <LineChart data={chartData}>
+                  <XAxis dataKey="spot" tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
+                    axisLine={{ stroke: '#2a2e39' }} tickFormatter={v => `$${v}`} />
+                  <YAxis tick={{ fill: '#545862', fontSize: 11 }} tickLine={false}
+                    axisLine={{ stroke: '#2a2e39' }} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => [v, chartMode.charAt(0).toUpperCase() + chartMode.slice(1)]}
+                    labelFormatter={v => `Spot: $${v}`} />
+                  <ReferenceLine x={spot} stroke="#ff9800" strokeDasharray="4 4" label={{ value: 'Current', fill: '#ff9800', fontSize: 10, position: 'top' }} />
+                  <ReferenceLine x={strike} stroke="#545862" strokeDasharray="3 3" />
+                  <Line type="monotone" dataKey={chartMode} stroke="#26a69a" strokeWidth={2} dot={false} />
+                </LineChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
     </div>
   );
