@@ -18,6 +18,18 @@
   gap: 16px;
 }
 
+.greeks-ticker-form {
+  display: flex;
+  gap: 6px;
+}
+.greeks-ticker-form .tv-input {
+  flex: 1;
+  min-width: 0;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
 .greeks-slider {
   display: flex;
   flex-direction: column;

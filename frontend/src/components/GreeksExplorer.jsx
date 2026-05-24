@@ -50,6 +50,9 @@ function bs(s, k, t, sigma, type) {
 }
 
 export default function GreeksExplorer() {
+  const [ticker, setTicker] = useState('');
+  const [tickerInput, setTickerInput] = useState('');
+  const [tickerLoading, setTickerLoading] = useState(false);
   const [spot, setSpot] = useState(100);
   const [strike, setStrike] = useState(100);
   const [dte, setDte] = useState(30);
@@ -57,6 +60,30 @@ export default function GreeksExplorer() {
   const [optionType, setOptionType] = useState('call');
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+
+  async function loadTicker(sym) {
+    if (!sym) return;
+    setTickerLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/quote/${sym.toUpperCase()}`);
+      if (!res.ok) throw new Error(`Failed to load ${sym.toUpperCase()}`);
+      const data = await res.json();
+      setTicker(data.symbol);
+      setSpot(data.spot);
+      setStrike(data.spot);
+      if (data.iv) setIv(data.iv);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setTickerLoading(false);
+    }
+  }
+
+  function handleTickerSubmit(e) {
+    e.preventDefault();
+    if (tickerInput.trim()) loadTicker(tickerInput.trim());
+  }
 
   async function compute() {
     setError(null);
@@ -91,11 +118,19 @@ export default function GreeksExplorer() {
       <div className="greeks-params tv-panel">
         <div className="tv-panel-header">
           <span className="tv-panel-title">Parameters</span>
+          {ticker && <span className="tv-badge blue">{ticker}</span>}
         </div>
         <div className="tv-panel-body greeks-controls">
-          <Slider label="Spot" value={`$${spot}`} min={50} max={600} step={1}
+          <form className="greeks-ticker-form" onSubmit={handleTickerSubmit}>
+            <input className="tv-input" placeholder="Ticker e.g. SPY"
+              value={tickerInput} onChange={e => setTickerInput(e.target.value.toUpperCase())} />
+            <button className="tv-btn-primary" type="submit" disabled={tickerLoading || !tickerInput.trim()}>
+              {tickerLoading ? '...' : 'Load'}
+            </button>
+          </form>
+          <Slider label="Spot" value={`$${spot}`} min={1} max={Math.max(spot * 2, 600)} step={1}
             val={spot} onChange={setSpot} />
-          <Slider label="Strike" value={`$${strike}`} min={50} max={600} step={1}
+          <Slider label="Strike" value={`$${strike}`} min={1} max={Math.max(spot * 2, 600)} step={1}
             val={strike} onChange={setStrike} />
           <Slider label="DTE" value={`${dte}d`} min={1} max={365} step={1}
             val={dte} onChange={setDte} />

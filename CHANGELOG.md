@@ -1,5 +1,8 @@
 # Changelog
 
+- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Add ticker input to load real spot price + ATM IV, dynamic slider ranges
+- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.css — Add ticker form styles
+- [2026-05-23] Modified: src/ui/app.py — Add GET /api/quote/{symbol} endpoint returning spot + ATM IV
 - [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Restructure layout: chart spans full width below params+results row
 - [2026-05-23] Modified: frontend/src/components/GreeksExplorer.css — Grid layout with full-width chart, compact horizontal Greeks strip, tighter spacing
 - [2026-05-23] Modified: frontend/src/styles/components.css — Restyle toggles as compact segmented pills (not tab-looking buttons), polish slider with glow thumb, refine chart container

@@ -427,7 +427,29 @@ def get_chain(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# ── Greeks Calculator ─────────────────────────────────────���──────────────────
+# ── Quick Quote ──────────────────────────────────────────────────────────────
+
+@app.get("/api/quote/{symbol}")
+def get_quote(symbol: str):
+    """Spot price + ATM implied volatility for a ticker."""
+    try:
+        from scanner.providers import create_provider
+        provider = create_provider()
+        chain = provider.get_chain(symbol.upper(), min_dte=7, max_dte=45)
+        spot = chain.spot
+        atm_iv = None
+        if chain.contracts:
+            calls = [c for c in chain.contracts if c.option_type == "call" and c.implied_volatility and c.implied_volatility > 0]
+            if calls:
+                closest = min(calls, key=lambda c: abs(c.strike - spot))
+                atm_iv = closest.implied_volatility
+        return {"symbol": chain.ticker, "spot": round(spot, 2), "iv": round(atm_iv, 4) if atm_iv else None}
+    except Exception as e:
+        logger.exception("Quote fetch failed for %s", symbol)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# ── Greeks Calculator ─────────────────────────────────────────────────────────
 
 @app.post("/api/greeks")
 def compute_greeks(req: GreeksRequest):
