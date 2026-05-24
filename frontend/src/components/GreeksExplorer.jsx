@@ -71,7 +71,7 @@ export default function GreeksExplorer() {
       const data = await res.json();
       setTicker(data.symbol);
       setSpot(data.spot);
-      setStrike(data.spot);
+      setStrike(Math.round(data.spot));
       if (data.iv) setIv(data.iv);
     } catch (e) {
       setError(e.message);
@@ -128,14 +128,14 @@ export default function GreeksExplorer() {
               {tickerLoading ? '...' : 'Load'}
             </button>
           </form>
-          <Slider label="Spot" value={`$${spot}`} min={1} max={Math.max(spot * 2, 600)} step={1}
-            val={spot} onChange={setSpot} />
-          <Slider label="Strike" value={`$${strike}`} min={1} max={Math.max(spot * 2, 600)} step={1}
-            val={strike} onChange={setStrike} />
-          <Slider label="DTE" value={`${dte}d`} min={1} max={365} step={1}
-            val={dte} onChange={setDte} />
-          <Slider label="IV" value={`${(iv * 100).toFixed(0)}%`} min={5} max={150} step={1}
-            val={iv * 100} onChange={v => setIv(v / 100)} />
+          <Param label="Spot" prefix="$" value={spot} min={1} max={Math.max(spot * 2, 600)} step={1}
+            onChange={setSpot} />
+          <Param label="Strike" prefix="$" value={strike} min={1} max={Math.max(spot * 2, 600)} step={1}
+            onChange={v => setStrike(Math.round(v))} />
+          <Param label="DTE" suffix="d" value={dte} min={1} max={365} step={1}
+            onChange={setDte} />
+          <Param label="IV" suffix="%" value={+(iv * 100).toFixed(1)} min={1} max={200} step={0.5}
+            onChange={v => setIv(v / 100)} />
           <div className="tv-toggle-group" style={{ alignSelf: 'flex-start' }}>
             <button className={`tv-toggle ${optionType === 'call' ? 'active' : ''}`}
               onClick={() => setOptionType('call')}>Call</button>
@@ -220,15 +220,43 @@ export default function GreeksExplorer() {
   );
 }
 
-function Slider({ label, value, min, max, step, val, onChange }) {
+function Param({ label, prefix, suffix, value, min, max, step, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  function startEdit() {
+    setDraft(String(value));
+    setEditing(true);
+  }
+
+  function commitEdit() {
+    setEditing(false);
+    const n = parseFloat(draft);
+    if (!isNaN(n)) onChange(Math.max(min, Math.min(max, n)));
+  }
+
+  function onKey(e) {
+    if (e.key === 'Enter') commitEdit();
+    if (e.key === 'Escape') setEditing(false);
+  }
+
   return (
-    <div className="greeks-slider">
-      <div className="greeks-slider-header">
-        <span>{label}</span>
-        <span className="greeks-slider-value">{value}</span>
+    <div className="greeks-param">
+      <div className="greeks-param-header">
+        <span className="greeks-param-label">{label}</span>
+        {editing ? (
+          <input className="greeks-param-input" type="number" value={draft}
+            min={min} max={max} step={step} autoFocus
+            onChange={e => setDraft(e.target.value)}
+            onBlur={commitEdit} onKeyDown={onKey} />
+        ) : (
+          <span className="greeks-param-value" onClick={startEdit} title="Click to edit">
+            {prefix}{value}{suffix}
+          </span>
+        )}
       </div>
       <input type="range" className="tv-slider" min={min} max={max} step={step}
-        value={val} onChange={e => onChange(+e.target.value)} />
+        value={value} onChange={e => onChange(+e.target.value)} />
     </div>
   );
 }

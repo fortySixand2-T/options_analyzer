@@ -30,23 +30,52 @@
   letter-spacing: 0.5px;
 }
 
-.greeks-slider {
+.greeks-param {
   display: flex;
   flex-direction: column;
   gap: 5px;
 }
-.greeks-slider-header {
+.greeks-param-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 13px;
+}
+.greeks-param-label {
   color: var(--text-secondary);
 }
-.greeks-slider-value {
+.greeks-param-value {
   font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  cursor: text;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+.greeks-param-value:hover {
+  border-color: var(--border);
+}
+.greeks-param-input {
+  width: 80px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--blue);
+  border-radius: 3px;
+  padding: 2px 6px;
+  outline: none;
+  -moz-appearance: textfield;
+}
+.greeks-param-input::-webkit-inner-spin-button,
+.greeks-param-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .greeks-results {

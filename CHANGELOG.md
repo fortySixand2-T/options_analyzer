@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Add click-to-edit input on all params, enforce whole-number strikes
+- [2026-05-23] Modified: frontend/src/components/GreeksExplorer.css — Add editable param input styles with hover border hint
 - [2026-05-23] Modified: frontend/src/components/GreeksExplorer.jsx — Add ticker input to load real spot price + ATM IV, dynamic slider ranges
 - [2026-05-23] Modified: frontend/src/components/GreeksExplorer.css — Add ticker form styles
 - [2026-05-23] Modified: src/ui/app.py — Add GET /api/quote/{symbol} endpoint returning spot + ATM IV
