@@ -1,5 +1,11 @@
 # Changelog
 
+- [2026-05-24] Modified: frontend/src/pages/LandingPage.jsx — Polished landing page with hero, signal flow diagram, features grid, strategy table, CTA
+- [2026-05-24] Modified: frontend/src/styles/landing.css — Complete rewrite: sticky header, gradient hero, flow diagram, feature cards, responsive layout
+- [2026-05-24] Modified: frontend/src/styles/auth.css — Updated colors to match accent system
+- [2026-05-24] Modified: frontend/src/styles/variables.css — Added --accent, --accent-dim, --blue-dim CSS variables
+- [2026-05-24] Modified: frontend/index.html — Updated title and added meta description
+- [2026-05-24] Modified: frontend/public/favicon.svg — New diamond favicon matching brand
 - [2026-05-24] Created: src/auth/__init__.py — Auth package exports
 - [2026-05-24] Created: src/auth/config.py — JWT and DB path configuration
 - [2026-05-24] Created: src/auth/models.py — Pydantic models for auth requests/responses

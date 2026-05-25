@@ -16,7 +16,10 @@
   --red-dim: rgba(239, 83, 80, 0.12);
   --amber: #ff9800;
   --blue: #2962ff;
+  --blue-dim: rgba(41, 98, 255, 0.12);
   --purple: #ab47bc;
+  --accent: #2962ff;
+  --accent-dim: rgba(41, 98, 255, 0.12);
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --h1: 18px;
