@@ -1,5 +1,12 @@
 # Changelog
 
+- [2026-05-25] Created: src/ui/backtest_configs_router.py — Backtest config save/load/delete API
+- [2026-05-25] Created: src/ui/greeks_advanced_router.py — Monte Carlo forward simulation + multi-leg payoff diagram endpoints
+- [2026-05-25] Created: src/auth/tier_middleware.py — User tier access control (free/pro limits)
+- [2026-05-25] Created: src/notifications/webhook_notifier.py — Webhook dispatcher: Discord, Slack, Telegram, generic
+- [2026-05-25] Created: src/ui/settings_router.py — User settings + webhook CRUD API
+- [2026-05-25] Modified: src/data/user_db.py — Add user_settings, webhooks, backtest_configs tables
+- [2026-05-25] Modified: src/ui/app.py — Mount Phase 5-7 routers, register daily chain collector, add ThetaData backfill endpoint
 - [2026-05-25] Created: src/ui/alerts_router.py — Alerts CRUD API with test notification endpoint
 - [2026-05-25] Created: src/alerts/__init__.py — Alerts package init
 - [2026-05-25] Created: src/alerts/engine.py — Alert evaluation engine: IV rank, price, regime triggers with cooldown

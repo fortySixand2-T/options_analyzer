@@ -50,6 +50,16 @@ async def lifespan(app: FastAPI):
     from src.alerts.engine import evaluate_alerts
     scheduler.register("alert_evaluator", evaluate_alerts, interval_seconds=300, market_hours_only=True)
 
+    async def daily_chain_collect():
+        """Collect chain snapshots for watchlist symbols at market close."""
+        try:
+            from data.chain_collector import collect_daily_snapshots
+            collect_daily_snapshots(tickers=["SPY", "QQQ", "IWM"], max_dte=60)
+        except Exception:
+            pass
+
+    scheduler.register("daily_chain_collector", daily_chain_collect, interval_seconds=3600, market_hours_only=True)
+
     scheduler.start_all()
     yield
     await scheduler.stop_all()
@@ -67,6 +77,9 @@ from src.ui.scanner_presets_router import router as scanner_presets_router
 from src.ui.positions_router import router as positions_router
 from src.ui.performance_router import router as performance_router
 from src.ui.alerts_router import router as alerts_router
+from src.ui.backtest_configs_router import router as backtest_configs_router
+from src.ui.greeks_advanced_router import router as greeks_advanced_router
+from src.ui.settings_router import router as settings_router
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -76,6 +89,9 @@ app.include_router(scanner_presets_router)
 app.include_router(positions_router)
 app.include_router(performance_router)
 app.include_router(alerts_router)
+app.include_router(backtest_configs_router)
+app.include_router(greeks_advanced_router)
+app.include_router(settings_router)
 
 # CORS for React dev server
 app.add_middleware(
@@ -848,6 +864,29 @@ def read_all_notifications(_user: dict = Depends(get_current_user)):
 def scheduler_status(_user: dict = Depends(get_current_user)):
     """Check status of background scheduled tasks."""
     return {"tasks": scheduler.status()}
+
+
+# ── Admin: Data Pipeline ────────────────────────────────────────────────────
+
+@app.post("/api/admin/backfill-theta")
+def trigger_theta_backfill(
+    symbols: str = Query("SPY,QQQ,IWM"),
+    days_back: int = Query(30, ge=1, le=365),
+    _user: dict = Depends(get_current_user),
+):
+    """Trigger ThetaData backfill (requires Theta Terminal on host)."""
+    tickers = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    try:
+        from data.thetadata_backfill import backfill_thetadata
+        result = backfill_thetadata(tickers=tickers, days_back=days_back)
+        return {"status": "ok", "result": result}
+    except ImportError:
+        raise HTTPException(status_code=501, detail="ThetaData module not available")
+    except ConnectionError:
+        raise HTTPException(status_code=503, detail="Theta Terminal not reachable — ensure it's running on host")
+    except Exception as e:
+        logger.exception("ThetaData backfill failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ── Chain Snapshots ──────────────────────────────────────────────────────────

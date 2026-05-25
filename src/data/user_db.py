@@ -77,6 +77,30 @@ def init_user_tables() -> None:
             created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS user_settings (
+            user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            settings_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS webhooks (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name        TEXT NOT NULL,
+            type        TEXT NOT NULL,
+            url         TEXT NOT NULL,
+            config_json TEXT NOT NULL DEFAULT '{}',
+            is_active   INTEGER DEFAULT 1,
+            created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS backtest_configs (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name        TEXT NOT NULL,
+            config_json TEXT NOT NULL,
+            created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS alerts (
             id                 INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -114,6 +138,8 @@ def init_user_tables() -> None:
         CREATE INDEX IF NOT EXISTS idx_journal_user ON journal(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, read);
+        CREATE INDEX IF NOT EXISTS idx_webhooks_user ON webhooks(user_id);
+        CREATE INDEX IF NOT EXISTS idx_backtest_configs_user ON backtest_configs(user_id);
         CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(user_id);
         CREATE INDEX IF NOT EXISTS idx_positions_user ON positions(user_id);
         CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(user_id, status);
