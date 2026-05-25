@@ -28,7 +28,7 @@ from src.auth.database import (
     revoke_refresh_token,
     store_refresh_token,
 )
-from jose import JWTError
+from jwt import PyJWTError
 
 
 @pytest.fixture(autouse=True)
@@ -77,13 +77,13 @@ class TestJWT:
         assert payload["type"] == "refresh"
 
     def test_invalid_token_raises(self):
-        with pytest.raises(JWTError):
+        with pytest.raises(PyJWTError):
             decode_token("this.is.not.a.valid.token")
 
     def test_tampered_token_raises(self):
         token = create_access_token(1, "a@b.com")
         tampered = token[:-5] + "XXXXX"
-        with pytest.raises(JWTError):
+        with pytest.raises(PyJWTError):
             decode_token(tampered)
 
     def test_expired_token_raises(self):
@@ -94,11 +94,11 @@ class TestJWT:
         try:
             # Create a token that expires immediately (0 minutes from now)
             from datetime import datetime, timedelta, timezone
-            from jose import jwt as jose_jwt
+            import jwt as pyjwt
             expire = datetime.now(timezone.utc) - timedelta(seconds=10)
-            payload = {"sub": "1", "email": "x@y.com", "type": "access", "exp": expire, "jti": "test"}
-            token = jose_jwt.encode(payload, cfg.JWT_SECRET_KEY, algorithm=cfg.JWT_ALGORITHM)
-            with pytest.raises(JWTError):
+            payload = {"sub": "1", "email": "x@y.com", "type": "access", "exp": expire, "jti": "test", "iss": "options-analyzer", "aud": "options-analyzer"}
+            token = pyjwt.encode(payload, cfg.JWT_SECRET_KEY, algorithm=cfg.JWT_ALGORITHM)
+            with pytest.raises(PyJWTError):
                 decode_token(token)
         finally:
             cfg.JWT_ACCESS_EXPIRE_MINUTES = original

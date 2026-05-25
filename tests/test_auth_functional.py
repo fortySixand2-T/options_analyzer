@@ -255,13 +255,14 @@ class TestTokenSecurity:
         assert res.status_code == 401
 
     def test_token_from_different_secret_rejected(self):
-        from jose import jwt as jose_jwt
+        import jwt as pyjwt
         from datetime import datetime, timedelta, timezone
         import uuid
 
-        fake_token = jose_jwt.encode(
+        fake_token = pyjwt.encode(
             {"sub": "1", "email": "a@b.com", "type": "access",
-             "exp": datetime.now(timezone.utc) + timedelta(hours=1), "jti": uuid.uuid4().hex},
+             "exp": datetime.now(timezone.utc) + timedelta(hours=1), "jti": uuid.uuid4().hex,
+             "iss": "options-analyzer", "aud": "options-analyzer"},
             "wrong-secret-key",
             algorithm="HS256",
         )
@@ -269,15 +270,15 @@ class TestTokenSecurity:
         assert res.status_code == 401
 
     def test_token_with_tampered_user_id(self):
-        from jose import jwt as jose_jwt
+        import jwt as pyjwt
         from src.auth import config as cfg
         from datetime import datetime, timedelta, timezone
         import uuid
 
-        # Create token for user_id=9999 (doesn't exist)
-        fake_token = jose_jwt.encode(
+        fake_token = pyjwt.encode(
             {"sub": "9999", "email": "fake@test.com", "type": "access",
-             "exp": datetime.now(timezone.utc) + timedelta(hours=1), "jti": uuid.uuid4().hex},
+             "exp": datetime.now(timezone.utc) + timedelta(hours=1), "jti": uuid.uuid4().hex,
+             "iss": "options-analyzer", "aud": "options-analyzer"},
             cfg.JWT_SECRET_KEY,
             algorithm=cfg.JWT_ALGORITHM,
         )

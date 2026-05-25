@@ -1,12 +1,19 @@
 """Auth API endpoints — register, login, refresh, logout, me."""
 
+import unicodedata
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from jose import JWTError
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+import jwt
+
+limiter = Limiter(key_func=get_remote_address)
 
 from src.auth.database import (
+    cleanup_expired_tokens,
     create_user,
+    enforce_session_limit,
     get_refresh_token,
     get_user_by_email,
     revoke_all_user_tokens,
@@ -35,9 +42,10 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def register(body: UserCreate):
+@limiter.limit("3/minute")
+def register(request: Request, body: UserCreate):
     """Create a new user account and return tokens."""
-    email = body.email.lower()
+    email = unicodedata.normalize("NFKC", body.email).lower()
     existing = get_user_by_email(email)
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
@@ -51,14 +59,16 @@ def register(body: UserCreate):
     from datetime import timedelta
     expires_at = (datetime.now(timezone.utc) + timedelta(days=JWT_REFRESH_EXPIRE_DAYS)).isoformat()
     store_refresh_token(user["id"], hash_token(refresh_token), expires_at)
+    enforce_session_limit(user["id"])
 
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(body: UserLogin):
+@limiter.limit("5/minute")
+def login(request: Request, body: UserLogin):
     """Authenticate with email/password and return tokens."""
-    email = body.email.lower()
+    email = unicodedata.normalize("NFKC", body.email).lower()
     user = get_user_by_email(email)
     if user is None or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(
@@ -76,16 +86,18 @@ def login(body: UserLogin):
     from datetime import timedelta
     expires_at = (datetime.now(timezone.utc) + timedelta(days=JWT_REFRESH_EXPIRE_DAYS)).isoformat()
     store_refresh_token(user["id"], hash_token(refresh_token), expires_at)
+    enforce_session_limit(user["id"])
 
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh(body: RefreshRequest):
+@limiter.limit("10/minute")
+def refresh(request: Request, body: RefreshRequest):
     """Exchange a valid refresh token for a new token pair."""
     try:
         payload = decode_token(body.refresh_token)
-    except JWTError:
+    except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     if payload.get("type") != "refresh":

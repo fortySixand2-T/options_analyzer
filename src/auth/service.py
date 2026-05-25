@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from jose import JWTError, jwt
+import jwt
 
 from src.auth import config as auth_config
 
@@ -33,6 +33,8 @@ def create_access_token(user_id: int, email: str) -> str:
         "type": "access",
         "exp": expire,
         "jti": uuid.uuid4().hex,
+        "iss": "options-analyzer",
+        "aud": "options-analyzer",
     }
     return jwt.encode(payload, auth_config.JWT_SECRET_KEY, algorithm=auth_config.JWT_ALGORITHM)
 
@@ -45,21 +47,29 @@ def create_refresh_token(user_id: int, email: str) -> str:
         "type": "refresh",
         "exp": expire,
         "jti": uuid.uuid4().hex,
+        "iss": "options-analyzer",
+        "aud": "options-analyzer",
     }
     return jwt.encode(payload, auth_config.JWT_SECRET_KEY, algorithm=auth_config.JWT_ALGORITHM)
 
 
 def decode_token(token: str) -> dict:
-    """Decode a JWT and return payload. Raises JWTError on invalid/expired."""
+    """Decode a JWT and return payload. Raises jwt.PyJWTError on invalid/expired."""
     try:
-        payload = jwt.decode(token, auth_config.JWT_SECRET_KEY, algorithms=[auth_config.JWT_ALGORITHM])
+        payload = jwt.decode(
+            token,
+            auth_config.JWT_SECRET_KEY,
+            algorithms=[auth_config.JWT_ALGORITHM],
+            issuer="options-analyzer",
+            audience="options-analyzer",
+        )
         user_id = payload.get("sub")
         email = payload.get("email")
         token_type = payload.get("type")
         if user_id is None or email is None:
-            raise JWTError("Missing claims")
+            raise jwt.InvalidTokenError("Missing claims")
         return {"id": int(user_id), "email": email, "type": token_type}
-    except JWTError:
+    except jwt.PyJWTError:
         raise
 
 

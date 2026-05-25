@@ -132,3 +132,38 @@ def revoke_all_user_tokens(user_id: int) -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+MAX_ACTIVE_SESSIONS = 5
+
+
+def enforce_session_limit(user_id: int) -> None:
+    """Keep only the most recent MAX_ACTIVE_SESSIONS tokens; revoke older ones."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            """UPDATE refresh_tokens SET revoked = 1
+               WHERE user_id = ? AND revoked = 0 AND id NOT IN (
+                   SELECT id FROM refresh_tokens
+                   WHERE user_id = ? AND revoked = 0
+                   ORDER BY created_at DESC LIMIT ?
+               )""",
+            (user_id, user_id, MAX_ACTIVE_SESSIONS),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def cleanup_expired_tokens() -> int:
+    """Delete revoked and expired tokens. Returns number of rows removed."""
+    conn = get_connection()
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        cursor = conn.execute(
+            "DELETE FROM refresh_tokens WHERE revoked = 1 OR expires_at < ?", (now,)
+        )
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()

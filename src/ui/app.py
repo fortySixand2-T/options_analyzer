@@ -20,19 +20,20 @@ import os
 from datetime import date
 from typing import Dict, List, Optional
 
-import secrets
-
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from src.auth.database import init_auth_db
-from src.auth.router import router as auth_router
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+from src.auth.database import cleanup_expired_tokens, init_auth_db
+from src.auth.dependencies import get_current_user
+from src.auth.router import limiter, router as auth_router
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_auth_db()
+    cleanup_expired_tokens()
     yield
 
 
@@ -50,6 +52,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(auth_router)
 
 # CORS for React dev server
@@ -75,24 +79,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
         return response
 
 
 app.add_middleware(SecurityHeadersMiddleware)
-
-
-# ── API Key Authentication ──────────────────────────────────────────────────
-
-_API_KEY = os.getenv("API_SECRET_KEY", "")
-_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-
-async def require_api_key(api_key: str = Security(_api_key_header)):
-    """Dependency that enforces API key auth on mutating endpoints."""
-    if not _API_KEY:
-        return
-    if not api_key or not secrets.compare_digest(api_key, _API_KEY):
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 # ── Request/Response Models ──────────────────────────────────────────────────
@@ -122,7 +113,7 @@ class JournalEntry(BaseModel):
 # ── Regime ─────���─────────────────────────────────────────────────────────────
 
 @app.get("/api/regime")
-def get_regime(symbol: str = Query("SPY", description="Symbol for dealer data")):
+def get_regime(symbol: str = Query("SPY", description="Symbol for dealer data"), _user: dict = Depends(get_current_user)):
     """Current market regime classification + VIX + dealer positioning."""
     try:
         from regime.detector import detect_regime
@@ -189,7 +180,7 @@ def get_regime(symbol: str = Query("SPY", description="Symbol for dealer data"))
 # ── Market State ──────────────────────────────────────────────────────────────
 
 @app.get("/api/market-state")
-def get_market_state(symbol: str = Query("SPY", description="Symbol")):
+def get_market_state(symbol: str = Query("SPY", description="Symbol"), _user: dict = Depends(get_current_user)):
     """Full L1 market state snapshot — regime, edge, skew, dealer, quality."""
     try:
         from market_state import build_market_state
@@ -204,6 +195,7 @@ def get_market_state(symbol: str = Query("SPY", description="Symbol")):
 def get_trade_candidates(
     symbol: str = Query("SPY", description="Symbol"),
     portfolio_value: float = Query(100_000, description="Portfolio value for sizing"),
+    _user: dict = Depends(get_current_user),
 ):
     """Full L1→L2→L3 pipeline: market state → trade candidates → sizing.
 
@@ -253,7 +245,7 @@ def _get_portfolio():
 
 
 @app.get("/api/portfolio")
-def get_portfolio():
+def get_portfolio(_user: dict = Depends(get_current_user)):
     """L4 portfolio snapshot — positions, Greeks, risk, hedge triggers."""
     try:
         pf = _get_portfolio()
@@ -272,6 +264,7 @@ def scan(
     min_dte: int = Query(0, ge=0, le=365, description="Min DTE filter"),
     strategies: bool = Query(False, description="Include strategy evaluation"),
     top: int = Query(20, ge=1, le=100, description="Max results"),
+    _user: dict = Depends(get_current_user),
 ):
     """Scan for options signals, optionally with strategy evaluation."""
     tickers = [s.strip().upper() for s in symbols.split(",") if s.strip()]
@@ -412,6 +405,7 @@ def get_chain(
     symbol: str,
     max_dte: int = Query(14, ge=0, le=365, description="Max DTE"),
     min_dte: int = Query(0, ge=0, le=365, description="Min DTE"),
+    _user: dict = Depends(get_current_user),
 ):
     """Full options chain with Greeks for a symbol."""
     try:
@@ -446,7 +440,7 @@ def get_chain(
 # ── Quick Quote ──────────────────────────────────────────────────────────────
 
 @app.get("/api/quote/{symbol}")
-def get_quote(symbol: str):
+def get_quote(symbol: str, _user: dict = Depends(get_current_user)):
     """Spot price + ATM implied volatility for a ticker."""
     try:
         from scanner.providers import create_provider
@@ -468,7 +462,7 @@ def get_quote(symbol: str):
 # ── Greeks Calculator ─────────────────────────────────────────────────────────
 
 @app.post("/api/greeks")
-def compute_greeks(req: GreeksRequest):
+def compute_greeks(req: GreeksRequest, _user: dict = Depends(get_current_user)):
     """Compute option price + Greeks. Supports European (BS) and American (LSMC)."""
     from models.black_scholes import black_scholes_price, calculate_greeks
     from config import RISK_FREE_RATE
@@ -578,6 +572,7 @@ def compare_backtests(
     slippage_pct: float = Query(0.0, ge=0.0, le=1.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
     source: str = Query("local", description="Pricing source: 'local' (BS) or 'chain_replay' (real data)"),
     option_style: str = Query("european", description="Option style: 'european' (BS) or 'american' (LSMC)"),
+    _user: dict = Depends(get_current_user),
 ):
     """Compare backtests across multiple strategies."""
     from backtest.models import BacktestRequest
@@ -634,6 +629,7 @@ def get_backtest(
     slippage_pct: float = Query(0.0, ge=0.0, le=1.0, description="Slippage as decimal, e.g. 0.03 for 3%"),
     source: str = Query("local", description="Pricing source: 'local' (BS) or 'chain_replay' (real data)"),
     option_style: str = Query("european", description="Option style: 'european' (BS) or 'american' (LSMC)"),
+    _user: dict = Depends(get_current_user),
 ):
     """Run or retrieve cached backtest results with optional signal filters."""
     from backtest.models import BacktestRequest
@@ -702,7 +698,7 @@ def _get_journal_db():
 
 
 @app.get("/api/journal")
-def list_journal(limit: int = Query(50, ge=1, le=500)):
+def list_journal(limit: int = Query(50, ge=1, le=500), _user: dict = Depends(get_current_user)):
     """List trade journal entries."""
     conn = _get_journal_db()
     rows = conn.execute(
@@ -715,8 +711,8 @@ def list_journal(limit: int = Query(50, ge=1, le=500)):
     return {"entries": entries, "count": len(entries)}
 
 
-@app.post("/api/journal", dependencies=[Depends(require_api_key)])
-def add_journal(entry: JournalEntry):
+@app.post("/api/journal")
+def add_journal(entry: JournalEntry, _user: dict = Depends(get_current_user)):
     """Log a trade to the journal."""
     conn = _get_journal_db()
     try:
@@ -735,10 +731,11 @@ def add_journal(entry: JournalEntry):
 
 # ── Chain Snapshots ──────────────────────────────────────────────────────────
 
-@app.post("/api/chain-snapshots/collect", dependencies=[Depends(require_api_key)])
+@app.post("/api/chain-snapshots/collect")
 def collect_chain_snapshots(
     symbols: str = Query("SPY,QQQ,IWM", description="Comma-separated symbols"),
     max_dte: int = Query(60, ge=0, le=365, description="Max DTE to collect"),
+    _user: dict = Depends(get_current_user),
 ):
     """Trigger daily chain snapshot collection for the given tickers."""
     from data.chain_collector import collect_daily_snapshots
@@ -756,14 +753,14 @@ def collect_chain_snapshots(
 
 
 @app.get("/api/chain-snapshots/stats")
-def chain_snapshot_stats():
+def chain_snapshot_stats(_user: dict = Depends(get_current_user)):
     """Database statistics for stored chain snapshots."""
     from data.chain_store import get_db_stats
     return get_db_stats()
 
 
 @app.get("/api/chain-snapshots/{symbol}/dates")
-def chain_snapshot_dates(symbol: str):
+def chain_snapshot_dates(symbol: str, _user: dict = Depends(get_current_user)):
     """List available snapshot dates for a symbol."""
     from data.chain_store import get_available_dates
     dates = get_available_dates(symbol.upper())
@@ -777,6 +774,7 @@ def chain_snapshot_detail(
     option_type: Optional[str] = Query(None, description="Filter: call or put"),
     min_strike: Optional[float] = Query(None),
     max_strike: Optional[float] = Query(None),
+    _user: dict = Depends(get_current_user),
 ):
     """Retrieve a stored chain snapshot for a symbol and date."""
     from data.chain_store import get_snapshot
@@ -821,6 +819,7 @@ def iv_history(
     symbol: str,
     start: str = Query("", description="Start date YYYY-MM-DD"),
     end: str = Query("", description="End date YYYY-MM-DD"),
+    _user: dict = Depends(get_current_user),
 ):
     """IV history for a symbol from stored snapshots."""
     from data.chain_store import get_iv_history

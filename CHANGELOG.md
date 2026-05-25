@@ -1,5 +1,14 @@
 # Changelog
 
+- [2026-05-25] Modified: requirements.txt — Replace python-jose (CVE) with PyJWT, add slowapi for rate limiting
+- [2026-05-25] Modified: src/auth/service.py — Migrate to PyJWT, add iss/aud claims to tokens
+- [2026-05-25] Modified: src/auth/dependencies.py — Migrate from jose.JWTError to jwt.PyJWTError
+- [2026-05-25] Modified: src/auth/router.py — Migrate to PyJWT, add rate limiting (3/min register, 5/min login, 10/min refresh), Unicode NFKC email normalization, session limit enforcement
+- [2026-05-25] Modified: src/auth/config.py — Enforce strong JWT secret: fail in production if weak/missing, generate ephemeral secret in dev with warning
+- [2026-05-25] Modified: src/auth/database.py — Add enforce_session_limit (max 5 active), cleanup_expired_tokens
+- [2026-05-25] Modified: src/ui/app.py — Protect all API endpoints with JWT auth, add CSP header, wire rate limiter, remove legacy API key auth, run token cleanup on startup
+- [2026-05-25] Modified: tests/test_auth.py — Migrate from jose to PyJWT, add iss/aud claims to test payloads
+- [2026-05-25] Modified: tests/test_auth_functional.py — Migrate from jose to PyJWT, add iss/aud claims to test payloads
 - [2026-05-24] Modified: README.md — Updated with auth system, public/authenticated page split, project structure
 - [2026-05-24] Modified: CLAUDE.md — Added auth files to key files table, updated current status
 - [2026-05-24] Modified: HOWTO.md — Added Account Setup section, updated Web UI docs, added JWT_SECRET_KEY to env reference

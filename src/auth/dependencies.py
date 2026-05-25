@@ -2,7 +2,7 @@
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError
+import jwt
 
 from src.auth.database import get_user_by_id
 from src.auth.service import decode_token
@@ -20,7 +20,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
         )
     try:
         payload = decode_token(token)
-    except JWTError:
+    except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -53,5 +53,5 @@ async def get_optional_user(token: str = Depends(oauth2_scheme)) -> dict | None:
         if payload.get("type") != "access":
             return None
         return get_user_by_id(payload["id"])
-    except JWTError:
+    except jwt.PyJWTError:
         return None
