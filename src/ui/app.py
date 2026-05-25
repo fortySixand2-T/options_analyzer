@@ -61,6 +61,7 @@ app = FastAPI(
 from src.ui.watchlist_router import router as watchlist_router
 from src.ui.scanner_presets_router import router as scanner_presets_router
 from src.ui.positions_router import router as positions_router
+from src.ui.performance_router import router as performance_router
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -68,6 +69,7 @@ app.include_router(auth_router)
 app.include_router(watchlist_router)
 app.include_router(scanner_presets_router)
 app.include_router(positions_router)
+app.include_router(performance_router)
 
 # CORS for React dev server
 app.add_middleware(

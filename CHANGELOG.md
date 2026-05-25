@@ -1,5 +1,10 @@
 # Changelog
 
+- [2026-05-25] Created: src/ui/performance_router.py — Performance analytics API: summary, by-strategy, by-regime, by-month, equity curve, drawdown
+- [2026-05-25] Created: frontend/src/components/Performance.jsx — Performance dashboard: equity curve, drawdown, strategy/regime breakdowns, monthly heatmap
+- [2026-05-25] Created: frontend/src/components/Performance.css — Performance component styles
+- [2026-05-25] Modified: frontend/src/components/Sidebar.jsx — Add Performance tab
+- [2026-05-25] Modified: frontend/src/pages/DashboardPage.jsx — Add Performance tab rendering
 - [2026-05-25] Created: src/ui/positions_router.py — Positions CRUD API with P&L calculation, close, Greeks aggregation
 - [2026-05-25] Created: frontend/src/components/Positions.jsx — Positions UI: open/closed/Greeks views, new position form, close workflow
 - [2026-05-25] Created: frontend/src/components/Positions.css — Positions component styles

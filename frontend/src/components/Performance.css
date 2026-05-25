@@ -1,0 +1,38 @@
+.performance { display: flex; flex-direction: column; gap: 16px; }
+
+.perf-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+.perf-hint { font-size: 12px; margin-top: 4px; }
+
+.perf-stat-strip {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.perf-stat-box { display: flex; flex-direction: column; gap: 2px; min-width: 80px; }
+.perf-stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+.perf-stat-val { font-size: 15px; font-weight: 600; font-family: var(--font-mono); color: var(--text-primary); }
+
+.perf-chart-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.perf-chart-card h3 { font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; font-weight: 500; }
+
+.perf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 800px) { .perf-grid { grid-template-columns: 1fr; } }
+
+.perf-month-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.perf-month-cell {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 12px; border-radius: var(--radius); min-width: 100px;
+}
+.perf-month-cell.positive { background: var(--green-dim); }
+.perf-month-cell.negative { background: var(--red-dim); }
+.perf-month-label { font-size: 11px; color: var(--text-muted); }
+.perf-month-val { font-size: 14px; font-weight: 600; font-family: var(--font-mono); }
+.perf-month-cell.positive .perf-month-val { color: var(--green); }
+.perf-month-cell.negative .perf-month-val { color: var(--red); }
+.perf-month-trades { font-size: 10px; color: var(--text-muted); }
+
+.text-green { color: var(--green); }
+.text-red { color: var(--red); }

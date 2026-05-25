@@ -6,6 +6,7 @@ import Scanner from '../components/Scanner';
 import Positions from '../components/Positions';
 import GreeksExplorer from '../components/GreeksExplorer';
 import Backtest from '../components/Backtest';
+import Performance from '../components/Performance';
 import Journal from '../components/Journal';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -90,6 +91,7 @@ export default function DashboardPage() {
           {tab === 'positions' && <Positions />}
           {tab === 'greeks' && <GreeksExplorer />}
           {tab === 'backtest' && <Backtest />}
+          {tab === 'performance' && <Performance />}
           {tab === 'journal' && <Journal />}
         </main>
       </div>
