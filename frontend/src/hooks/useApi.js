@@ -84,4 +84,20 @@ export async function postApi(path, body) {
   return res.json();
 }
 
+export async function putApi(path, body) {
+  const res = await authedFetch(`${API_BASE}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+export async function deleteApi(path) {
+  const res = await authedFetch(`${API_BASE}${path}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
 export { authedFetch };

@@ -34,6 +34,8 @@ from slowapi.errors import RateLimitExceeded
 from src.auth.database import cleanup_expired_tokens, init_auth_db
 from src.auth.dependencies import get_current_user
 from src.auth.router import limiter, router as auth_router
+from src.data.user_db import init_user_tables, migrate_journal_from_legacy
+from src.scheduler import scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +43,12 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_auth_db()
+    init_user_tables()
+    migrate_journal_from_legacy()
     cleanup_expired_tokens()
+    scheduler.start_all()
     yield
+    await scheduler.stop_all()
 
 
 app = FastAPI(
@@ -668,65 +674,165 @@ def get_backtest(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# ── Journal ───────────────────────────��──────────────────────────────────────
-
-# Simple SQLite-backed journal
-_JOURNAL_DB = os.getenv("JOURNAL_DB", "data/journal.db")
-
-
-def _get_journal_db():
-    import sqlite3
-    os.makedirs(os.path.dirname(_JOURNAL_DB) if os.path.dirname(_JOURNAL_DB) else ".", exist_ok=True)
-    conn = sqlite3.connect(_JOURNAL_DB, timeout=10)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS journal (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            strategy TEXT NOT NULL,
-            symbol TEXT NOT NULL,
-            entry_date TEXT NOT NULL,
-            entry_price REAL NOT NULL,
-            exit_date TEXT,
-            exit_price REAL,
-            contracts INTEGER DEFAULT 1,
-            pnl REAL,
-            notes TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    return conn
-
+# ── Journal (user-scoped, in users.db) ──────────────────────────────────────
 
 @app.get("/api/journal")
 def list_journal(limit: int = Query(50, ge=1, le=500), _user: dict = Depends(get_current_user)):
-    """List trade journal entries."""
-    conn = _get_journal_db()
-    rows = conn.execute(
-        "SELECT * FROM journal ORDER BY created_at DESC LIMIT ?", (limit,)
-    ).fetchall()
-    cols = ["id", "strategy", "symbol", "entry_date", "entry_price",
-            "exit_date", "exit_price", "contracts", "pnl", "notes", "created_at"]
-    entries = [dict(zip(cols, row)) for row in rows]
-    conn.close()
-    return {"entries": entries, "count": len(entries)}
+    """List trade journal entries for the current user."""
+    from src.data.user_db import get_user_db
+    conn = get_user_db()
+    try:
+        rows = conn.execute(
+            """SELECT id, strategy, symbol, entry_date, entry_price, exit_date,
+                      exit_price, contracts, pnl, notes, regime_at_entry,
+                      bias_at_entry, edge_at_entry, tags, created_at
+               FROM journal WHERE user_id = ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (_user["id"], limit),
+        ).fetchall()
+        return {"entries": [dict(r) for r in rows], "count": len(rows)}
+    finally:
+        conn.close()
 
 
 @app.post("/api/journal")
 def add_journal(entry: JournalEntry, _user: dict = Depends(get_current_user)):
     """Log a trade to the journal."""
-    conn = _get_journal_db()
+    from src.data.user_db import get_user_db
+    conn = get_user_db()
     try:
         conn.execute(
-            """INSERT INTO journal (strategy, symbol, entry_date, entry_price,
+            """INSERT INTO journal (user_id, strategy, symbol, entry_date, entry_price,
                exit_date, exit_price, contracts, pnl, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (entry.strategy, entry.symbol, entry.entry_date, entry.entry_price,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (_user["id"], entry.strategy, entry.symbol, entry.entry_date, entry.entry_price,
              entry.exit_date, entry.exit_price, entry.contracts, entry.pnl, entry.notes),
         )
         conn.commit()
     finally:
         conn.close()
     return {"status": "ok"}
+
+
+@app.put("/api/journal/{entry_id}")
+def update_journal(entry_id: int, entry: JournalEntry, _user: dict = Depends(get_current_user)):
+    """Update a journal entry."""
+    from src.data.user_db import get_user_db
+    conn = get_user_db()
+    try:
+        cursor = conn.execute(
+            """UPDATE journal SET strategy=?, symbol=?, entry_date=?, entry_price=?,
+               exit_date=?, exit_price=?, contracts=?, pnl=?, notes=?
+               WHERE id=? AND user_id=?""",
+            (entry.strategy, entry.symbol, entry.entry_date, entry.entry_price,
+             entry.exit_date, entry.exit_price, entry.contracts, entry.pnl,
+             entry.notes, entry_id, _user["id"]),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Entry not found")
+    finally:
+        conn.close()
+    return {"status": "ok"}
+
+
+@app.delete("/api/journal/{entry_id}")
+def delete_journal(entry_id: int, _user: dict = Depends(get_current_user)):
+    """Delete a journal entry."""
+    from src.data.user_db import get_user_db
+    conn = get_user_db()
+    try:
+        cursor = conn.execute(
+            "DELETE FROM journal WHERE id=? AND user_id=?",
+            (entry_id, _user["id"]),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Entry not found")
+    finally:
+        conn.close()
+    return {"status": "ok"}
+
+
+@app.get("/api/journal/export")
+def export_journal(
+    format: str = Query("csv", description="Export format: csv"),
+    _user: dict = Depends(get_current_user),
+):
+    """Export journal entries as CSV."""
+    import csv
+    import io
+    from starlette.responses import StreamingResponse
+
+    from src.data.user_db import get_user_db
+    conn = get_user_db()
+    try:
+        rows = conn.execute(
+            """SELECT strategy, symbol, entry_date, entry_price, exit_date,
+                      exit_price, contracts, pnl, notes, regime_at_entry,
+                      bias_at_entry, created_at
+               FROM journal WHERE user_id = ?
+               ORDER BY created_at DESC""",
+            (_user["id"],),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["strategy", "symbol", "entry_date", "entry_price", "exit_date",
+                     "exit_price", "contracts", "pnl", "notes", "regime", "bias", "created_at"])
+    for r in rows:
+        writer.writerow([r["strategy"], r["symbol"], r["entry_date"], r["entry_price"],
+                         r["exit_date"], r["exit_price"], r["contracts"], r["pnl"],
+                         r["notes"], r["regime_at_entry"], r["bias_at_entry"], r["created_at"]])
+
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=journal_export.csv"},
+    )
+
+
+# ── Notifications ───────────────────────────────────────────────────────────
+
+@app.get("/api/notifications")
+def list_notifications(
+    limit: int = Query(50, ge=1, le=200),
+    unread_only: bool = Query(False),
+    _user: dict = Depends(get_current_user),
+):
+    """List notifications for the current user."""
+    from src.notifications.dispatcher import get_notifications, get_unread_count
+    items = get_notifications(_user["id"], limit=limit, include_read=not unread_only)
+    count = get_unread_count(_user["id"])
+    return {"notifications": items, "unread_count": count}
+
+
+@app.post("/api/notifications/{notification_id}/read")
+def read_notification(notification_id: int, _user: dict = Depends(get_current_user)):
+    """Mark a notification as read."""
+    from src.notifications.dispatcher import mark_as_read
+    if not mark_as_read(_user["id"], notification_id):
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"status": "ok"}
+
+
+@app.post("/api/notifications/read-all")
+def read_all_notifications(_user: dict = Depends(get_current_user)):
+    """Mark all notifications as read."""
+    from src.notifications.dispatcher import mark_all_read
+    count = mark_all_read(_user["id"])
+    return {"status": "ok", "marked": count}
+
+
+# ── Scheduler Status ────────────────────────────────────────────────────────
+
+@app.get("/api/scheduler/status")
+def scheduler_status(_user: dict = Depends(get_current_user)):
+    """Check status of background scheduled tasks."""
+    return {"tasks": scheduler.status()}
 
 
 # ── Chain Snapshots ──────────────────────────────────────────────────────────

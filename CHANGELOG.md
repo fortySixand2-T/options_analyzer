@@ -1,5 +1,18 @@
 # Changelog
 
+- [2026-05-25] Created: tests/conftest.py — Shared test fixtures: rate limiter reset, JWT auth helper
+- [2026-05-25] Modified: tests/test_ui.py — Migrate from API key auth to JWT auth, replace TestApiKeyAuth with TestJwtAuth
+- [2026-05-25] Modified: tests/test_auth_functional.py — Fix rate limit test counts, add JWT auth to protected endpoint tests
+- [2026-05-25] Created: src/data/user_db.py — Shared SQLite helper for user-scoped tables (journal, notifications) in users.db
+- [2026-05-25] Created: src/scheduler.py — Asyncio background task scheduler with market hours detection
+- [2026-05-25] Created: src/notifications/__init__.py — Notifications package init
+- [2026-05-25] Created: src/notifications/dispatcher.py — In-app notification system: send, list, mark read
+- [2026-05-25] Modified: src/ui/app.py — Add user-scoped journal (CRUD + CSV export), notification endpoints, scheduler status, journal migration on startup
+- [2026-05-25] Created: frontend/src/context/NotificationContext.jsx — Notification polling context (60s interval)
+- [2026-05-25] Modified: frontend/src/hooks/useApi.js — Add putApi and deleteApi exports
+- [2026-05-25] Modified: frontend/src/App.jsx — Wrap with NotificationProvider
+- [2026-05-25] Modified: frontend/src/pages/DashboardPage.jsx — Add notification bell with dropdown in topbar
+- [2026-05-25] Modified: frontend/src/styles/shell.css — Add notification bell and dropdown styles
 - [2026-05-25] Modified: requirements.txt — Replace python-jose (CVE) with PyJWT, add slowapi for rate limiting
 - [2026-05-25] Modified: src/auth/service.py — Migrate to PyJWT, add iss/aud claims to tokens
 - [2026-05-25] Modified: src/auth/dependencies.py — Migrate from jose.JWTError to jwt.PyJWTError
