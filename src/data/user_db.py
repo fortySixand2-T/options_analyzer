@@ -53,9 +53,32 @@ def init_user_tables() -> None:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS watchlist_items (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            symbol              TEXT NOT NULL,
+            alert_iv_rank_above REAL,
+            alert_iv_rank_below REAL,
+            notes               TEXT DEFAULT '',
+            sort_order          INTEGER DEFAULT 0,
+            created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, symbol)
+        );
+
+        CREATE TABLE IF NOT EXISTS scanner_presets (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name        TEXT NOT NULL,
+            config_json TEXT NOT NULL,
+            is_pinned   INTEGER DEFAULT 0,
+            created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE INDEX IF NOT EXISTS idx_journal_user ON journal(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, read);
+        CREATE INDEX IF NOT EXISTS idx_watchlist_user ON watchlist_items(user_id);
+        CREATE INDEX IF NOT EXISTS idx_scanner_presets_user ON scanner_presets(user_id);
     """)
     conn.commit()
     conn.close()

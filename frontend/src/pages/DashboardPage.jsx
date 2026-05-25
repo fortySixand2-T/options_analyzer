@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Sidebar, { TABS } from '../components/Sidebar';
+import Watchlist from '../components/Watchlist';
 import RegimeDashboard from '../components/RegimeDashboard';
 import Scanner from '../components/Scanner';
 import GreeksExplorer from '../components/GreeksExplorer';
@@ -11,7 +12,7 @@ import { useNotifications } from '../context/NotificationContext';
 function getInitialTab() {
   const hash = window.location.hash.slice(1);
   if (TABS.some(t => t.id === hash)) return hash;
-  return 'regime';
+  return 'watchlist';
 }
 
 export default function DashboardPage() {
@@ -82,6 +83,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <main className="app-main">
+          {tab === 'watchlist' && <Watchlist />}
           {tab === 'regime' && <RegimeDashboard />}
           {tab === 'scanner' && <Scanner />}
           {tab === 'greeks' && <GreeksExplorer />}

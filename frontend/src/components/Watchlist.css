@@ -1,0 +1,60 @@
+.watchlist { display: flex; flex-direction: column; gap: 12px; }
+
+.wl-toolbar { display: flex; align-items: center; gap: 8px; }
+.wl-add-row { display: flex; align-items: center; gap: 8px; }
+
+.wl-loading, .wl-empty {
+  text-align: center; padding: 40px 20px; color: var(--text-muted);
+}
+.wl-empty p { margin: 4px 0; }
+.wl-hint { font-size: 12px; }
+
+.wl-table { width: 100%; }
+.wl-symbol { font-weight: 600; color: var(--text-primary); font-family: var(--font-mono); }
+
+.wl-iv-bar-wrap {
+  display: flex; align-items: center; gap: 6px; min-width: 80px;
+}
+.wl-iv-bar {
+  height: 6px; background: var(--blue); border-radius: 3px;
+  transition: width 0.3s;
+}
+.wl-iv-bar[data-high] { background: var(--red); }
+.wl-iv-val { font-size: 12px; font-family: var(--font-mono); color: var(--text-secondary); }
+
+.wl-badge {
+  display: inline-block; padding: 2px 6px; border-radius: 3px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+}
+.badge-red { background: var(--red-dim); color: var(--red); }
+.badge-green { background: var(--green-dim); color: var(--green); }
+.badge-amber { background: rgba(255,152,0,0.12); color: var(--amber); }
+.badge-blue { background: var(--blue-dim); color: var(--blue); }
+
+.wl-alert-tag {
+  font-size: 11px; font-family: var(--font-mono);
+  color: var(--amber); background: rgba(255,152,0,0.08);
+  padding: 1px 5px; border-radius: 3px;
+}
+
+.wl-notes-cell { max-width: 200px; }
+.wl-notes-text { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 180px; }
+
+.wl-edit-form { display: flex; flex-direction: column; gap: 6px; min-width: 200px; }
+.wl-edit-alerts { display: flex; gap: 8px; font-size: 11px; color: var(--text-secondary); }
+.wl-edit-alerts label { display: flex; align-items: center; gap: 4px; }
+.wl-edit-alerts input { width: 50px; }
+.wl-edit-actions { display: flex; gap: 4px; }
+
+.wl-actions { display: flex; gap: 4px; justify-content: flex-end; }
+
+.tv-btn-icon {
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; padding: 4px; border-radius: var(--radius);
+  display: flex; align-items: center;
+}
+.tv-btn-icon:hover { color: var(--text-primary); background: var(--bg-hover); }
+.tv-btn-icon.danger:hover { color: var(--red); }
+
+.text-green { color: var(--green); }
+.text-red { color: var(--red); }

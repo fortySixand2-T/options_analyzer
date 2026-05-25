@@ -1,5 +1,13 @@
 # Changelog
 
+- [2026-05-25] Created: src/ui/watchlist_router.py — Watchlist CRUD API with live IV rank enrichment
+- [2026-05-25] Created: src/ui/scanner_presets_router.py — Scanner presets save/load/delete API
+- [2026-05-25] Modified: src/data/user_db.py — Add watchlist_items and scanner_presets tables
+- [2026-05-25] Modified: src/ui/app.py — Mount watchlist and scanner presets routers
+- [2026-05-25] Created: frontend/src/components/Watchlist.jsx — Watchlist UI with symbol table, add/edit/delete, IV rank bars, regime badges
+- [2026-05-25] Created: frontend/src/components/Watchlist.css — Watchlist component styles
+- [2026-05-25] Modified: frontend/src/components/Sidebar.jsx — Add Watchlist tab (first position)
+- [2026-05-25] Modified: frontend/src/pages/DashboardPage.jsx — Add Watchlist tab rendering, default to watchlist
 - [2026-05-25] Created: tests/conftest.py — Shared test fixtures: rate limiter reset, JWT auth helper
 - [2026-05-25] Modified: tests/test_ui.py — Migrate from API key auth to JWT auth, replace TestApiKeyAuth with TestJwtAuth
 - [2026-05-25] Modified: tests/test_auth_functional.py — Fix rate limit test counts, add JWT auth to protected endpoint tests

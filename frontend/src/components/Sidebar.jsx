@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 
 const TABS = [
   {
+    id: 'watchlist', label: 'Watchlist',
+    icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4L10 14.3 5.2 17l.9-5.4L2.2 7.7l5.4-.8z"/></svg>,
+  },
+  {
     id: 'regime', label: 'Regime',
     icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="16" height="4" rx="1"/><rect x="2" y="9" width="11" height="4" rx="1"/><rect x="2" y="15" width="7" height="4" rx="1"/></svg>,
   },
