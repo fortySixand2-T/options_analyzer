@@ -3,6 +3,7 @@ import Sidebar, { TABS } from '../components/Sidebar';
 import Watchlist from '../components/Watchlist';
 import RegimeDashboard from '../components/RegimeDashboard';
 import Scanner from '../components/Scanner';
+import Positions from '../components/Positions';
 import GreeksExplorer from '../components/GreeksExplorer';
 import Backtest from '../components/Backtest';
 import Journal from '../components/Journal';
@@ -86,6 +87,7 @@ export default function DashboardPage() {
           {tab === 'watchlist' && <Watchlist />}
           {tab === 'regime' && <RegimeDashboard />}
           {tab === 'scanner' && <Scanner />}
+          {tab === 'positions' && <Positions />}
           {tab === 'greeks' && <GreeksExplorer />}
           {tab === 'backtest' && <Backtest />}
           {tab === 'journal' && <Journal />}

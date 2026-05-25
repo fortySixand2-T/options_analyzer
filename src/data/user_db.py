@@ -53,6 +53,30 @@ def init_user_tables() -> None:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS positions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            symbol          TEXT NOT NULL,
+            strategy        TEXT NOT NULL,
+            legs_json       TEXT,
+            entry_date      TEXT NOT NULL,
+            entry_price     REAL NOT NULL,
+            is_credit       INTEGER DEFAULT 1,
+            contracts       INTEGER DEFAULT 1,
+            max_loss        REAL,
+            profit_target   REAL,
+            stop_loss       REAL,
+            exit_date       TEXT,
+            exit_price      REAL,
+            exit_reason     TEXT,
+            pnl             REAL,
+            status          TEXT NOT NULL DEFAULT 'open',
+            regime_at_entry TEXT,
+            bias_at_entry   TEXT,
+            notes           TEXT DEFAULT '',
+            created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS watchlist_items (
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -77,6 +101,8 @@ def init_user_tables() -> None:
         CREATE INDEX IF NOT EXISTS idx_journal_user ON journal(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, read);
+        CREATE INDEX IF NOT EXISTS idx_positions_user ON positions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(user_id, status);
         CREATE INDEX IF NOT EXISTS idx_watchlist_user ON watchlist_items(user_id);
         CREATE INDEX IF NOT EXISTS idx_scanner_presets_user ON scanner_presets(user_id);
     """)

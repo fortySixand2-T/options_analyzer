@@ -1,5 +1,12 @@
 # Changelog
 
+- [2026-05-25] Created: src/ui/positions_router.py — Positions CRUD API with P&L calculation, close, Greeks aggregation
+- [2026-05-25] Created: frontend/src/components/Positions.jsx — Positions UI: open/closed/Greeks views, new position form, close workflow
+- [2026-05-25] Created: frontend/src/components/Positions.css — Positions component styles
+- [2026-05-25] Modified: src/data/user_db.py — Add positions table
+- [2026-05-25] Modified: src/ui/app.py — Mount positions router
+- [2026-05-25] Modified: frontend/src/components/Sidebar.jsx — Add Positions tab
+- [2026-05-25] Modified: frontend/src/pages/DashboardPage.jsx — Add Positions tab rendering
 - [2026-05-25] Created: src/ui/watchlist_router.py — Watchlist CRUD API with live IV rank enrichment
 - [2026-05-25] Created: src/ui/scanner_presets_router.py — Scanner presets save/load/delete API
 - [2026-05-25] Modified: src/data/user_db.py — Add watchlist_items and scanner_presets tables

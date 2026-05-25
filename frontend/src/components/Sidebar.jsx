@@ -14,6 +14,10 @@ const TABS = [
     icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8.5" cy="8.5" r="5.5"/><line x1="12.5" y1="12.5" x2="17" y2="17"/></svg>,
   },
   {
+    id: 'positions', label: 'Positions',
+    icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="4" width="16" height="12" rx="1"/><path d="M6 10h8M10 7v6"/></svg>,
+  },
+  {
     id: 'greeks', label: 'Greeks',
     icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="2,16 6,8 10,12 14,4 18,9"/></svg>,
   },
