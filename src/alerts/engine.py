@@ -94,7 +94,7 @@ def _fire_alert(alert):
         alert["user_id"],
         title=f"Alert: {alert['name']}",
         body=f"{alert['trigger_type'].replace('_', ' ')} triggered for {symbol} (threshold: {threshold})",
-        notif_type="alert",
+        notification_type="alert",
     )
 
     conn = get_user_db()

@@ -156,7 +156,7 @@ def test_alert(alert_id: int, _user: dict = Depends(get_current_user)):
         _user["id"],
         title=f"Test: {row['name']}",
         body=f"This is a test notification for alert '{row['name']}'",
-        notif_type="alert_test",
+        notification_type="alert_test",
     )
 
     return {"status": "ok", "message": "Test notification sent"}
