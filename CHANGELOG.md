@@ -1,5 +1,14 @@
 # Changelog
 
+- [2026-05-25] Created: src/ui/alerts_router.py — Alerts CRUD API with test notification endpoint
+- [2026-05-25] Created: src/alerts/__init__.py — Alerts package init
+- [2026-05-25] Created: src/alerts/engine.py — Alert evaluation engine: IV rank, price, regime triggers with cooldown
+- [2026-05-25] Created: frontend/src/components/Alerts.jsx — Alerts UI: create/toggle/delete alerts, test button, history
+- [2026-05-25] Created: frontend/src/components/Alerts.css — Alerts component styles
+- [2026-05-25] Modified: src/data/user_db.py — Add alerts table
+- [2026-05-25] Modified: src/ui/app.py — Mount alerts router, register alert evaluator as scheduled task (5min)
+- [2026-05-25] Modified: frontend/src/components/Sidebar.jsx — Add Alerts tab
+- [2026-05-25] Modified: frontend/src/pages/DashboardPage.jsx — Add Alerts tab rendering
 - [2026-05-25] Created: src/ui/performance_router.py — Performance analytics API: summary, by-strategy, by-regime, by-month, equity curve, drawdown
 - [2026-05-25] Created: frontend/src/components/Performance.jsx — Performance dashboard: equity curve, drawdown, strategy/regime breakdowns, monthly heatmap
 - [2026-05-25] Created: frontend/src/components/Performance.css — Performance component styles

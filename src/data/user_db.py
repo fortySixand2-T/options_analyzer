@@ -77,6 +77,19 @@ def init_user_tables() -> None:
             created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS alerts (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name               TEXT NOT NULL,
+            trigger_type       TEXT NOT NULL,
+            trigger_config_json TEXT NOT NULL,
+            channels_json      TEXT NOT NULL DEFAULT '["in_app"]',
+            is_active          INTEGER DEFAULT 1,
+            cooldown_minutes   INTEGER DEFAULT 60,
+            last_triggered_at  TEXT,
+            created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS watchlist_items (
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -101,6 +114,7 @@ def init_user_tables() -> None:
         CREATE INDEX IF NOT EXISTS idx_journal_user ON journal(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, read);
+        CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(user_id);
         CREATE INDEX IF NOT EXISTS idx_positions_user ON positions(user_id);
         CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(user_id, status);
         CREATE INDEX IF NOT EXISTS idx_watchlist_user ON watchlist_items(user_id);

@@ -46,6 +46,10 @@ async def lifespan(app: FastAPI):
     init_user_tables()
     migrate_journal_from_legacy()
     cleanup_expired_tokens()
+
+    from src.alerts.engine import evaluate_alerts
+    scheduler.register("alert_evaluator", evaluate_alerts, interval_seconds=300, market_hours_only=True)
+
     scheduler.start_all()
     yield
     await scheduler.stop_all()
@@ -62,6 +66,7 @@ from src.ui.watchlist_router import router as watchlist_router
 from src.ui.scanner_presets_router import router as scanner_presets_router
 from src.ui.positions_router import router as positions_router
 from src.ui.performance_router import router as performance_router
+from src.ui.alerts_router import router as alerts_router
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -70,6 +75,7 @@ app.include_router(watchlist_router)
 app.include_router(scanner_presets_router)
 app.include_router(positions_router)
 app.include_router(performance_router)
+app.include_router(alerts_router)
 
 # CORS for React dev server
 app.add_middleware(

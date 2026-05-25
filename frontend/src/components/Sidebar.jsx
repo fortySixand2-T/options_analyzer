@@ -26,6 +26,10 @@ const TABS = [
     icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="10" cy="10" r="7"/><polyline points="10,6 10,10 13,12"/></svg>,
   },
   {
+    id: 'alerts', label: 'Alerts',
+    icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10 2a5 5 0 00-5 5v3l-1.5 2h13L15 10V7a5 5 0 00-5-5z"/><path d="M8 17h4"/></svg>,
+  },
+  {
     id: 'performance', label: 'Performance',
     icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 17l4-6 4 3 6-10"/><circle cx="17" cy="4" r="2"/></svg>,
   },
