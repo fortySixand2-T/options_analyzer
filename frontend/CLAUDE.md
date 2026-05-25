@@ -13,6 +13,14 @@ React + Vite app. Served by FastAPI in Docker.
 | GreeksExplorer.jsx | Interactive greeks visualization | Built |
 | Journal.jsx | Trade journal | Built |
 
+## Auth & Routing
+
+- `AuthContext.jsx` manages JWT tokens (`oa_access_token`, `oa_refresh_token` in localStorage)
+- `useApi.js` attaches Bearer token to all requests, auto-refreshes on 401
+- Public routes: `/` (landing), `/login`, `/signup` — wrapped in `PublicOnlyRoute`
+- Protected route: `/app` (dashboard) — wrapped in `ProtectedRoute`
+- Auth endpoints: POST `/api/auth/register`, `/login`, `/refresh`, `/logout`, GET `/api/auth/me`
+
 ## API base
 
 All calls go to `/api/` (proxied via Vite config to FastAPI on port 8000).

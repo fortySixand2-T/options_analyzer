@@ -1,5 +1,11 @@
 # Changelog
 
+- [2026-05-24] Modified: README.md — Updated with auth system, public/authenticated page split, project structure
+- [2026-05-24] Modified: CLAUDE.md — Added auth files to key files table, updated current status
+- [2026-05-24] Modified: HOWTO.md — Added Account Setup section, updated Web UI docs, added JWT_SECRET_KEY to env reference
+- [2026-05-24] Modified: TRADING_SYSTEM_ARCHITECTURE.md — Added auth layer to architecture diagram
+- [2026-05-24] Modified: frontend/CLAUDE.md — Added Auth & Routing section
+- [2026-05-24] Created: tests/test_auth_functional.py — 36 functional tests for auth flows
 - [2026-05-24] Modified: frontend/src/pages/LandingPage.jsx — Polished landing page with hero, signal flow diagram, features grid, strategy table, CTA
 - [2026-05-24] Modified: frontend/src/styles/landing.css — Complete rewrite: sticky header, gradient hero, flow diagram, feature cards, responsive layout
 - [2026-05-24] Modified: frontend/src/styles/auth.css — Updated colors to match accent system

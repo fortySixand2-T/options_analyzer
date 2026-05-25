@@ -53,7 +53,10 @@ Deferred strategies live in `src/strategies/_deferred/` for a future swing tab.
 | Scan orchestration | `src/scanner/scanner.py`, `src/strategy_scanner.py` |
 | Backtesting | `src/backtest/local_backtest.py`, `src/backtest/analyzer.py` |
 | API server | `src/ui/app.py` |
+| Auth system | `src/auth/` (config, database, service, router, dependencies, models) |
 | Frontend entry | `frontend/src/App.jsx` |
+| Auth context | `frontend/src/context/AuthContext.jsx` |
+| API client | `frontend/src/hooks/useApi.js` |
 
 ## Frozen files — never modify logic
 
@@ -99,6 +102,9 @@ When rebuild is NOT needed:
 ## Current status
 
 - App running in Docker on localhost:9000
+- JWT authentication: register/login/refresh/logout with bcrypt + refresh token rotation
+- Public pages: landing (`/`), login (`/login`), signup (`/signup`)
+- Authenticated dashboard (`/app`): Regime, Scanner, Greeks, Backtest, Journal tabs
 - Regime dashboard live with VIX data
 - Chain-based GEX fallback committed (no FlashAlpha key needed)
 - Dealer positioning displays correctly (source: chain)

@@ -1,7 +1,7 @@
 # Index Options Scanner
 
 0-14 DTE defined-risk options scanner with three-layer signal architecture.
-Docker deployment. FastAPI + React on `localhost:9000`.
+JWT-authenticated multi-user web app. Docker deployment. FastAPI + React on `localhost:9000`.
 
 ## What It Does
 
@@ -39,8 +39,12 @@ Open **http://localhost:9000** in your browser. First run takes ~2-3 minutes to 
 
 ## Web UI
 
-Five tabs:
+**Public pages** (no login required):
+- **Landing** (`/`) — Product overview with signal architecture diagram, strategy matrix, features
+- **Login** (`/login`) — Email/password authentication
+- **Sign up** (`/signup`) — New account registration
 
+**Authenticated dashboard** (`/app`) — five tabs:
 - **Regime** — VIX level, term structure, IV rank, dealer positioning badge
 - **Scanner** — Conviction-scored trade setups with signal checklists
 - **Greeks** — Interactive options calculator (spot, strike, DTE, IV sliders)
@@ -89,6 +93,13 @@ The scanner evaluates all three signal layers independently, maps the combinatio
 │   ├── backfill_thetadata.py    # ThetaData historical backfill
 │   └── daily_collect.sh         # Cron: daily chain snapshots
 ├── src/
+│   ├── auth/                    # Authentication system
+│   │   ├── config.py            # JWT secret, algorithm, expiry settings
+│   │   ├── database.py          # SQLite user + refresh token storage
+│   │   ├── dependencies.py      # FastAPI get_current_user dependency
+│   │   ├── models.py            # Pydantic auth request/response models
+│   │   ├── router.py            # Auth endpoints (register/login/refresh/logout/me)
+│   │   └── service.py           # bcrypt hashing, JWT creation/validation
 │   ├── backtest/                # Backtesting engine
 │   │   ├── local_backtest.py    # BS-model backtest runner
 │   │   ├── chain_replay.py      # Real-data chain replay backtester
@@ -117,11 +128,20 @@ The scanner evaluates all three signal layers independently, maps the combinatio
 │   ├── models/                  # Black-Scholes pricer + Greeks (frozen)
 │   ├── monte_carlo/             # GBM, GARCH, jump-diffusion (frozen)
 │   ├── ui/
-│   │   └── app.py               # FastAPI backend
+│   │   └── app.py               # FastAPI backend (mounts auth router)
 │   ├── bias_detector.py         # Directional bias signals
 │   └── config.py                # Conviction weights + config
 ├── frontend/src/
-│   ├── App.jsx                  # React app with tab navigation
+│   ├── App.jsx                  # React router: public + protected routes
+│   ├── context/
+│   │   └── AuthContext.jsx      # Auth state (token, login, register, logout)
+│   ├── pages/
+│   │   ├── LandingPage.jsx      # Public landing page
+│   │   ├── LoginPage.jsx        # Login form
+│   │   ├── SignupPage.jsx        # Registration form
+│   │   └── DashboardPage.jsx    # Authenticated app shell
+│   ├── hooks/
+│   │   └── useApi.js            # Authenticated API client with auto-refresh
 │   └── components/
 │       ├── RegimeDashboard.jsx  # Vol regime visualization
 │       ├── Scanner.jsx          # Options scanner view
@@ -129,7 +149,14 @@ The scanner evaluates all three signal layers independently, maps the combinatio
 │       ├── Backtest.jsx         # Backtest config + orchestration
 │       ├── BacktestParts.jsx    # Results views, charts, trade table
 │       └── Journal.jsx          # Trade journal
+├── tests/
+│   ├── test_auth.py             # Auth unit tests (16 tests)
+│   ├── test_auth_api.py         # Auth integration tests (15 tests)
+│   ├── test_auth_functional.py  # Auth functional tests (36 tests)
+│   └── ...                      # Scanner, backtest, regime, etc.
 ├── data/                        # SQLite databases (Docker volume)
+│   ├── chain_snapshots.db       # Market data snapshots
+│   └── users.db                 # User accounts + refresh tokens
 ├── docker-compose.yml
 ├── Dockerfile
 ├── start.sh                     # Single entry point for everything

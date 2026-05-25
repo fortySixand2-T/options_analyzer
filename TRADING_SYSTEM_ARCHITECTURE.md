@@ -10,9 +10,12 @@ Your edge decays in hours, not days. At 0-14 DTE, theta is nonlinear — a 5 DTE
 
 ---
 
-## Architecture: Four Layers
+## Architecture: Four Layers + Auth
 
 ```
++-----------------------------------------------------+
+|  AUTH: JWT Authentication                           |
+|  Register, login, refresh token rotation, bcrypt    |
 +-----------------------------------------------------+
 |  L4: PORTFOLIO ENGINE                               |
 |  Position limits, correlation, margin, Greeks mgmt  |
@@ -27,6 +30,8 @@ Your edge decays in hours, not days. At 0-14 DTE, theta is nonlinear — a 5 DTE
 |  Regime, vol surface, dealer positioning, microstr. |
 +-----------------------------------------------------+
 ```
+
+**Auth layer** (`src/auth/`): JWT-based multi-user authentication. Access tokens (30min) + refresh tokens (7 days) with rotation. bcrypt password hashing with SHA-256 pre-hash. SQLite storage at `data/users.db`. Public routes: landing, login, signup. All dashboard/API routes require valid token via `get_current_user` dependency.
 
 **Implementation status:** All 4 layers built, wired, and bridged to execution. L1→L2→L3 pipeline serves via `/api/trade-candidates`. L4 portfolio state via `/api/portfolio`. Execution bridge: `POST /api/order/from-candidate` runs full pipeline → builds Tastytrade order → dry-run or submit. UI "Preview Order" → "Submit Order (Paper)" flow live.
 
@@ -271,4 +276,4 @@ These require intraday or end-of-day chain snapshots to compute historically.
 
 ---
 
-*Options Analytics Team — 2026-04. Last updated 2026-04-27 with chain snapshot pipeline.*
+*Options Analytics Team — 2026-04. Last updated 2026-05-24 with JWT auth layer.*

@@ -14,6 +14,40 @@ First run takes ~2-3 minutes to build Docker images. Subsequent runs start in se
 
 ---
 
+## Account Setup
+
+The app requires an account to access the dashboard.
+
+### 1. Create an account
+
+Open http://localhost:9000 and click **Get Started** (or go to `/signup`).
+
+Enter your email, a display name, and a password (min 8 characters). Click **Create account**.
+
+### 2. Log in
+
+After registration you're redirected to the login page. Enter your email and password, then click **Sign in**.
+
+You'll land on the authenticated dashboard at `/app` with access to all five tabs (Regime, Scanner, Greeks, Backtest, Journal).
+
+### 3. Session management
+
+- Access tokens expire after 30 minutes; the app auto-refreshes them silently
+- Refresh tokens last 7 days — you stay logged in across browser sessions
+- Click **Sign out** in the top bar to end your session
+- Refresh tokens rotate on each use (old token is revoked)
+
+### 4. Production deployment
+
+Set a strong `JWT_SECRET_KEY` in `.env` (the default `dev-secret-change-in-production` is only for local development):
+
+```bash
+# Generate a random secret
+openssl rand -hex 32
+```
+
+---
+
 ## Prerequisites
 
 You need one thing installed: **Docker Desktop**.
@@ -80,7 +114,12 @@ Building and starting Options Scanner...
 
 ### Web UI (http://localhost:9000)
 
-Five tabs:
+**Public pages** (no login required):
+- **Landing** (`/`) — Product overview with signal architecture, strategy matrix, features
+- **Login** (`/login`) — Email/password authentication
+- **Sign up** (`/signup`) — New account registration
+
+**Authenticated dashboard** (`/app`) — five tabs:
 
 **Regime** — Current market regime classification. Shows VIX level, VIX term structure (contango/backwardation), IV rank, upcoming FOMC/CPI dates, and which strategy types are favored right now.
 
@@ -110,7 +149,7 @@ Full interactive Swagger UI. Every endpoint is documented and testable from the 
 | `./start.sh collect-stats` | Show snapshot DB statistics |
 | `./start.sh backfill SPY --start 2025-04-01` | Alpaca historical backfill |
 | `./start.sh backfill-theta` | ThetaData backfill (needs Theta Terminal) |
-| `./start.sh test` | Run the test suite (364 tests) |
+| `./start.sh test` | Run the test suite (431 tests) |
 | `./start.sh shell` | Interactive dev shell inside Docker |
 | `./start.sh stop` | Stop all running containers |
 | `./start.sh logs` | Tail live app logs |
@@ -233,6 +272,7 @@ Source: local (BS pricer + yfinance OHLCV)
 
 | Variable | Default | Description |
 |---|---|---|
+| `JWT_SECRET_KEY` | dev-secret-... | JWT signing secret (change in production) |
 | `API_SECRET_KEY` | (empty) | API authentication key |
 | `TT_USERNAME` | (empty) | Tastytrade email/username |
 | `TT_PASSWORD` | (empty) | Tastytrade password |
