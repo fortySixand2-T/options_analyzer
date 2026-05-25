@@ -3,6 +3,8 @@
 import os
 import tempfile
 
+collect_ignore_glob = ["_parked/*"]
+
 os.environ.setdefault("AUTH_DB_PATH", os.path.join(tempfile.mkdtemp(), "test_users.db"))
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-tests")
 os.environ.setdefault("USER_DB_PATH", os.path.join(tempfile.mkdtemp(), "test_user_db.db"))

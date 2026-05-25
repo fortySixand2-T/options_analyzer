@@ -1,5 +1,19 @@
 # Changelog
 
+- [2026-05-25] Created: tests/test_watchlist.py — Watchlist CRUD endpoint tests (12 tests)
+- [2026-05-25] Created: tests/test_positions.py — Positions CRUD + P&L calculation tests (20 tests)
+- [2026-05-25] Created: tests/test_performance.py — Performance analytics endpoint tests (12 tests)
+- [2026-05-25] Created: tests/test_alerts.py — Alerts CRUD + test notification tests (14 tests)
+- [2026-05-25] Created: tests/test_notifications.py — Notification dispatcher unit tests (13 tests)
+- [2026-05-25] Created: tests/test_webhooks.py — Webhook notifier unit tests + settings router tests (15 tests)
+- [2026-05-25] Created: tests/test_tiers.py — Tier middleware unit tests (9 tests)
+- [2026-05-25] Created: tests/test_scanner_presets.py — Scanner presets + backtest configs CRUD tests (13 tests)
+- [2026-05-25] Created: tests/test_greeks_advanced.py — Monte Carlo forward + payoff diagram tests (11 tests)
+- [2026-05-25] Created: tests/test_user_isolation.py — Cross-user data isolation tests (7 tests)
+- [2026-05-25] Created: tests/test_alert_engine.py — Alert engine internals: cooldown, trigger eval, fire (15 tests)
+- [2026-05-25] Modified: Dockerfile — Add /app to PYTHONPATH for src.* imports in tests
+- [2026-05-25] Modified: pytest.ini — Add collect_ignore_glob for _parked tests
+- [2026-05-25] Modified: tests/conftest.py — Add collect_ignore_glob for _parked directory
 - [2026-05-25] Created: src/ui/backtest_configs_router.py — Backtest config save/load/delete API
 - [2026-05-25] Created: src/ui/greeks_advanced_router.py — Monte Carlo forward simulation + multi-leg payoff diagram endpoints
 - [2026-05-25] Created: src/auth/tier_middleware.py — User tier access control (free/pro limits)
