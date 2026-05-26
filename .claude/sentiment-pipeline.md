@@ -48,8 +48,8 @@ for any consuming system.
 - `src/sentiment/scorer.py` — SentimentScorer class (implemented)
 
 **Acceptance criteria:**
-- [ ] `pip install transformers torch` (CPU-only) in Docker
-- [ ] Add `transformers>=4.30.0` and `torch>=2.0.0` to `requirements.txt`
+- [x] `pip install transformers torch` (CPU-only) in Docker — torch 2.12+cpu, transformers 5.9
+- [x] Add `transformers>=4.30.0` to `requirements.txt` (torch via --extra-index-url in Dockerfile)
 - [x] `SentimentScorer.score_batch(headlines)` returns `List[ScoredHeadline]`
 - [x] Each ScoredHeadline has positive/negative/neutral that sum to ~1.0
 - [x] Confidence = max(pos, neg, neu)

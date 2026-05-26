@@ -34,13 +34,16 @@ with mocked FinBERT. Two blockers remain before live execution:
 
 ### What's blocking
 
-1. **torch + transformers not in Docker** — FinBERT needs PyTorch (~280MB
-   CPU-only wheel) and HuggingFace transformers. Without these, the scorer
-   can't run live. Tests pass by mocking torch.
+1. **Docker memory limit** — Currently 2GB allocated to Docker Desktop.
+   FinBERT needs ~1.5GB to load (model + torch runtime). Increase Docker
+   Desktop memory to 4GB+ (Settings → Resources → Memory) to run the
+   scorer and e2e tests.
 
-2. **No headline CSV data** — The backtest needs historical financial
-   headlines. A Kaggle dataset (e.g. "Daily Financial News for Stock Market
-   Prediction") placed at `data/headlines.csv` would unblock Phase 4.
+2. **Real headline data for backtest** — A synthetic 40-headline sample
+   exists at `data/headlines_sample.csv` for pipeline validation. The Phase 4
+   backtest needs 6+ months of real headlines. Recommended: Kaggle "Daily
+   Financial News for Stock Market Prediction" dataset, placed at
+   `data/headlines.csv`.
 
 ### Where we're going
 
