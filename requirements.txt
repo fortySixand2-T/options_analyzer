@@ -44,3 +44,6 @@ pydantic[email]>=2.5.0
 
 # Rate limiting
 slowapi>=0.1.9
+
+# Sentiment analysis (FinBERT)
+transformers>=4.30.0

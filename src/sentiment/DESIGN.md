@@ -13,23 +13,72 @@ Integration with the scanner happens at the *call site*, not inside this module.
 
 ---
 
+## Current status (2026-05-26)
+
+### What we have
+
+| Component | Status | Tests |
+|---|---|---|
+| Data models (Headline, ScoredHeadline, SentimentSnapshot, SentimentSignal) | Done | 11 |
+| SQLite store (headlines, scored_headlines, sentiment_snapshots) | Done | 16 |
+| CSV provider (Kaggle-format replay for backtesting) | Done | 16 |
+| NewsAPI provider (live headlines, free tier) | Done | — |
+| FinBERT scorer (batch scoring, lazy model loading) | Done (code) | 11 (mocked) |
+| Aggregator (exp-decay rolling windows, velocity, breadth) | Done | 17 |
+| Signal generator (40/40/20 weighted composite) | Done | 15 |
+| Backtest runner + CLI script | Done (code) | — |
+| **Total tests** | **86 passing** | |
+
+All code is written and tested. The pipeline works end-to-end in unit tests
+with mocked FinBERT. Two blockers remain before live execution:
+
+### What's blocking
+
+1. **torch + transformers not in Docker** — FinBERT needs PyTorch (~280MB
+   CPU-only wheel) and HuggingFace transformers. Without these, the scorer
+   can't run live. Tests pass by mocking torch.
+
+2. **No headline CSV data** — The backtest needs historical financial
+   headlines. A Kaggle dataset (e.g. "Daily Financial News for Stock Market
+   Prediction") placed at `data/headlines.csv` would unblock Phase 4.
+
+### Where we're going
+
+```
+Current state                          Target state
+─────────────                          ────────────
+[x] Models + store + providers         [ ] torch in Docker image
+[x] Scorer (code, mocked tests)   →   [ ] Scorer runs live on real headlines
+[x] Aggregator + signal gen            [ ] Phase 4 backtest with real data
+[x] Backtest runner (code)             [ ] Decision gate: hit_rate>52%, Sharpe>0.3, corr>0.05
+                                       [ ] If gate passes → Phase 5 integration
+                                       [ ] bias_detector gets optional sentiment input
+                                       [ ] API endpoint + dashboard widget
+```
+
+**Decision gate (Phase 4):** The backtest must show that sentiment velocity
+predicts next-day directional moves before we wire it into the scanner.
+If it doesn't, we park the module and revisit with better data or a
+different model. No integration without evidence.
+
+---
+
 ## Architecture
 
 ```
 NewsProvider (ABC)          FinBERT Scorer          Aggregator           Signal
-  ├─ NewsAPI               headline text ──►      per-ticker rolling   SentimentSignal
-  ├─ Benzinga              {pos, neg, neu,        windows (1h, 6h,     dataclass with
-  ├─ CSVProvider            confidence}            24h) + velocity      label + score +
-  └─ (future)                                      computation          velocity + detail
-        │                        │                      │                    │
-        ▼                        ▼                      ▼                    ▼
-   ┌──────────────── SQLite (sentiment.db) ─────────────────────────────────────┐
-   │  headlines        scored_headlines       sentiment_snapshots               │
-   │  (raw text,       (+ pos/neg/neu/       (ticker, window,                  │
-   │   timestamp,       confidence,           composite_score,                  │
-   │   source)          model_version)        velocity, label)                  │
-   └────────────────────────────────────────────────────────────────────────────┘
-                                                      │
+  |-- NewsAPI              headline text -->      per-ticker rolling   SentimentSignal
+  |-- CSVProvider          {pos, neg, neu,        windows (1h, 6h,     dataclass with
+  '-- (future)              confidence}            24h) + velocity      label + score +
+        |                        |                 computation          velocity + detail
+        v                        v                      v                    v
+   +---------------- SQLite (sentiment.db) --------------------------------+
+   |  headlines        scored_headlines       sentiment_snapshots          |
+   |  (raw text,       (+ pos/neg/neu/       (ticker, window,            |
+   |   timestamp,       confidence,           composite_score,            |
+   |   source)          model_version)        velocity, label)            |
+   +----------------------------------------------------------------------+
+                                                      |
                                               BacktestRunner
                                         (replay signals vs price,
                                          hit rate, Sharpe, etc.)
@@ -49,13 +98,23 @@ src/sentiment/
 │   ├── __init__.py          # create_news_provider() factory
 │   ├── base.py              # NewsProvider ABC
 │   ├── newsapi_provider.py  # NewsAPI.org (free tier, 100 req/day)
-│   ├── benzinga_provider.py # Benzinga (paid, richer data)
 │   └── csv_provider.py      # Historical CSV replay for backtesting
 ├── scorer.py                # FinBERT scoring: headline → sentiment vector
 ├── aggregator.py            # Rolling windows, velocity, composite signal
 ├── store.py                 # SQLite persistence (idempotent schema, WAL mode)
 ├── signal.py                # SentimentSignal generation (labels + thresholds)
 └── backtest.py              # Standalone backtest runner
+
+scripts/
+└── run_sentiment_backtest.py  # CLI: run backtest, print decision gate
+
+tests/
+├── test_sentiment_models.py      # 11 tests
+├── test_sentiment_store.py       # 16 tests
+├── test_csv_provider.py          # 16 tests
+├── test_sentiment_scorer.py      # 11 tests (mocked torch)
+├── test_sentiment_aggregator.py  # 17 tests
+└── test_sentiment_signal.py      # 15 tests
 ```
 
 ---
@@ -104,7 +163,7 @@ than sentiment *level*.
 
 ```
 composite = weighted_mean(scored_headlines, decay=exponential, halflife=window)
-            × confidence_filter(min_confidence=0.6)
+            x confidence_filter(min_confidence=0.6)
 
 velocity  = composite(window=1h) - composite(window=6h)
 breadth   = positive_count / total_count  (fraction of headlines that are positive)
@@ -117,18 +176,17 @@ The `SentimentSignal.score` combines:
 
 ---
 
-## Integration points (Phase 5 — not built in this module)
+## Integration points (Phase 5 — not built yet, contingent on backtest)
 
 The consuming system imports `SentimentSignal` and uses it however it wants:
 
 ```python
-# Example: wire into bias_detector as an optional input
 from sentiment import get_sentiment, SentimentSignal
 
 sig: SentimentSignal = get_sentiment("SPY")
-# sig.label → "LEAN_POSITIVE"
-# sig.score → 0.23
-# sig.velocity → 0.08
+# sig.label -> "LEAN_POSITIVE"
+# sig.score -> 0.23
+# sig.velocity -> 0.08
 
 # Add to bias score with configurable weight
 bias_score += sig.score * SENTIMENT_WEIGHT
@@ -136,6 +194,13 @@ bias_score += sig.score * SENTIMENT_WEIGHT
 
 The module itself never imports from `scanner/`, `regime/`, `bias_detector`,
 or any other `src/` package. This is a hard rule.
+
+Integration plan:
+- `src/bias_detector.py` — optional `sentiment_signal` parameter, default weight 10%
+- `src/config.py` — `SENTIMENT_WEIGHT` env var
+- `src/ui/app.py` — `/api/sentiment/{ticker}` endpoint
+- `frontend/` — sentiment gauge widget on dashboard
+- `src/scanner/scorer.py` is FROZEN — use a wrapper, not direct modification
 
 ---
 
@@ -150,7 +215,7 @@ CREATE TABLE headlines (
     ticker TEXT NOT NULL,
     text TEXT NOT NULL,
     published_at TEXT NOT NULL,      -- ISO 8601
-    source TEXT NOT NULL,            -- 'newsapi', 'benzinga', 'csv'
+    source TEXT NOT NULL,            -- 'newsapi', 'csv'
     url TEXT,
     collected_at TEXT NOT NULL,
     UNIQUE(ticker, text, published_at)
@@ -191,54 +256,29 @@ CREATE TABLE sentiment_snapshots (
 
 ---
 
-## Backtest design
-
-The standalone backtest answers: **does sentiment velocity predict
-next-session directional moves?**
-
-Input:
-- Historical headlines (CSV or from SQLite)
-- Price data (yfinance, same as the scanner uses)
-
-Process:
-1. For each trading day, score all prior-session headlines
-2. Compute composite score + velocity
-3. Generate signal label
-4. Record next-day return (open-to-close or close-to-close)
-
-Output:
-- Hit rate per signal label
-- Average return per signal label
-- Sharpe ratio of signal-following strategy
-- Correlation of sentiment velocity with next-day returns
-- Drawdown analysis
-- Comparison: sentiment-only vs random
-
----
-
 ## Dependencies (additions to requirements.txt)
 
 ```
 transformers>=4.30.0      # FinBERT model loading
 torch>=2.0.0              # FinBERT inference (CPU only)
-newsapi-python>=0.2.7     # NewsAPI.org client (optional)
+newsapi-python>=0.2.7     # NewsAPI.org client (optional, for live headlines)
 ```
 
-`torch` is heavy (~2GB). For Docker, use `torch-cpu` or `--extra-index-url`
-for the CPU-only wheel. FinBERT inference is fast on CPU for headline-length
-text (< 50ms per headline).
+`torch` is heavy. Use `--extra-index-url https://download.pytorch.org/whl/cpu`
+for the CPU-only wheel (~280MB vs ~2GB). FinBERT inference is fast on CPU
+for headline-length text (< 50ms per headline).
 
 ---
 
 ## Phasing
 
-| Phase | Deliverable | Test |
+| Phase | Deliverable | Status |
 |---|---|---|
-| 1 — Foundation | models, config, store, provider ABC, CSV provider | Unit tests for store CRUD, CSV loading |
-| 2 — Scoring | FinBERT scorer, batch processing | Score a batch of 100 headlines, verify output shape |
-| 3 — Aggregation | Rolling windows, velocity, composite signal, signal labels | Aggregate scored headlines, verify velocity math |
-| 4 — Backtest | Standalone backtest runner with metrics | Run on 6mo of Kaggle headlines, produce report |
-| 5 — Integration | Hooks into bias_detector + scorer (optional weight), API endpoint, dashboard widget | End-to-end: collect → score → signal → display |
+| 1 — Foundation | models, config, store, provider ABC, CSV provider | DONE |
+| 2 — Scoring | FinBERT scorer, batch processing | CODE DONE (torch not in Docker) |
+| 3 — Aggregation | Rolling windows, velocity, composite signal, signal labels | DONE |
+| 4 — Backtest | Standalone backtest runner with metrics | CODE DONE (needs torch + CSV) |
+| 5 — Integration | bias_detector hook, API endpoint, dashboard widget | NOT STARTED |
 
-Each phase is independently testable. Phase 4 (backtest) is the validation
-gate — if sentiment doesn't show signal, Phase 5 integration is deferred.
+Phase 4 is the validation gate. If sentiment doesn't predict next-day moves
+(hit_rate <= 52% or Sharpe <= 0.3), Phase 5 is deferred indefinitely.

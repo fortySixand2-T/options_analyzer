@@ -1,5 +1,8 @@
 # Changelog
 
+- [2026-05-26] Modified: requirements.txt — Added transformers for FinBERT sentiment scoring
+- [2026-05-26] Modified: Dockerfile — Added torch CPU-only install for sentiment module
+- [2026-05-26] Modified: src/sentiment/DESIGN.md — Updated with current status, roadmap, and blockers
 - [2026-05-26] Modified: CLAUDE.md — Added sentiment module to key files and current status
 - [2026-05-26] Modified: .claude/sentiment-pipeline.md — Updated phases 1-4 status to reflect completion
 - [2026-05-26] Created: tests/test_sentiment_scorer.py — FinBERT scorer tests with full torch mocking (11 tests)
