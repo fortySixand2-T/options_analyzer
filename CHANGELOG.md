@@ -1,5 +1,6 @@
 # Changelog
 
+- [2026-05-26] Modified: src/ui/sentiment_router.py — Fix CSV path fallback when SENTIMENT_CSV_PATH is empty
 - [2026-05-26] Created: src/ui/sentiment_router.py — Sentiment API endpoints (signal, headlines, snapshots, stats)
 - [2026-05-26] Modified: src/ui/app.py — Registered sentiment router
 - [2026-05-26] Created: frontend/src/components/Sentiment.jsx — Sentiment dashboard tab with gauge, windows, headlines table

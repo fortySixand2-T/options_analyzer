@@ -26,11 +26,32 @@ def get_sentiment_signal(
     """
     try:
         from src.sentiment import get_sentiment
+        from src.sentiment.config import CSV_PATH
+        import os
+
+        provider_kwargs = {}
+        if provider == "csv":
+            csv_path = CSV_PATH
+            if not csv_path or not os.path.isfile(csv_path):
+                fallback = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                    "data", "headlines_sample.csv",
+                )
+                if os.path.isfile(fallback):
+                    csv_path = fallback
+                else:
+                    raise FileNotFoundError(
+                        "No headline CSV found. Place a file at data/headlines.csv "
+                        "or set SENTIMENT_CSV_PATH env var."
+                    )
+            provider_kwargs["csv_path"] = csv_path
+
         signal = get_sentiment(
             ticker=ticker.upper(),
             provider_type=provider,
             primary_window=primary_window,
             velocity_window=velocity_window,
+            **provider_kwargs,
         )
         return {
             "ticker": signal.ticker,
