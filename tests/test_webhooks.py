@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from ui.app import app
 from conftest import get_auth_headers
 from src.notifications.webhook_notifier import (
-    send_discord, send_slack, send_generic_webhook, dispatch_webhook,
+    send_discord, send_slack, send_telegram, send_generic_webhook, dispatch_webhook,
 )
 
 
@@ -54,6 +54,62 @@ class TestWebhookNotifierUnit:
     def test_slack_success(self, mock_post):
         mock_post.return_value = MagicMock(status_code=200)
         assert send_slack("https://hooks.slack.com/x", "Title") is True
+
+    @patch("src.notifications.webhook_notifier.requests.post")
+    def test_slack_includes_title_in_text(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=200)
+        send_slack("https://hooks.slack.com/x", "My Alert", "Some body")
+        payload = mock_post.call_args[1]["json"]
+        assert "My Alert" in payload["text"]
+        assert "Some body" in payload["text"]
+
+    @patch("src.notifications.webhook_notifier.requests.post")
+    def test_slack_failure(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=500)
+        assert send_slack("https://hooks.slack.com/x", "T") is False
+
+    # ── Telegram ────────────────────────────────────────────────────────────────
+
+    @patch("src.notifications.webhook_notifier.requests.post")
+    def test_telegram_success(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=200)
+        assert send_telegram("123:ABC", "456", "Title", "Body") is True
+
+    @patch("src.notifications.webhook_notifier.requests.post")
+    def test_telegram_posts_to_correct_url(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=200)
+        send_telegram("MY_TOKEN", "MY_CHAT", "Title")
+        url = mock_post.call_args.args[0]
+        assert "MY_TOKEN" in url
+        assert "sendMessage" in url
+
+    @patch("src.notifications.webhook_notifier.requests.post")
+    def test_telegram_sends_chat_id(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=200)
+        send_telegram("tok", "999", "Title", "Body")
+        payload = mock_post.call_args[1]["json"]
+        assert payload["chat_id"] == "999"
+        assert "Title" in payload["text"]
+
+    @patch("src.notifications.webhook_notifier.requests.post")
+    def test_telegram_failure(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=400)
+        assert send_telegram("tok", "123", "T") is False
+
+    @patch("src.notifications.webhook_notifier.requests.post")
+    def test_telegram_network_error_returns_false(self, mock_post):
+        mock_post.side_effect = Exception("timeout")
+        assert send_telegram("tok", "123", "T") is False
+
+    @patch("src.notifications.webhook_notifier.requests.post")
+    def test_dispatch_routes_telegram(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=200)
+        result = dispatch_webhook(
+            "telegram",
+            {"url": "", "bot_token": "123:ABC", "chat_id": "456"},
+            "Title", "Body",
+        )
+        assert result is True
 
     @patch("src.notifications.webhook_notifier.requests.post")
     def test_generic_webhook_success(self, mock_post):
@@ -125,6 +181,47 @@ class TestSettingsRouter:
     def test_delete_nonexistent_webhook_404(self, auth):
         resp = client.delete("/api/user/webhooks/9999", headers=auth)
         assert resp.status_code == 404
+
+    def test_create_slack_webhook(self, auth):
+        resp = client.post("/api/user/webhooks", json={
+            "name": "My Slack", "type": "slack",
+            "url": "https://hooks.slack.com/services/T/B/token",
+        }, headers=auth)
+        assert resp.status_code == 201
+        assert "id" in resp.json()
+
+    def test_create_telegram_webhook(self, auth):
+        resp = client.post("/api/user/webhooks", json={
+            "name": "My Telegram", "type": "telegram",
+            "url": "",
+            "config": {"bot_token": "123:ABC", "chat_id": "456"},
+        }, headers=auth)
+        assert resp.status_code == 201
+        assert "id" in resp.json()
+
+    def test_create_telegram_missing_bot_token_400(self, auth):
+        resp = client.post("/api/user/webhooks", json={
+            "name": "Bad Tg", "type": "telegram", "url": "",
+            "config": {"chat_id": "456"},
+        }, headers=auth)
+        assert resp.status_code == 400
+
+    def test_create_telegram_missing_chat_id_400(self, auth):
+        resp = client.post("/api/user/webhooks", json={
+            "name": "Bad Tg", "type": "telegram", "url": "",
+            "config": {"bot_token": "123:ABC"},
+        }, headers=auth)
+        assert resp.status_code == 400
+
+    def test_telegram_webhook_appears_in_settings(self, auth):
+        client.post("/api/user/webhooks", json={
+            "name": "Tg", "type": "telegram", "url": "",
+            "config": {"bot_token": "tok", "chat_id": "123"},
+        }, headers=auth)
+        webhooks = client.get("/api/user/settings", headers=auth).json()["webhooks"]
+        tg = next((w for w in webhooks if w["type"] == "telegram"), None)
+        assert tg is not None
+        assert tg["name"] == "Tg"
 
     def test_requires_auth(self):
         assert client.get("/api/user/settings").status_code == 401

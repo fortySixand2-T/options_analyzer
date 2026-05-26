@@ -1,5 +1,11 @@
 # Changelog
 
+- [2026-05-26] Modified: src/alerts/engine.py — Wire webhook dispatch into alert firing, add _dispatch_webhooks helper
+- [2026-05-26] Modified: src/ui/settings_router.py — Add Telegram-specific validation (bot_token + chat_id required)
+- [2026-05-26] Modified: tests/test_alert_engine.py — Add webhook dispatch tests, _dispatch_webhooks unit tests
+- [2026-05-26] Modified: tests/test_webhooks.py — Add Telegram notifier tests, Slack/Telegram webhook creation tests
+- [2026-05-26] Modified: .env.example — Add notification webhook env var docs (Discord, Slack, Telegram)
+- [2026-05-26] Created: .claude/rules/security.md — Security rules for CI checks, secrets, dependencies
 - [2026-05-25] Created: tests/test_watchlist.py — Watchlist CRUD endpoint tests (12 tests)
 - [2026-05-25] Created: tests/test_positions.py — Positions CRUD + P&L calculation tests (20 tests)
 - [2026-05-25] Created: tests/test_performance.py — Performance analytics endpoint tests (12 tests)

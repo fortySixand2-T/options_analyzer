@@ -88,8 +88,14 @@ def create_webhook(body: WebhookCreate, _user: dict = Depends(get_current_user))
     valid_types = {"discord", "slack", "telegram", "webhook"}
     if body.type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Type must be one of: {valid_types}")
-    if not body.url.strip():
+    # Telegram uses bot_token + chat_id from config instead of a URL
+    if body.type != "telegram" and not body.url.strip():
         raise HTTPException(status_code=400, detail="URL required")
+    if body.type == "telegram":
+        if not body.config.get("bot_token", "").strip():
+            raise HTTPException(status_code=400, detail="Telegram requires config.bot_token")
+        if not body.config.get("chat_id", "").strip():
+            raise HTTPException(status_code=400, detail="Telegram requires config.chat_id")
 
     conn = get_user_db()
     try:

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from src.data.user_db import get_user_db
 from src.notifications.dispatcher import send_notification
+from src.notifications.webhook_notifier import dispatch_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -90,12 +91,19 @@ def _fire_alert(alert):
     symbol = config.get("symbol", "")
     threshold = config.get("threshold", "")
 
+    title = f"Alert: {alert['name']}"
+    body = f"{alert['trigger_type'].replace('_', ' ')} triggered for {symbol} (threshold: {threshold})"
+
+    # In-app notification
     send_notification(
         alert["user_id"],
-        title=f"Alert: {alert['name']}",
-        body=f"{alert['trigger_type'].replace('_', ' ')} triggered for {symbol} (threshold: {threshold})",
+        title=title,
+        body=body,
         notification_type="alert",
     )
+
+    # External webhooks (Slack, Discord, Telegram, generic)
+    _dispatch_webhooks(alert["user_id"], title, body)
 
     conn = get_user_db()
     try:
@@ -107,6 +115,26 @@ def _fire_alert(alert):
         conn.commit()
     finally:
         conn.close()
+
+
+def _dispatch_webhooks(user_id: int, title: str, body: str):
+    """Send alert to all active external webhooks for this user."""
+    conn = get_user_db()
+    try:
+        webhooks = conn.execute(
+            "SELECT type, url, config_json FROM webhooks WHERE user_id = ? AND is_active = 1",
+            (user_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    for wh in webhooks:
+        try:
+            cfg = json.loads(wh["config_json"] or "{}")
+            cfg["url"] = wh["url"]
+            dispatch_webhook(wh["type"], cfg, title, body)
+        except Exception as e:
+            logger.warning("Webhook dispatch failed (type=%s): %s", wh["type"], e)
 
 
 def _get_iv_rank(symbol: str):
