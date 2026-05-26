@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-26] Modified: CLAUDE.md — Added sentiment module to key files and current status
+- [2026-05-26] Modified: .claude/sentiment-pipeline.md — Updated phases 1-4 status to reflect completion
 - [2026-05-26] Created: tests/test_sentiment_scorer.py — FinBERT scorer tests with full torch mocking (11 tests)
 - [2026-05-26] Created: tests/test_sentiment_signal.py — Signal generation tests: weights, clamping, labels (15 tests)
 - [2026-05-26] Created: scripts/run_sentiment_backtest.py — CLI backtest runner with decision gate output

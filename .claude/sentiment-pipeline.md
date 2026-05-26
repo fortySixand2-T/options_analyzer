@@ -12,7 +12,7 @@ for any consuming system.
 
 ---
 
-## Phase 1: Foundation ✅ SCAFFOLDED
+## Phase 1: Foundation ✅ COMPLETE
 
 **Goal:** Core data models, config, SQLite store, provider ABC, CSV provider.
 
@@ -27,12 +27,12 @@ for any consuming system.
 - `src/sentiment/providers/newsapi_provider.py` — live headlines
 
 **Acceptance criteria:**
-- [ ] `SentimentStore` creates tables on first connect
-- [ ] `SentimentStore.save_headlines()` inserts, deduplicates
-- [ ] `CSVProvider` loads a Kaggle financial news CSV
-- [ ] `CSVProvider.fetch_headlines("SPY")` returns filtered, sorted headlines
-- [ ] `CSVProvider.fetch_window(ticker, start, end)` returns time-bounded results
-- [ ] Unit tests pass: `pytest tests/test_sentiment_store.py tests/test_csv_provider.py`
+- [x] `SentimentStore` creates tables on first connect
+- [x] `SentimentStore.save_headlines()` inserts, deduplicates
+- [x] `CSVProvider` loads a Kaggle financial news CSV
+- [x] `CSVProvider.fetch_headlines("SPY")` returns filtered, sorted headlines
+- [x] `CSVProvider.fetch_window(ticker, start, end)` returns time-bounded results
+- [x] Unit tests pass: `pytest tests/test_sentiment_store.py tests/test_csv_provider.py`
 
 **Stop conditions:**
 - Do NOT install torch/transformers yet
@@ -40,24 +40,24 @@ for any consuming system.
 
 ---
 
-## Phase 2: FinBERT Scoring
+## Phase 2: FinBERT Scoring ✅ CODE COMPLETE (torch not yet in Docker)
 
 **Goal:** Score headlines with ProsusAI/finbert. Batch processing. Persist scores.
 
 **Files:**
-- `src/sentiment/scorer.py` — SentimentScorer class (scaffolded)
+- `src/sentiment/scorer.py` — SentimentScorer class (implemented)
 
 **Acceptance criteria:**
 - [ ] `pip install transformers torch` (CPU-only) in Docker
 - [ ] Add `transformers>=4.30.0` and `torch>=2.0.0` to `requirements.txt`
-- [ ] `SentimentScorer.score_batch(headlines)` returns `List[ScoredHeadline]`
-- [ ] Each ScoredHeadline has positive/negative/neutral that sum to ~1.0
-- [ ] Confidence = max(pos, neg, neu)
-- [ ] Lazy model loading (no download until first call)
-- [ ] Batch size configurable via FINBERT_BATCH_SIZE
-- [ ] Score 100 headlines in < 30s on CPU
-- [ ] `SentimentStore.save_scored()` persists to `scored_headlines` table
-- [ ] Unit test: `pytest tests/test_sentiment_scorer.py`
+- [x] `SentimentScorer.score_batch(headlines)` returns `List[ScoredHeadline]`
+- [x] Each ScoredHeadline has positive/negative/neutral that sum to ~1.0
+- [x] Confidence = max(pos, neg, neu)
+- [x] Lazy model loading (no download until first call)
+- [x] Batch size configurable via FINBERT_BATCH_SIZE
+- [ ] Score 100 headlines in < 30s on CPU (needs torch installed)
+- [x] `SentimentStore.save_scored()` persists to `scored_headlines` table
+- [x] Unit test: `pytest tests/test_sentiment_scorer.py` (11 tests, mocked torch)
 
 **Stop conditions:**
 - Do NOT aggregate or generate signals yet
@@ -68,25 +68,25 @@ https://download.pytorch.org/whl/cpu` for smaller image.
 
 ---
 
-## Phase 3: Aggregation & Signal Generation
+## Phase 3: Aggregation & Signal Generation ✅ COMPLETE
 
 **Goal:** Rolling window aggregation, velocity computation, final signal output.
 
 **Files:**
-- `src/sentiment/aggregator.py` — SentimentAggregator (scaffolded)
-- `src/sentiment/signal.py` — generate_signal() (scaffolded)
+- `src/sentiment/aggregator.py` — SentimentAggregator (implemented)
+- `src/sentiment/signal.py` — generate_signal() (implemented)
 
 **Acceptance criteria:**
-- [ ] `SentimentAggregator.aggregate(ticker)` produces snapshots for 1h, 6h, 24h
-- [ ] Exponential decay weighting (halflife configurable)
-- [ ] Velocity = current composite - prior snapshot composite
-- [ ] Breadth = positive_count / total_count
-- [ ] `generate_signal()` combines composite (40%) + velocity (40%) + breadth (20%)
-- [ ] Signal labels: STRONG_POSITIVE / LEAN_POSITIVE / NEUTRAL / LEAN_NEGATIVE / STRONG_NEGATIVE
-- [ ] Thresholds configurable via env vars
-- [ ] Snapshots persisted to `sentiment_snapshots` table
-- [ ] `get_sentiment("SPY")` works end-to-end (fetch → score → aggregate → signal)
-- [ ] Unit tests: `pytest tests/test_sentiment_aggregator.py tests/test_sentiment_signal.py`
+- [x] `SentimentAggregator.aggregate(ticker)` produces snapshots for 1h, 6h, 24h
+- [x] Exponential decay weighting (halflife configurable)
+- [x] Velocity = current composite - prior snapshot composite
+- [x] Breadth = positive_count / total_count
+- [x] `generate_signal()` combines composite (40%) + velocity (40%) + breadth (20%)
+- [x] Signal labels: STRONG_POSITIVE / LEAN_POSITIVE / NEUTRAL / LEAN_NEGATIVE / STRONG_NEGATIVE
+- [x] Thresholds configurable via env vars
+- [x] Snapshots persisted to `sentiment_snapshots` table
+- [ ] `get_sentiment("SPY")` works end-to-end (needs torch for scorer step)
+- [x] Unit tests: `pytest tests/test_sentiment_aggregator.py tests/test_sentiment_signal.py` (26 tests)
 
 **Stop conditions:**
 - Do NOT start backtesting yet
@@ -94,13 +94,13 @@ https://download.pytorch.org/whl/cpu` for smaller image.
 
 ---
 
-## Phase 4: Standalone Backtest
+## Phase 4: Standalone Backtest ⏳ CODE COMPLETE — needs torch + headline CSV
 
 **Goal:** Validate the hypothesis — does sentiment predict next-day moves?
 
 **Files:**
-- `src/sentiment/backtest.py` — SentimentBacktester (scaffolded)
-- `scripts/run_sentiment_backtest.py` — CLI runner
+- `src/sentiment/backtest.py` — SentimentBacktester (implemented)
+- `scripts/run_sentiment_backtest.py` — CLI runner (implemented, with decision gate)
 
 **Data requirements:**
 - Historical headline CSV (Kaggle "Daily Financial News" or similar)

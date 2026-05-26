@@ -57,6 +57,9 @@ Deferred strategies live in `src/strategies/_deferred/` for a future swing tab.
 | Frontend entry | `frontend/src/App.jsx` |
 | Auth context | `frontend/src/context/AuthContext.jsx` |
 | API client | `frontend/src/hooks/useApi.js` |
+| Sentiment module | `src/sentiment/` (standalone, zero imports from other src/) |
+| Sentiment design | `src/sentiment/DESIGN.md` |
+| Sentiment pipeline | `.claude/sentiment-pipeline.md` |
 
 ## Frozen files — never modify logic
 
@@ -112,14 +115,18 @@ When rebuild is NOT needed:
 - Chain-replay backtester available (source=chain_replay) alongside BS backtester
 - ThetaData backfill pipeline ready (needs Theta Terminal on host)
 - Validation backtests complete, scoring weights recalibrated
+- Sentiment module: Phases 1-3 complete (models, store, providers, scorer, aggregator, signal), Phase 4 backtest code ready, 86 tests passing. Needs torch + headline CSV to run live.
 
 ## What's next
 
 See `.claude/rules/` for path-scoped implementation details.
+See `.claude/sentiment-pipeline.md` for sentiment module phasing.
 Priority order:
 1. ~~Verify dealer data displays after Docker rebuild~~ ✓
 2. ~~Verify regime classification thresholds~~ ✓
 3. ~~Build backtest UI with compare mode, signal filter toggles, DTE breakdown~~ ✓
 4. ~~Run 6 validation backtests from SIGNALS.md~~ ✓
-5. Run ThetaData backfill when Theta Terminal is available
-6. Backtest on ThetaData (chain_replay with real greeks)
+5. Sentiment: add torch/transformers to Docker, source headline CSV, run Phase 4 backtest
+6. Sentiment: if backtest passes gate → Phase 5 integration (bias_detector, API, UI)
+7. Run ThetaData backfill when Theta Terminal is available
+8. Backtest on ThetaData (chain_replay with real greeks)
