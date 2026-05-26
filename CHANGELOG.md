@@ -1,5 +1,8 @@
 # Changelog
 
+- [2026-05-26] Created: data/headlines_sample.csv — 40 synthetic financial headlines for pipeline validation
+- [2026-05-26] Created: tests/test_sentiment_e2e.py — End-to-end pipeline test (CSV + FinBERT + aggregation)
+- [2026-05-26] Modified: docker-compose.yml — Added data volume mount to test service
 - [2026-05-26] Modified: requirements.txt — Added transformers for FinBERT sentiment scoring
 - [2026-05-26] Modified: Dockerfile — Added torch CPU-only install for sentiment module
 - [2026-05-26] Modified: src/sentiment/DESIGN.md — Updated with current status, roadmap, and blockers

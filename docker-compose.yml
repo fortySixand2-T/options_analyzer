@@ -25,6 +25,8 @@ services:
       context: .
       target: dev
     image: options_analyzer:dev
+    volumes:
+      - ./data:/app/data
     command: python -m pytest tests/ -v --ignore=tests/_parked
 
   # CLI scanner (one-off runs)
