@@ -1,5 +1,8 @@
 # Changelog
 
+- [2026-05-26] Created: tests/test_sentiment_scorer.py — FinBERT scorer tests with full torch mocking (11 tests)
+- [2026-05-26] Created: tests/test_sentiment_signal.py — Signal generation tests: weights, clamping, labels (15 tests)
+- [2026-05-26] Created: scripts/run_sentiment_backtest.py — CLI backtest runner with decision gate output
 - [2026-05-26] Created: src/sentiment/ — Copied sentiment analysis module from zip (models, config, store, providers, scorer, aggregator, signal, backtest)
 - [2026-05-26] Created: tests/test_sentiment_*.py, tests/test_csv_provider.py — Sentiment module unit tests (4 files)
 - [2026-05-26] Created: .claude/sentiment-pipeline.md — Phased task file for sentiment pipeline
