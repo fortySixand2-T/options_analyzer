@@ -1,0 +1,112 @@
+.sentiment-page { padding: 0; }
+
+.sentiment-controls {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.ticker-form { display: flex; gap: 8px; align-items: center; }
+.ticker-form .input { width: 120px; text-transform: uppercase; }
+
+/* Signal card */
+.sentiment-signal-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 20px; margin-bottom: 16px;
+}
+.signal-header {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+}
+.signal-label-badge {
+  border: 2px solid; padding: 6px 16px; border-radius: 20px;
+  font-weight: 600; font-size: 13px; letter-spacing: 0.5px;
+}
+.signal-actionable {
+  font-size: 12px; padding: 3px 10px; border-radius: 12px;
+  font-weight: 500;
+}
+.signal-actionable.yes { color: var(--green); background: rgba(34,197,94,0.1); }
+.signal-actionable.no { color: var(--text-muted); background: rgba(128,128,128,0.1); }
+
+.signal-metrics {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+  margin-top: 16px;
+}
+.metric {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.metric-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.metric-value { font-size: 18px; font-weight: 600; font-family: monospace; }
+
+/* Score gauge */
+.score-gauge { margin: 8px 0 4px; }
+.gauge-track {
+  position: relative; height: 12px;
+  background: var(--bg-surface, #1a1a2e);
+  border-radius: 6px; overflow: hidden;
+}
+.gauge-center {
+  position: absolute; left: 50%; top: 0; bottom: 0; width: 2px;
+  background: var(--border); transform: translateX(-50%); z-index: 1;
+}
+.gauge-fill {
+  position: absolute; top: 2px; bottom: 2px; border-radius: 4px; opacity: 0.7;
+}
+.gauge-needle {
+  position: absolute; top: -2px; bottom: -2px; width: 3px;
+  background: white; border-radius: 2px; transform: translateX(-50%); z-index: 2;
+}
+.gauge-labels {
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: var(--text-muted); margin-top: 4px;
+}
+
+/* Window breakdown */
+.sentiment-panel {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px; margin-bottom: 16px;
+}
+.panel-title {
+  font-size: 14px; font-weight: 600; color: var(--text-primary);
+  margin-bottom: 12px;
+}
+.windows-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.window-card {
+  background: var(--bg-surface, #1a1a2e); border-radius: 6px; padding: 12px;
+}
+.window-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.window-name { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.window-label { font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+.window-stats { display: flex; flex-direction: column; gap: 4px; }
+.window-stats > div {
+  display: flex; justify-content: space-between; font-size: 12px;
+}
+.ws-label { color: var(--text-muted); }
+.window-stats span:last-child { font-family: monospace; color: var(--text-primary); }
+
+/* Headlines table */
+.headlines-table-wrap { overflow-x: auto; max-height: 400px; overflow-y: auto; }
+.headlines-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.headlines-table th {
+  text-align: left; padding: 8px; color: var(--text-muted);
+  border-bottom: 1px solid var(--border); font-weight: 500;
+  position: sticky; top: 0; background: var(--bg-card); z-index: 1;
+}
+.headlines-table td {
+  padding: 6px 8px; border-bottom: 1px solid var(--border-dim, rgba(255,255,255,0.05));
+  color: var(--text-primary);
+}
+.headlines-table tr:hover td { background: rgba(255,255,255,0.02); }
+.hl-time { white-space: nowrap; color: var(--text-muted); font-family: monospace; font-size: 11px; }
+.hl-text { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.num { font-family: monospace; text-align: right; }
+
+.empty-state { color: var(--text-muted); font-size: 14px; padding: 20px 0; }
+
+@media (max-width: 768px) {
+  .signal-metrics { grid-template-columns: repeat(2, 1fr); }
+  .windows-grid { grid-template-columns: 1fr; }
+}

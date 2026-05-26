@@ -9,6 +9,7 @@ import Backtest from '../components/Backtest';
 import Alerts from '../components/Alerts';
 import Performance from '../components/Performance';
 import Journal from '../components/Journal';
+import Sentiment from '../components/Sentiment';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -95,6 +96,7 @@ export default function DashboardPage() {
           {tab === 'alerts' && <Alerts />}
           {tab === 'performance' && <Performance />}
           {tab === 'journal' && <Journal />}
+          {tab === 'sentiment' && <Sentiment />}
         </main>
       </div>
     </div>

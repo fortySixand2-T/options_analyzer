@@ -80,6 +80,7 @@ from src.ui.alerts_router import router as alerts_router
 from src.ui.backtest_configs_router import router as backtest_configs_router
 from src.ui.greeks_advanced_router import router as greeks_advanced_router
 from src.ui.settings_router import router as settings_router
+from src.ui.sentiment_router import router as sentiment_router
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -92,6 +93,7 @@ app.include_router(alerts_router)
 app.include_router(backtest_configs_router)
 app.include_router(greeks_advanced_router)
 app.include_router(settings_router)
+app.include_router(sentiment_router)
 
 # CORS for React dev server
 app.add_middleware(

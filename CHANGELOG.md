@@ -1,5 +1,11 @@
 # Changelog
 
+- [2026-05-26] Created: src/ui/sentiment_router.py — Sentiment API endpoints (signal, headlines, snapshots, stats)
+- [2026-05-26] Modified: src/ui/app.py — Registered sentiment router
+- [2026-05-26] Created: frontend/src/components/Sentiment.jsx — Sentiment dashboard tab with gauge, windows, headlines table
+- [2026-05-26] Created: frontend/src/components/Sentiment.css — Sentiment tab styling
+- [2026-05-26] Modified: frontend/src/components/Sidebar.jsx — Added Sentiment tab to navigation
+- [2026-05-26] Modified: frontend/src/pages/DashboardPage.jsx — Wired Sentiment component into tab router
 - [2026-05-26] Created: data/headlines_sample.csv — 40 synthetic financial headlines for pipeline validation
 - [2026-05-26] Created: tests/test_sentiment_e2e.py — End-to-end pipeline test (CSV + FinBERT + aggregation)
 - [2026-05-26] Modified: docker-compose.yml — Added data volume mount to test service

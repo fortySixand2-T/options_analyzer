@@ -37,6 +37,10 @@ const TABS = [
     id: 'journal', label: 'Journal',
     icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="4" y="2" width="12" height="16" rx="1"/><line x1="7" y1="6" x2="13" y2="6"/><line x1="7" y1="9" x2="13" y2="9"/><line x1="7" y1="12" x2="10" y2="12"/></svg>,
   },
+  {
+    id: 'sentiment', label: 'Sentiment',
+    icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10 2C5.6 2 2 5.6 2 10s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8z"/><path d="M6.5 8.5h0M13.5 8.5h0" strokeLinecap="round"/><path d="M6.5 12.5c1 1.5 2.2 2 3.5 2s2.5-.5 3.5-2"/></svg>,
+  },
 ];
 
 export default function Sidebar({ activeTab, onTabChange, onToggle }) {
