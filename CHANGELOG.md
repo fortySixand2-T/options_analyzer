@@ -1,5 +1,9 @@
 # Changelog
 
+- [2026-05-26] Created: src/sentiment/ — Copied sentiment analysis module from zip (models, config, store, providers, scorer, aggregator, signal, backtest)
+- [2026-05-26] Created: tests/test_sentiment_*.py, tests/test_csv_provider.py — Sentiment module unit tests (4 files)
+- [2026-05-26] Created: .claude/sentiment-pipeline.md — Phased task file for sentiment pipeline
+- [2026-05-26] Created: .claude/rules/sentiment.md — Sentiment module dev rules
 - [2026-05-26] Modified: src/alerts/engine.py — Wire webhook dispatch into alert firing, add _dispatch_webhooks helper
 - [2026-05-26] Modified: src/ui/settings_router.py — Add Telegram-specific validation (bot_token + chat_id required)
 - [2026-05-26] Modified: tests/test_alert_engine.py — Add webhook dispatch tests, _dispatch_webhooks unit tests
