@@ -32,12 +32,18 @@ def main():
     parser.add_argument("--start", default=None, help="Start date YYYY-MM-DD")
     parser.add_argument("--end", default=None, help="End date YYYY-MM-DD")
     parser.add_argument("--output", default="data/sentiment_backtest_results.json", help="Output JSON path")
+    parser.add_argument("--scorer", default="auto", choices=["auto", "finbert", "keyword"],
+                        help="Scorer: auto (try FinBERT, fallback keyword), finbert, keyword")
     args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+
+    prefer_finbert = args.scorer != "keyword"
+    if args.scorer == "keyword":
+        prefer_finbert = False
 
     result = run_backtest(
         csv_path=args.csv,
@@ -47,6 +53,7 @@ def main():
         end_date=args.end,
         primary_window=args.primary,
         velocity_window=args.velocity,
+        prefer_finbert=prefer_finbert,
     )
 
     print("\n" + "=" * 60)

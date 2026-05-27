@@ -74,12 +74,12 @@ class SentimentBacktester:
         ticker: str = "MACRO",
         price_ticker: str = "SPY",
         db_path: str = None,
+        prefer_finbert: bool = True,
     ):
         self.csv_path = csv_path
         self.ticker = ticker
         self.price_ticker = price_ticker
 
-        # Use a temporary DB for backtesting (don't pollute production)
         if db_path is None:
             db_path = os.path.join(
                 os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -87,7 +87,7 @@ class SentimentBacktester:
             )
         self.store = SentimentStore(db_path=db_path)
         self.provider = CSVProvider(csv_path=csv_path, default_ticker=ticker)
-        self.scorer = create_scorer()
+        self.scorer = create_scorer(prefer_finbert=prefer_finbert)
         self.aggregator = SentimentAggregator(store=self.store)
 
     def run(
@@ -124,8 +124,29 @@ class SentimentBacktester:
             self.ticker, limit=999_999
         )
         if not all_headlines:
-            # Try macro headlines
             all_headlines = self.provider.fetch_macro_headlines(limit=999_999)
+
+        # For market-level backtests, include all tickers' headlines for density
+        if len(all_headlines) < 200:
+            logger.info("Only %d headlines for %s, loading all tickers", len(all_headlines), self.ticker)
+            all_tickers = self.provider.get_tickers()
+            seen_texts = {h.text for h in all_headlines}
+            for t in all_tickers:
+                if t == self.ticker:
+                    continue
+                extras = self.provider.fetch_headlines(t, limit=999_999)
+                for h in extras:
+                    if h.text not in seen_texts:
+                        seen_texts.add(h.text)
+                        from .models import Headline
+                        all_headlines.append(Headline(
+                            text=h.text,
+                            ticker=self.ticker,
+                            published_at=h.published_at,
+                            source=h.source,
+                            url=h.url,
+                            collected_at=h.collected_at,
+                        ))
 
         logger.info("Loaded %d headlines", len(all_headlines))
 
@@ -240,7 +261,11 @@ class SentimentBacktester:
             )
 
         total_days = len(df)
-        actionable = df[df["is_actionable"]]
+        # A day is actionable if it has a directional signal with enough headlines
+        actionable = df[
+            (df["headline_count"] >= 3) &
+            (df["signal_label"] != "NEUTRAL")
+        ]
         signal_days = len(actionable)
 
         # Overall hit rate (direction prediction)
@@ -325,6 +350,7 @@ def run_backtest(
     primary_window: str = "24h",
     velocity_window: str = "6h",
     db_path: str = None,
+    prefer_finbert: bool = True,
 ) -> BacktestResult:
     """Convenience function to run a sentiment backtest.
 
@@ -339,6 +365,7 @@ def run_backtest(
         ticker=ticker,
         price_ticker=price_ticker,
         db_path=db_path,
+        prefer_finbert=prefer_finbert,
     )
     return bt.run(
         start_date=start_date,

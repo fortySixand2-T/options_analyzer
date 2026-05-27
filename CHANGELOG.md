@@ -1,5 +1,9 @@
 # Changelog
 
+- [2026-05-27] Created: docs/sentiment_backtest_report.md — Backtest results and analysis for 3 configs
+- [2026-05-27] Created: scripts/collect_headlines.py — Real headline collector (yfinance + RSS feeds)
+- [2026-05-27] Modified: scripts/run_sentiment_backtest.py — Added --scorer flag (auto/finbert/keyword)
+- [2026-05-27] Modified: src/sentiment/backtest.py — Scorer preference param, all-ticker fallback, actionability fix
 - [2026-05-26] Modified: data/headlines_sample.csv — Added 15 recent headlines (2026-05-26/27) for live testing
 - [2026-05-26] Modified: frontend/src/components/Sentiment.jsx — Added scorer badge (Keyword/FinBERT) to signal card
 - [2026-05-26] Modified: src/ui/sentiment_router.py — Added scorer field to API response

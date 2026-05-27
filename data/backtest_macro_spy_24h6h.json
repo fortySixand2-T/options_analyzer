@@ -1,0 +1,186 @@
+{
+  "ticker": "MACRO",
+  "start_date": "2026-05-05",
+  "end_date": "2026-05-26",
+  "total_days": 14,
+  "signal_days": 3,
+  "label_stats": {
+    "LEAN_NEGATIVE": {
+      "count": 2,
+      "hit_rate": 0.5,
+      "avg_return": 0.003591,
+      "total_return": 0.007183,
+      "avg_score": -0.2065,
+      "avg_velocity": -0.0078
+    },
+    "STRONG_NEGATIVE": {
+      "count": 1,
+      "hit_rate": 0.0,
+      "avg_return": 0.008256,
+      "total_return": 0.008256,
+      "avg_score": -0.4765,
+      "avg_velocity": -0.1152
+    }
+  },
+  "hit_rate": 0.3333,
+  "avg_return": 0.005146,
+  "sharpe": 11.3757,
+  "max_drawdown": 0.0,
+  "correlation": -0.4133,
+  "daily_log": [
+    {
+      "date": "2026-05-05",
+      "signal_label": "NEUTRAL",
+      "signal_score": 0.0,
+      "velocity": 0.0,
+      "headline_count": 1,
+      "is_actionable": false,
+      "next_day_return": 0.013899,
+      "today_close": 723.77001953125,
+      "tomorrow_close": 733.8300170898438
+    },
+    {
+      "date": "2026-05-06",
+      "signal_label": "LEAN_NEGATIVE",
+      "signal_score": -0.2,
+      "velocity": 0.0,
+      "headline_count": 3,
+      "is_actionable": false,
+      "next_day_return": -0.003066,
+      "today_close": 733.8300170898438,
+      "tomorrow_close": 731.5800170898438
+    },
+    {
+      "date": "2026-05-07",
+      "signal_label": "STRONG_NEGATIVE",
+      "signal_score": -0.4765,
+      "velocity": -0.1152,
+      "headline_count": 3,
+      "is_actionable": false,
+      "next_day_return": 0.008256,
+      "today_close": 731.5800170898438,
+      "tomorrow_close": 737.6199951171875
+    },
+    {
+      "date": "2026-05-08",
+      "signal_label": "NEUTRAL",
+      "signal_score": 0.0,
+      "velocity": 0.0,
+      "headline_count": 1,
+      "is_actionable": false,
+      "next_day_return": 0.002278,
+      "today_close": 737.6199951171875,
+      "tomorrow_close": 739.2999877929688
+    },
+    {
+      "date": "2026-05-11",
+      "signal_label": "NEUTRAL",
+      "signal_score": 0.0,
+      "velocity": 0.0,
+      "headline_count": 0,
+      "is_actionable": false,
+      "next_day_return": -0.001515,
+      "today_close": 739.2999877929688,
+      "tomorrow_close": 738.1799926757812
+    },
+    {
+      "date": "2026-05-12",
+      "signal_label": "NEUTRAL",
+      "signal_score": 0.0,
+      "velocity": 0.0,
+      "headline_count": 0,
+      "is_actionable": false,
+      "next_day_return": 0.005595,
+      "today_close": 738.1799926757812,
+      "tomorrow_close": 742.3099975585938
+    },
+    {
+      "date": "2026-05-13",
+      "signal_label": "NEUTRAL",
+      "signal_score": 0.0,
+      "velocity": 0.0,
+      "headline_count": 2,
+      "is_actionable": false,
+      "next_day_return": 0.007894,
+      "today_close": 742.3099975585938,
+      "tomorrow_close": 748.1699829101562
+    },
+    {
+      "date": "2026-05-14",
+      "signal_label": "NEUTRAL",
+      "signal_score": 0.0,
+      "velocity": 0.0,
+      "headline_count": 2,
+      "is_actionable": false,
+      "next_day_return": -0.012029,
+      "today_close": 748.1699829101562,
+      "tomorrow_close": 739.1699829101562
+    },
+    {
+      "date": "2026-05-15",
+      "signal_label": "NEUTRAL",
+      "signal_score": 0.0,
+      "velocity": 0.0,
+      "headline_count": 2,
+      "is_actionable": false,
+      "next_day_return": -0.000703,
+      "today_close": 739.1699829101562,
+      "tomorrow_close": 738.6500244140625
+    },
+    {
+      "date": "2026-05-18",
+      "signal_label": "NEUTRAL",
+      "signal_score": 0.0,
+      "velocity": 0.0,
+      "headline_count": 0,
+      "is_actionable": false,
+      "next_day_return": -0.006661,
+      "today_close": 738.6500244140625,
+      "tomorrow_close": 733.72998046875
+    },
+    {
+      "date": "2026-05-19",
+      "signal_label": "LEAN_NEGATIVE",
+      "signal_score": -0.213,
+      "velocity": -0.0155,
+      "headline_count": 6,
+      "is_actionable": false,
+      "next_day_return": 0.010249,
+      "today_close": 733.72998046875,
+      "tomorrow_close": 741.25
+    },
+    {
+      "date": "2026-05-20",
+      "signal_label": "NEUTRAL",
+      "signal_score": 0.0,
+      "velocity": 0.0,
+      "headline_count": 1,
+      "is_actionable": false,
+      "next_day_return": 0.001983,
+      "today_close": 741.25,
+      "tomorrow_close": 742.719970703125
+    },
+    {
+      "date": "2026-05-21",
+      "signal_label": "NEUTRAL",
+      "signal_score": 0.0,
+      "velocity": 0.0,
+      "headline_count": 2,
+      "is_actionable": false,
+      "next_day_return": 0.003932,
+      "today_close": 742.719970703125,
+      "tomorrow_close": 745.6400146484375
+    },
+    {
+      "date": "2026-05-22",
+      "signal_label": "NEUTRAL",
+      "signal_score": 0.0,
+      "velocity": 0.0,
+      "headline_count": 2,
+      "is_actionable": false,
+      "next_day_return": 0.006639,
+      "today_close": 745.6400146484375,
+      "tomorrow_close": 750.5900268554688
+    }
+  ]
+}
