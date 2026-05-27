@@ -10,6 +10,7 @@
 - [2026-05-26] Created: src/sentiment/scorer_factory.py — Auto-selects FinBERT or keyword scorer based on availability
 - [2026-05-26] Created: tests/test_keyword_scorer.py — 18 tests for keyword scorer and scorer factory
 - [2026-05-26] Created: tests/test_sentiment_fallback.py — 7 tests for full pipeline with keyword fallback
+- [2026-05-26] Modified: .claude/sentiment-pipeline.md — Updated phases 2-4.5 status
 - [2026-05-26] Modified: docker-compose.yml — Added mem_limit 4g to app service
 - [2026-05-26] Modified: src/ui/sentiment_router.py — Fix CSV path fallback when SENTIMENT_CSV_PATH is empty
 - [2026-05-26] Created: src/ui/sentiment_router.py — Sentiment API endpoints (signal, headlines, snapshots, stats)
