@@ -69,7 +69,7 @@ def get_sentiment(
     """
     from .aggregator import SentimentAggregator
     from .providers import create_news_provider
-    from .scorer import SentimentScorer
+    from .scorer_factory import create_scorer
     from .signal import generate_signal
     from .store import SentimentStore
 
@@ -88,8 +88,9 @@ def get_sentiment(
             detail={"reason": "no headlines available"},
         )
 
-    # 2. Score with FinBERT
-    scorer = SentimentScorer()
+    # 2. Score headlines (FinBERT if available, keyword fallback otherwise)
+    scorer = create_scorer()
+    scorer_version = getattr(scorer, 'MODEL_VERSION', getattr(scorer, 'model_name', 'unknown'))
     scored = scorer.score_batch(headlines)
 
     # 3. Persist
@@ -107,6 +108,7 @@ def get_sentiment(
         primary_window=primary_window,
         velocity_window=velocity_window,
     )
+    signal.detail["scorer"] = scorer_version
 
     store.close()
     return signal
@@ -120,4 +122,5 @@ __all__ = [
     "SentimentSignal",
     "SentimentSnapshot",
     "SignalLabel",
+    "create_scorer",
 ]

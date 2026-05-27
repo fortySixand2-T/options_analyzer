@@ -189,12 +189,14 @@ class SentimentStore:
         ticker: str,
         since: Optional[datetime] = None,
         until: Optional[datetime] = None,
-        model_version: str = "ProsusAI/finbert",
+        model_version: str = None,
     ) -> List[Dict]:
         """Fetch scored headlines for aggregation.
 
         Returns list of dicts with keys:
             text, published_at, positive, negative, neutral, confidence, label
+
+        If model_version is None, returns headlines from any scorer.
         """
         conn = self._ensure_conn()
         query = """
@@ -203,9 +205,12 @@ class SentimentStore:
             FROM scored_headlines s
             JOIN headlines h ON h.id = s.headline_id
             WHERE h.ticker = ?
-              AND s.model_version = ?
         """
-        params: list = [ticker, model_version]
+        params: list = [ticker]
+
+        if model_version is not None:
+            query += " AND s.model_version = ?"
+            params.append(model_version)
 
         if since:
             query += " AND h.published_at >= ?"

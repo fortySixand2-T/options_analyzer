@@ -1,5 +1,16 @@
 # Changelog
 
+- [2026-05-26] Modified: data/headlines_sample.csv — Added 15 recent headlines (2026-05-26/27) for live testing
+- [2026-05-26] Modified: frontend/src/components/Sentiment.jsx — Added scorer badge (Keyword/FinBERT) to signal card
+- [2026-05-26] Modified: src/ui/sentiment_router.py — Added scorer field to API response
+- [2026-05-26] Modified: src/sentiment/store.py — Made model_version param optional in get_scored_headlines
+- [2026-05-26] Modified: src/sentiment/__init__.py — Use scorer_factory for auto-fallback, report scorer in signal detail
+- [2026-05-26] Modified: src/sentiment/backtest.py — Use scorer_factory instead of direct SentimentScorer
+- [2026-05-26] Created: src/sentiment/keyword_scorer.py — Lightweight keyword-based fallback scorer (no torch needed)
+- [2026-05-26] Created: src/sentiment/scorer_factory.py — Auto-selects FinBERT or keyword scorer based on availability
+- [2026-05-26] Created: tests/test_keyword_scorer.py — 18 tests for keyword scorer and scorer factory
+- [2026-05-26] Created: tests/test_sentiment_fallback.py — 7 tests for full pipeline with keyword fallback
+- [2026-05-26] Modified: docker-compose.yml — Added mem_limit 4g to app service
 - [2026-05-26] Modified: src/ui/sentiment_router.py — Fix CSV path fallback when SENTIMENT_CSV_PATH is empty
 - [2026-05-26] Created: src/ui/sentiment_router.py — Sentiment API endpoints (signal, headlines, snapshots, stats)
 - [2026-05-26] Modified: src/ui/app.py — Registered sentiment router

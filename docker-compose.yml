@@ -10,6 +10,7 @@ services:
     env_file: .env
     volumes:
       - ./data:/app/data
+    mem_limit: 4g
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]

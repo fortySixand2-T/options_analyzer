@@ -63,6 +63,11 @@ function SignalCard({ signal }) {
         ) : (
           <span className="signal-actionable no">Low data</span>
         )}
+        {signal.scorer && (
+          <span className="signal-actionable no" title="Scoring model">
+            {signal.scorer === 'keyword-v1' ? 'Keyword' : 'FinBERT'}
+          </span>
+        )}
       </div>
 
       <ScoreGauge score={signal.score} label={signal.label} />

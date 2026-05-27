@@ -23,7 +23,7 @@ from .aggregator import SentimentAggregator
 from .config import WINDOWS
 from .models import SentimentSnapshot, SignalLabel
 from .providers.csv_provider import CSVProvider
-from .scorer import SentimentScorer
+from .scorer_factory import create_scorer
 from .signal import generate_signal
 from .store import SentimentStore
 
@@ -87,7 +87,7 @@ class SentimentBacktester:
             )
         self.store = SentimentStore(db_path=db_path)
         self.provider = CSVProvider(csv_path=csv_path, default_ticker=ticker)
-        self.scorer = SentimentScorer()
+        self.scorer = create_scorer()
         self.aggregator = SentimentAggregator(store=self.store)
 
     def run(

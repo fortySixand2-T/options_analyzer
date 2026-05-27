@@ -73,6 +73,7 @@ def get_sentiment_signal(
                 }
                 for k, v in signal.snapshots.items()
             },
+            "scorer": signal.detail.get("scorer", "unknown"),
             "detail": signal.detail,
         }
     except FileNotFoundError as e:
