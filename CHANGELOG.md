@@ -1,5 +1,6 @@
 # Changelog
 
+- [2026-05-28] Modified: docs/sentiment_backtest_report.md — Multi-period validation: all 5 periods pass vol gate (N=1,462 total)
 - [2026-05-28] Modified: src/sentiment/backtest.py — Added volatility prediction target (realized vol metrics, vol gate)
 - [2026-05-28] Modified: scripts/run_sentiment_backtest.py — Added --target flag (direction/volatility)
 - [2026-05-28] Modified: docs/sentiment_backtest_report.md — Volatility prediction PASSES gate (0.22 corr, 1.26x ratio)
