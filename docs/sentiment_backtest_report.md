@@ -156,7 +156,28 @@ Key:
 **Data:** 119,553 headlines from 4 merged Kaggle datasets (SP500 + Reddit/DJIA + CNBC + Reuters + Guardian)
 **Period:** 2008-2024 (4,216 unique dates)
 
-*Results pending — backtests running across 5 periods with 120K headlines*
+| Period | Headlines | Signal Days | Vol Corr | Neg→Vol Corr | Vol Ratio | Gate |
+|--------|-----------|-------------|----------|-------------|-----------|------|
+| 2008-2012 | 29,384 | 1,109 | 0.009 | 0.009 | 1.04x | **FAIL** |
+| 2013-2016 | 25,293 | 927 | 0.088 | 0.077 | 1.03x | **FAIL** |
+| 2017-2019 | 40,530 | 497 | 0.150 | 0.135 | 1.25x | **PASS** |
+| 2020-2021 | 16,456 | 281 | **0.269** | **0.279** | **1.57x** | **PASS** |
+| 2022-2024 | 7,890 | 297 | 0.217 | 0.228 | 1.26x | **PASS** |
+
+**3 of 5 periods pass. The 2 failures are the Reddit-heavy periods (2008-2016).**
+
+#### Why the discrepancy vs Round 3?
+
+Round 3 used only SP500 financial headlines (curated, wire-service quality). Round 4 added 50K Reddit headlines (2008-2016) from `aaron7sun/stocknews` — these are general world news (wars, politics, Olympics), not financial headlines. FinBERT, trained on financial text, produces noise on non-financial content.
+
+**Evidence:** In 2008-2012, 1,109 of 1,261 days had signals (88%) — almost every day was "actionable" because Reddit fills every day with 25 headlines. But the signal is meaningless noise (0.009 correlation). In 2022-2024 with only SP500 headlines, 297 of 547 days had signals (54%) — more selective, more meaningful.
+
+#### Conclusion
+
+- **Financial-quality headlines (Reuters, CNBC, SP500 dataset): signal works (0.15-0.27 corr)**
+- **Reddit/general news: signal washes out (0.01-0.09 corr)**
+- **Headline source quality matters more than headline volume**
+- For production: use financial news sources only (NewsAPI with financial filters, yfinance, Reuters RSS)
 
 ---
 
@@ -192,11 +213,13 @@ Headlines (CSV) → FinBERT scorer → SentimentStore (SQLite) → Aggregator (e
 ## Recommendations
 
 1. **Direction prediction: DEAD.** Do not revisit unless fundamentally different model/data.
-2. **Volatility prediction: VALIDATED.** Integrate into vol regime layer (`src/regime/detector.py`).
-3. **Integration target:** High negative sentiment → bias regime toward HIGH_IV → favor premium-selling. Low/positive → bias toward LOW_IV → favor debit plays.
-4. **Keep Sentiment UI tab** as informational dashboard showing vol expectation, not direction.
-5. **Accumulate real-time data** with proper timestamps (NewsAPI, StockTwits, RSS cron) for sub-day windows.
-6. **X/Twitter not worth it** — $100+/month for read API. StockTwits (free) is better for trading sentiment.
+2. **Volatility prediction: VALIDATED** on financial-quality headlines (0.15-0.27 corr, 1.25-1.57x ratio across 2017-2024).
+3. **Headline source quality > quantity.** Reddit/general news destroys the signal. Use financial sources only.
+4. **Integration target:** High negative sentiment → bias regime toward HIGH_IV → favor premium-selling. Low/positive → bias toward LOW_IV → favor debit plays.
+5. **Keep Sentiment UI tab** as informational dashboard showing vol expectation, not direction.
+6. **Accumulate real-time data** with proper timestamps from financial sources (NewsAPI with business filter, yfinance, Reuters/CNBC RSS).
+7. **X/Twitter not worth it** — $100+/month for read API. StockTwits (free, finance-focused) is better for trading sentiment.
+8. **Best config:** SPY, 24h primary window, 6h velocity window, FinBERT scorer.
 
 ---
 

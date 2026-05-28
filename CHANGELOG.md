@@ -1,7 +1,7 @@
 # Changelog
 
 - [2026-05-28] Modified: docs/sentiment_backtest_report.md — Multi-period validation: all 5 periods pass vol gate (N=1,462 total)
-- [2026-05-28] Modified: docs/sentiment_backtest_report.md — Full restructure: methodology, data sources, all rounds, recommendations
+- [2026-05-28] Modified: docs/sentiment_backtest_report.md — Round 4 results: 3/5 pass, Reddit noise kills signal in early periods
 - [2026-05-28] Created: data/headlines_combined.csv — 119,553 merged headlines from 4 Kaggle datasets (2008-2024)
 - [2026-05-28] Modified: src/sentiment/backtest.py — Added volatility prediction target (realized vol metrics, vol gate)
 - [2026-05-28] Modified: scripts/run_sentiment_backtest.py — Added --target flag (direction/volatility)
