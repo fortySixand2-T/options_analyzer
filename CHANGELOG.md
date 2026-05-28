@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-28] Modified: docs/sentiment_backtest_report.md — Added FinBERT backtest results (Config 1 passes gate)
+- [2026-05-28] Modified: .claude/sentiment-pipeline.md — Phase 4 marked complete
 - [2026-05-27] Created: docs/sentiment_backtest_report.md — Backtest results and analysis for 3 configs
 - [2026-05-27] Created: scripts/collect_headlines.py — Real headline collector (yfinance + RSS feeds)
 - [2026-05-27] Modified: scripts/run_sentiment_backtest.py — Added --scorer flag (auto/finbert/keyword)
