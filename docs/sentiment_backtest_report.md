@@ -1,19 +1,91 @@
 # Sentiment Backtest Report
 
-**Date:** 2026-05-27 (updated 2026-05-28 with FinBERT + Kaggle results)
-**Data sources:** 149 real headlines (yfinance+RSS) + 7,912 Kaggle headlines (2022-2024)
-**Source files:** data/headlines_real.csv, data/headlines_kaggle_2022_2024.csv
+**Last updated:** 2026-05-28
+**Scorer:** ProsusAI/finbert (transformer model)
+**Docker:** Colima 4GB, 4 CPUs, HuggingFace cache mounted
 
 ---
 
-## Round 3: Kaggle Large Dataset (2026-05-28) — DEFINITIVE
+## Executive Summary
+
+Sentiment **does not predict next-day direction** (50% hit rate = coin flip) but **does predict next-day realized volatility** (0.17-0.26 correlation, 1.13-1.42x high/low ratio). Validated across 5 market regimes spanning 2008-2024 with N=1,462+ signal days.
+
+**Integration path:** Feed sentiment into vol regime layer, NOT directional bias.
+
+---
+
+## Data Sources
+
+| Dataset | Source | Headlines | Period | Description |
+|---------|--------|-----------|--------|-------------|
+| `headlines_real.csv` | yfinance + Yahoo RSS | 149 | May 2026 | Live-collected, real-time timestamps |
+| `headlines_kaggle.csv` | Kaggle `dyutidasmahaptra/s-and-p-500-with-financial-news-headlines-20082024` | 19,127 | 2008-2024 | S&P 500 headlines with daily close prices |
+| `headlines_combined.csv` | Merged from 4 Kaggle datasets | **119,553** | 2008-2024 | SP500 + Reddit/DJIA + CNBC + Reuters + Guardian |
+
+### Combined dataset breakdown
+
+| Source | Headlines | Period | Kaggle ref |
+|--------|-----------|--------|------------|
+| S&P 500 headlines | 18,152 | 2008-2024 | `dyutidasmahaptra/s-and-p-500-with-financial-news-headlines-20082024` |
+| Reddit/DJIA top 25 | 49,695 | 2008-2016 | `aaron7sun/stocknews` |
+| Reuters | 32,673 | 2018-2020 | `notlucasp/financial-news-headlines` |
+| Guardian Business | 17,759 | 2018-2020 | `notlucasp/financial-news-headlines` |
+| CNBC | 1,274 | 2018-2020 | `notlucasp/financial-news-headlines` |
+| **Total (deduplicated)** | **119,553** | **2008-2024** | **4,216 unique dates** |
+
+### Kaggle API
+
+- Token: `~/.kaggle/access_token` (bearer format: `KGAT_...`)
+- Download: `curl -H "Authorization: Bearer $TOKEN" "https://www.kaggle.com/api/v1/datasets/download/{ref}"`
+
+### Additional datasets available on Kaggle (not yet used)
+
+| Dataset | Size | Description |
+|---------|------|-------------|
+| `sumeakash/daily-news-for-stock-market-prediction` | 55MB | Large financial news corpus, updated May 2026 |
+| `ankurzing/sentiment-analysis-for-financial-news` | 2.7MB | Pre-labeled FinancialPhraseBank (43K downloads) |
+| `rdolphin/financial-news-with-ticker-level-sentiment` | 10MB | 5K articles with ticker-level sentiment from LLMs |
+| `belbino/financial-news-sentiment-vs-market-2020-present` | 2MB | 2020-present with market data, updated May 2026 |
+
+---
+
+## Round 1: Keyword Scoring (2026-05-27)
+
+**Scorer:** keyword-v1 (dictionary-based fallback, no torch needed)
+**Data:** 149 real headlines from yfinance + Yahoo RSS
+**Period:** May 5-26, 2026 (14 trading days)
+
+| Config | Ticker | Price | Primary | Velocity | Signal Days | Hit Rate | Sharpe | Correlation |
+|--------|--------|-------|---------|----------|-------------|----------|--------|-------------|
+| 1      | MACRO  | SPY   | 24h     | 6h       | 3/14        | 33.3%    | 11.38  | -0.4133     |
+| 2      | MACRO  | SPY   | 6h      | 1h       | 3/14        | 33.3%    | 11.38  | -0.9995     |
+| 3      | MACRO  | QQQ   | 24h     | 6h       | 3/14        | 33.3%    | 16.16  | -0.7441     |
+
+**Result: INCONCLUSIVE** — N=3 signal days, all signals negative, keyword lexicon has negative bias.
+
+---
+
+## Round 2: FinBERT on Real-Time Headlines (2026-05-28)
 
 **Scorer:** ProsusAI/finbert
-**Data:** 7,912 headlines from Kaggle "S&P 500 with Financial News Headlines (2008-2024)"
-**Period:** 2022-01-03 to 2024-03-08 (547 trading days, bear+recovery+bull regimes)
-**Docker:** Colima 4GB, batch_size=16, HuggingFace cache mounted
+**Data:** Same 149 headlines, re-scored with FinBERT
+**Period:** May 5-27, 2026 (15 trading days)
 
-### Results
+| Config | Ticker | Price | Primary | Velocity | Signal Days | Hit Rate | Sharpe | Correlation |
+|--------|--------|-------|---------|----------|-------------|----------|--------|-------------|
+| 1      | MACRO  | SPY   | 24h     | 6h       | 5/15        | 60.0%    | 10.52  | 0.3939      |
+| 2      | MACRO  | SPY   | 6h      | 1h       | 4/15        | 25.0%    | 15.38  | 0.5556      |
+| 3      | MACRO  | QQQ   | 24h     | 6h       | 6/15        | 33.3%    | 19.15  | 0.1968      |
+
+**Result: Config 1 appeared to pass all gates** — but N=5 is far too small. This was a false positive confirmed by Round 3.
+
+---
+
+## Round 3: Kaggle Large Dataset — Direction (2026-05-28)
+
+**Scorer:** ProsusAI/finbert
+**Data:** 7,912 headlines from Kaggle S&P 500 dataset
+**Period:** 2022-01-03 to 2024-03-08 (547 trading days)
 
 | Config | Ticker | Price | Primary | Velocity | Signal Days | Hit Rate | Sharpe | Correlation |
 |--------|--------|-------|---------|----------|-------------|----------|--------|-------------|
@@ -21,17 +93,23 @@
 | 2      | SPY    | SPY   | 6h      | 1h       | 0/547       | 0%       | 0.00   | 0.0000      |
 | 3      | SPY    | QQQ   | 24h     | 6h       | 297/547     | 49.8%    | -0.09  | -0.0189     |
 
-### Decision Gate
+**Direction gate:** hit_rate > 52%, Sharpe > 0.3, correlation > 0.05
 
-| Criterion          | Threshold | Config 1 | Config 2 | Config 3 |
-|--------------------|-----------|----------|----------|----------|
-| hit_rate > 52%     | 52%       | FAIL     | FAIL     | FAIL     |
-| Sharpe > 0.3       | 0.3       | FAIL     | FAIL     | FAIL     |
-| correlation > 0.05 | 0.05      | FAIL     | FAIL     | FAIL     |
+**DEFINITIVE FAIL — all configs fail all gates. 50.2% = coin flip.**
 
-**DEFINITIVE FAIL — all configs fail all gates with N=297 signal days.**
+Key findings:
+1. The signal is random for direction prediction
+2. 89% of signals were LEAN_NEGATIVE — FinBERT has a negative bias on financial headlines
+3. Config 2 (6h/1h) produced zero signals — daily timestamps don't fill sub-day windows
+4. The Round 2 N=5 pass was sample noise (60% → 50.2% with more data)
 
-### Volatility Prediction (same data, different target)
+---
+
+## Round 3: Kaggle Large Dataset — Volatility (2026-05-28)
+
+**Same data as above, but predicting next-day realized vol (high-low range / close)**
+
+### Single-Period Results (2022-2024)
 
 | Config | Setup | Vol Correlation | Neg→Vol Corr | High/Low Vol Ratio | Gate |
 |--------|-------|----------------|-------------|-------------------|------|
@@ -41,13 +119,7 @@
 
 **Volatility gate:** |vol_corr| > 0.10 AND vol_ratio > 1.10x
 
-**Configs 1 and 3 PASS.** Sentiment does not predict direction, but it DOES predict volatility:
-- High-sentiment days see **21-42% more realized vol** than low-sentiment days
-- Negative sentiment → vol correlation of ~0.17-0.27 (moderate, consistent across all regimes)
-- LEAN_POSITIVE days have dramatically lower vol vs LEAN_NEGATIVE
-- STRONG_NEGATIVE days consistently have the highest realized vol (~1.8-2.4%)
-
-### Multi-Period Validation (all pass)
+### Multi-Period Validation (SP500 dataset, all pass)
 
 | Period | Market Regime | Signal Days | Vol Corr | Neg→Vol Corr | Vol Ratio |
 |--------|--------------|-------------|----------|-------------|-----------|
@@ -58,7 +130,12 @@
 | 2022-2024 | Bear + bull | 297 | 0.217 | 0.228 | 1.26x |
 | **Full 2008-2024** | **All regimes** | **1,462** | **0.173** | **0.174** | **1.21x** |
 
-**N=1,462 signal days across 16 years. All periods pass both gates.** The signal is strongest during volatile periods (COVID 2020-2021: 0.26 corr, 1.42x ratio) and weakest during low-vol (2013-2016: 0.13 corr, 1.12x ratio) — which makes sense: there's less vol to predict in calm markets.
+**N=1,462 signal days across 16 years. All 5 periods pass both gates.**
+
+Signal strength by regime:
+- **Strongest:** COVID 2020-2021 (0.26 corr, 1.42x ratio) — makes sense, extreme sentiment during pandemic
+- **Weakest:** Low-vol 2013-2016 (0.13 corr, 1.12x ratio) — less vol to predict in calm markets
+- **Consistent:** All periods above gate thresholds
 
 ### Per-Label Volatility (Full Dataset, N=1,462)
 
@@ -69,123 +146,81 @@
 | STRONG_NEGATIVE | 66 | **1.84%** | -0.125% |
 | STRONG_POSITIVE | 1 | 0.82% | -0.766% |
 
-Key findings:
-- **STRONG_NEGATIVE → 1.84% avg vol** (47% above LEAN_NEGATIVE). These are the high-vol warning days.
-- **LEAN_POSITIVE → 0.92% avg vol** (26% below LEAN_NEGATIVE). Low-vol, calm markets.
-- The signal works as a vol amplifier detector, not a directional signal.
+Key:
+- **STRONG_NEGATIVE → 1.84% avg vol** (47% above LEAN_NEGATIVE baseline)
+- **LEAN_POSITIVE → 0.92% avg vol** (26% below baseline)
+- Sentiment works as a **vol amplifier detector**, not a directional signal
 
-**Implication for the scanner:** Sentiment can inform the vol regime layer. High negative sentiment → expect wider ranges → favor premium-selling strategies (iron condors, credit spreads). Low/positive sentiment → expect tighter ranges → favor defined-risk debit plays or butterflies.
+### Round 4: Combined Dataset — Volatility (2026-05-28)
 
-### Direction Analysis (FAIL)
+**Data:** 119,553 headlines from 4 merged Kaggle datasets (SP500 + Reddit/DJIA + CNBC + Reuters + Guardian)
+**Period:** 2008-2024 (4,216 unique dates)
 
-1. **The signal is random.** 50.2% hit rate over 297 days is indistinguishable from coin flip.
-2. **No predictive correlation.** Near-zero correlation (-0.004) means sentiment score has no linear relationship to next-day returns.
-3. **Negative Sharpe** confirms no edge — you'd lose money following this signal.
-4. **Config 2 (6h window) produced zero signals** — daily-timestamped headlines don't work with sub-day windows.
-5. **Heavy negative bias**: 89% of signals were LEAN_NEGATIVE (265/297). FinBERT reads financial headlines as more negative than they are for market prediction.
-6. **STRONG_NEGATIVE contrarian hint**: 18 STRONG_NEGATIVE days had 55.6% hit rate on SPY — small N but worth investigating as a fade signal.
-7. **The earlier N=5 pass was noise.** With sufficient data, Config 1 goes from 60% → 50.2% hit rate.
-
-### Why This Dataset Is Conclusive
-
-- **547 trading days** spanning bear market (2022 H1), recovery (2022 H2-2023), and bull (2023-2024)
-- **297 signal days** — far above the 50+ minimum for statistical confidence
-- **Multiple regimes tested** — unlike the 15-day window which was pure bull
-- **Same scorer (FinBERT)** that produced the false-positive on small data
+*Results pending — backtests running across 5 periods with 120K headlines*
 
 ---
 
-## Round 2: FinBERT Scoring (2026-05-28) — SUPERSEDED BY ROUND 3
+## Methodology
 
-**Scorer:** ProsusAI/finbert (transformer model, ~420MB)
-**Docker memory:** 4GB (Colima VM)
-**Scoring distribution:** 24.8% positive, 26.2% negative, 49.0% neutral
+### Signal Pipeline
 
-### Results
+```
+Headlines (CSV) → FinBERT scorer → SentimentStore (SQLite) → Aggregator (exp decay) → generate_signal()
+```
 
-| Config | Ticker | Price | Primary | Velocity | Signal Days | Hit Rate | Sharpe | Correlation |
-|--------|--------|-------|---------|----------|-------------|----------|--------|-------------|
-| 1      | MACRO  | SPY   | 24h     | 6h       | 5/15        | 60.0%    | 10.52  | 0.3939      |
-| 2      | MACRO  | SPY   | 6h      | 1h       | 4/15        | 25.0%    | 15.38  | 0.5556      |
-| 3      | MACRO  | QQQ   | 24h     | 6h       | 6/15        | 33.3%    | 19.15  | 0.1968      |
+- **Aggregation:** Exponential decay weighting, halflife=4h, windows: 1h/6h/24h
+- **Signal composition:** 40% composite + 40% velocity + 20% breadth
+- **Labels:** STRONG_POSITIVE / LEAN_POSITIVE / NEUTRAL / LEAN_NEGATIVE / STRONG_NEGATIVE
+- **Actionable:** headline_count >= 3 AND label != NEUTRAL
 
-### Decision Gate
+### Volatility Metrics
 
-| Criterion          | Threshold | Config 1 | Config 2 | Config 3 |
-|--------------------|-----------|----------|----------|----------|
-| hit_rate > 52%     | 52%       | **PASS** | FAIL     | FAIL     |
-| Sharpe > 0.3       | 0.3       | **PASS** | PASS     | PASS     |
-| correlation > 0.05 | 0.05      | **PASS** | PASS     | PASS     |
+- **Vol correlation:** Pearson corr of abs(sentiment_score) vs next-day realized vol
+- **Neg vol correlation:** Pearson corr of abs(negative sentiment scores) vs realized vol
+- **Realized vol:** (next-day High - Low) / today's Close
+- **Vol predictive ratio:** avg vol on high-sentiment days / avg vol on low-sentiment days (split at median abs score)
+- **Vol gate:** |vol_corr| > 0.10 AND vol_ratio > 1.10x
 
-**Config 1 (SPY, 24h+6h): ALL THREE GATES PASS** — proceed to Phase 5 candidate
-**Config 2 (SPY, 6h+1h): FAIL** — hit rate too low (25%)
-**Config 3 (QQQ, 24h+6h): FAIL** — hit rate too low (33.3%)
+### Direction Metrics
 
-### FinBERT vs Keyword Comparison
-
-| Metric         | Keyword (Round 1)    | FinBERT (Round 2)     |
-|----------------|----------------------|-----------------------|
-| Signal days    | 3/14                 | 5/15 (Config 1)       |
-| Hit rate       | 33.3%                | **60.0%** (Config 1)  |
-| Correlation    | -0.41 to -1.00       | **+0.19 to +0.56**    |
-| Signal variety | All negative         | Mixed (neg + positive)|
-| Neutral rate   | ~62%                 | **49.0%**             |
-
-Key improvements with FinBERT:
-1. **More signal days** (5 vs 3) — FinBERT produces fewer neutrals
-2. **Positive correlation** — FinBERT signals align with next-day returns (keyword showed contrarian/noise)
-3. **Mixed signal labels** — FinBERT detected both LEAN_NEGATIVE and STRONG_POSITIVE; keyword was all-negative
-4. **Config 1 passes all gates** — first validated configuration
-
-### Per-Label Breakdown (Config 1)
-
-| Label             | Count | Hit Rate | Avg Return | Avg Score |
-|-------------------|-------|----------|------------|-----------|
-| LEAN_NEGATIVE     | 4     | 50.0%    | +0.2237%   | -0.321    |
-| STRONG_POSITIVE   | 1     | 100.0%   | +0.6639%   | +0.521    |
-
-### Caveats
-
-- **N=5 signal days is still small.** Config 1 passing the gate is encouraging but not statistically robust. Need 50+ signal days for confidence.
-- **Single market regime** — May 2026 was a bullish period. The signal hasn't been tested in bear or sideways markets.
-- **Sharpe ratios are inflated** by small N and consistent market direction.
-- **The 24h primary window is best** — shorter windows (6h, 1h) produced fewer actionable signals and worse hit rates.
-
----
-
-## Round 1: Keyword Scoring (2026-05-27)
-
-**Scorer:** keyword-v1 (lightweight dictionary-based fallback)
-
-### Results
-
-| Config | Ticker | Price | Primary | Velocity | Signal Days | Hit Rate | Sharpe | Correlation |
-|--------|--------|-------|---------|----------|-------------|----------|--------|-------------|
-| 1      | MACRO  | SPY   | 24h     | 6h       | 3/14        | 33.3%    | 11.38  | -0.4133     |
-| 2      | MACRO  | SPY   | 6h      | 1h       | 3/14        | 33.3%    | 11.38  | -0.9995     |
-| 3      | MACRO  | QQQ   | 24h     | 6h       | 3/14        | 33.3%    | 16.16  | -0.7441     |
-
-**Overall: INCONCLUSIVE** — N=3 too few, all signals negative, negative correlation suggests keyword lexicon bias.
+- **Hit rate:** Fraction of days where sentiment direction matches next-day return direction
+- **Sharpe:** Annualized (mean / std * sqrt(252)) of returns on signal days
+- **Direction gate:** hit_rate > 52% AND Sharpe > 0.3 AND correlation > 0.05
 
 ---
 
 ## Recommendations
 
-- **Do NOT proceed to Phase 5 integration** — the signal is definitively unvalidated
-- **Keep the module as a standalone dashboard tool** (Path C) — sentiment is informational, not predictive for next-day returns
-- **Investigate STRONG_NEGATIVE as contrarian signal** — 55.6% hit rate (n=18) could be real but needs more data
-- **Consider alternative signal targets**: instead of next-day returns, try intraday volatility, weekly returns, or regime-conditional signals
-- **The infrastructure works** — the pipeline, scorer, aggregator, and UI are solid. The signal hypothesis is what failed, not the code
-- **Volatility prediction IS validated** — sentiment predicts next-day realized vol (0.22 corr, 1.26x ratio). Integration path: feed into vol regime layer, not directional bias
+1. **Direction prediction: DEAD.** Do not revisit unless fundamentally different model/data.
+2. **Volatility prediction: VALIDATED.** Integrate into vol regime layer (`src/regime/detector.py`).
+3. **Integration target:** High negative sentiment → bias regime toward HIGH_IV → favor premium-selling. Low/positive → bias toward LOW_IV → favor debit plays.
+4. **Keep Sentiment UI tab** as informational dashboard showing vol expectation, not direction.
+5. **Accumulate real-time data** with proper timestamps (NewsAPI, StockTwits, RSS cron) for sub-day windows.
+6. **X/Twitter not worth it** — $100+/month for read API. StockTwits (free) is better for trading sentiment.
+
+---
 
 ## Files
 
-- `data/backtest_finbert_spy_24h6h.json` — FinBERT Config 1 (PASSES gate)
-- `data/backtest_finbert_spy_6h1h.json` — FinBERT Config 2
-- `data/backtest_finbert_qqq_24h6h.json` — FinBERT Config 3
-- `data/backtest_macro_spy_24h6h.json` — Keyword Config 1
-- `data/backtest_macro_spy_6h1h.json` — Keyword Config 2
-- `data/backtest_macro_qqq_24h6h.json` — Keyword Config 3
-- `data/headlines_real.csv` — Input headlines (149)
-- `scripts/collect_headlines.py` — Headline collection script
-- `scripts/run_sentiment_backtest.py` — Backtest CLI runner
+### Data files (in `data/`, gitignored)
+- `headlines_real.csv` — 149 live headlines (May 2026)
+- `headlines_kaggle.csv` — 19,127 SP500 headlines (2008-2024)
+- `headlines_combined.csv` — 119,553 merged headlines (2008-2024)
+- `headlines_kaggle_*.csv` — Period-specific splits
+- `headlines_combined_*.csv` — Period-specific splits for combined dataset
+- `backtest_*.json` — Full results for each backtest run
+
+### Scripts
+- `scripts/collect_headlines.py` — Live headline collector (yfinance + RSS)
+- `scripts/run_sentiment_backtest.py` — Backtest CLI (`--target direction|volatility`, `--scorer finbert|keyword`)
+
+### Module
+- `src/sentiment/backtest.py` — Backtester with direction + volatility targets
+- `src/sentiment/scorer.py` — FinBERT scorer
+- `src/sentiment/scorer_factory.py` — Auto-selects FinBERT or keyword
+- `src/sentiment/keyword_scorer.py` — Lightweight fallback (no torch)
+
+### Infrastructure
+- Colima VM: 4GB memory, 4 CPUs (`colima start --memory 4 --cpu 4`)
+- HuggingFace cache: `.hf_cache:/home/appuser/.cache/huggingface` (mount in docker-compose)
+- Kaggle API: `~/.kaggle/access_token` (bearer token)
