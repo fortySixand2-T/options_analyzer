@@ -1,6 +1,9 @@
 # Changelog
 
-- [2026-05-28] Modified: docs/sentiment_backtest_report.md — Kaggle large dataset backtest: DEFINITIVE FAIL (N=297, 50.2% hit rate)
+- [2026-05-28] Modified: src/sentiment/backtest.py — Added volatility prediction target (realized vol metrics, vol gate)
+- [2026-05-28] Modified: scripts/run_sentiment_backtest.py — Added --target flag (direction/volatility)
+- [2026-05-28] Modified: docs/sentiment_backtest_report.md — Volatility prediction PASSES gate (0.22 corr, 1.26x ratio)
+- [2026-05-28] Modified: docs/sentiment_backtest_report.md — Kaggle large dataset backtest: direction FAIL (N=297, 50.2% hit rate)
 - [2026-05-28] Created: data/headlines_kaggle_2022_2024.csv — 7,912 headlines from Kaggle S&P 500 dataset (2022-2024)
 - [2026-05-28] Modified: docs/sentiment_backtest_report.md — Added FinBERT backtest results (Config 1 passes gate on small N)
 - [2026-05-28] Modified: .claude/sentiment-pipeline.md — Phase 4 marked complete

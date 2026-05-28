@@ -39,10 +39,10 @@ class BacktestResult:
     end_date: str
     total_days: int
     signal_days: int                  # days with actionable signal
+    target: str = "direction"         # "direction" or "volatility"
 
     # Per-label breakdown
     label_stats: Dict[str, Dict] = field(default_factory=dict)
-    # e.g. {"LEAN_POSITIVE": {"count": 30, "hit_rate": 0.63, "avg_return": 0.12, ...}}
 
     # Overall metrics
     hit_rate: float = 0.0             # fraction of correct direction predictions
@@ -50,6 +50,13 @@ class BacktestResult:
     sharpe: float = 0.0               # annualized Sharpe of signal-following strategy
     max_drawdown: float = 0.0
     correlation: float = 0.0          # Pearson corr of sentiment score vs next-day return
+
+    # Volatility-specific metrics
+    vol_correlation: float = 0.0      # corr of abs(sentiment) vs realized vol
+    neg_vol_correlation: float = 0.0  # corr of negative sentiment vs realized vol
+    high_sent_avg_vol: float = 0.0    # avg vol on high-sentiment days
+    low_sent_avg_vol: float = 0.0     # avg vol on low-sentiment days
+    vol_predictive_ratio: float = 0.0 # high_sent_avg_vol / low_sent_avg_vol
 
     # Raw data for plotting
     daily_log: List[Dict] = field(default_factory=list)
@@ -96,6 +103,7 @@ class SentimentBacktester:
         end_date: Optional[str] = None,
         primary_window: str = "24h",
         velocity_window: str = "6h",
+        target: str = "direction",
     ) -> BacktestResult:
         """Execute the backtest.
 
@@ -195,14 +203,21 @@ class SentimentBacktester:
             tomorrow_close = float(prices.loc[tomorrow, "Close"])
             next_day_return = (tomorrow_close - today_close) / today_close
 
+            # Realized volatility: next-day high-low range as % of close
+            tomorrow_high = float(prices.loc[tomorrow, "High"])
+            tomorrow_low = float(prices.loc[tomorrow, "Low"])
+            realized_vol = (tomorrow_high - tomorrow_low) / today_close
+
             daily_log.append({
                 "date": today.strftime("%Y-%m-%d"),
                 "signal_label": signal.label.value,
                 "signal_score": signal.score,
+                "signal_abs": abs(signal.score),
                 "velocity": signal.velocity,
                 "headline_count": signal.headline_count,
                 "is_actionable": signal.is_actionable,
                 "next_day_return": round(next_day_return, 6),
+                "realized_vol": round(realized_vol, 6),
                 "today_close": today_close,
                 "tomorrow_close": tomorrow_close,
             })
@@ -214,6 +229,7 @@ class SentimentBacktester:
             ticker=self.ticker,
             start_date=trading_days[0].strftime("%Y-%m-%d"),
             end_date=trading_days[-1].strftime("%Y-%m-%d"),
+            target=target,
         )
 
         self.store.close()
@@ -247,6 +263,7 @@ class SentimentBacktester:
         ticker: str,
         start_date: str,
         end_date: str,
+        target: str = "direction",
     ) -> BacktestResult:
         """Compute backtest metrics from daily log."""
         df = pd.DataFrame(daily_log)
@@ -258,52 +275,76 @@ class SentimentBacktester:
                 end_date=end_date,
                 total_days=0,
                 signal_days=0,
+                target=target,
             )
 
         total_days = len(df)
-        # A day is actionable if it has a directional signal with enough headlines
         actionable = df[
             (df["headline_count"] >= 3) &
             (df["signal_label"] != "NEUTRAL")
         ]
         signal_days = len(actionable)
 
-        # Overall hit rate (direction prediction)
+        # Direction metrics (always computed)
+        hit_rate = 0.0
+        avg_return = 0.0
+        sharpe = 0.0
+        max_drawdown = 0.0
+        correlation = 0.0
+
         if signal_days > 0:
             correct = actionable.apply(
                 lambda r: (
                     (r["signal_score"] > 0 and r["next_day_return"] > 0) or
                     (r["signal_score"] < 0 and r["next_day_return"] < 0) or
-                    (r["signal_score"] == 0)  # neutral doesn't count as wrong
+                    (r["signal_score"] == 0)
                 ),
                 axis=1,
             )
             hit_rate = correct.sum() / signal_days
             avg_return = actionable["next_day_return"].mean()
 
-            # Sharpe (annualized)
             returns = actionable["next_day_return"]
             if returns.std() > 0:
                 sharpe = (returns.mean() / returns.std()) * (252 ** 0.5)
             else:
                 sharpe = 0.0
 
-            # Max drawdown
             cumulative = (1 + returns).cumprod()
             peak = cumulative.expanding().max()
             drawdown = (cumulative - peak) / peak
             max_drawdown = drawdown.min()
 
-            # Correlation
             correlation = actionable["signal_score"].corr(actionable["next_day_return"])
-        else:
-            hit_rate = 0.0
-            avg_return = 0.0
-            sharpe = 0.0
-            max_drawdown = 0.0
-            correlation = 0.0
 
-        # Per-label stats
+        # Volatility metrics (computed on all days with headlines, not just directional)
+        vol_actionable = df[df["headline_count"] >= 3]
+        vol_correlation = 0.0
+        neg_vol_correlation = 0.0
+        high_sent_avg_vol = 0.0
+        low_sent_avg_vol = 0.0
+        vol_predictive_ratio = 0.0
+
+        if len(vol_actionable) > 10 and "realized_vol" in vol_actionable.columns:
+            vol_correlation = vol_actionable["signal_abs"].corr(vol_actionable["realized_vol"])
+
+            neg_subset = vol_actionable[vol_actionable["signal_score"] < 0]
+            if len(neg_subset) > 5:
+                neg_scores = neg_subset["signal_score"].abs()
+                neg_vol_correlation = neg_scores.corr(neg_subset["realized_vol"])
+
+            median_abs = vol_actionable["signal_abs"].median()
+            high_sent = vol_actionable[vol_actionable["signal_abs"] >= median_abs]
+            low_sent = vol_actionable[vol_actionable["signal_abs"] < median_abs]
+
+            if len(high_sent) > 0:
+                high_sent_avg_vol = high_sent["realized_vol"].mean()
+            if len(low_sent) > 0:
+                low_sent_avg_vol = low_sent["realized_vol"].mean()
+            if low_sent_avg_vol > 0:
+                vol_predictive_ratio = high_sent_avg_vol / low_sent_avg_vol
+
+        # Per-label stats (include vol)
         label_stats = {}
         for label in SignalLabel:
             subset = actionable[actionable["signal_label"] == label.value]
@@ -323,6 +364,7 @@ class SentimentBacktester:
                 "total_return": round(subset["next_day_return"].sum(), 6),
                 "avg_score": round(subset["signal_score"].mean(), 4),
                 "avg_velocity": round(subset["velocity"].mean(), 4),
+                "avg_vol": round(subset["realized_vol"].mean(), 6) if "realized_vol" in subset.columns else 0.0,
             }
 
         return BacktestResult(
@@ -331,12 +373,18 @@ class SentimentBacktester:
             end_date=end_date,
             total_days=total_days,
             signal_days=signal_days,
+            target=target,
             label_stats=label_stats,
             hit_rate=round(hit_rate, 4),
             avg_return=round(avg_return, 6),
             sharpe=round(sharpe, 4),
             max_drawdown=round(max_drawdown, 4),
             correlation=round(correlation if not np.isnan(correlation) else 0.0, 4),
+            vol_correlation=round(vol_correlation if not np.isnan(vol_correlation) else 0.0, 4),
+            neg_vol_correlation=round(neg_vol_correlation if not np.isnan(neg_vol_correlation) else 0.0, 4),
+            high_sent_avg_vol=round(high_sent_avg_vol, 6),
+            low_sent_avg_vol=round(low_sent_avg_vol, 6),
+            vol_predictive_ratio=round(vol_predictive_ratio, 4),
             daily_log=daily_log,
         )
 
@@ -351,6 +399,7 @@ def run_backtest(
     velocity_window: str = "6h",
     db_path: str = None,
     prefer_finbert: bool = True,
+    target: str = "direction",
 ) -> BacktestResult:
     """Convenience function to run a sentiment backtest.
 
@@ -372,4 +421,5 @@ def run_backtest(
         end_date=end_date,
         primary_window=primary_window,
         velocity_window=velocity_window,
+        target=target,
     )
