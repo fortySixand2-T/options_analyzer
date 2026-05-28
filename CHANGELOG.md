@@ -1,5 +1,7 @@
 # Changelog
 
+- [2026-05-28] Created: data/headlines_financial_only.csv — 69,858 headlines excluding Reddit (SP500 + Reuters + CNBC + Guardian)
+- [2026-05-28] Modified: docs/sentiment_backtest_report.md — Round 5: financial-only backtest confirms density requirement (~15 headlines/day)
 - [2026-05-28] Modified: docs/sentiment_backtest_report.md — Multi-period validation: all 5 periods pass vol gate (N=1,462 total)
 - [2026-05-28] Modified: docs/sentiment_backtest_report.md — Round 4 results: 3/5 pass, Reddit noise kills signal in early periods
 - [2026-05-28] Created: data/headlines_combined.csv — 119,553 merged headlines from 4 Kaggle datasets (2008-2024)
