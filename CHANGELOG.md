@@ -1,6 +1,8 @@
 # Changelog
 
-- [2026-05-28] Modified: docs/sentiment_backtest_report.md — Added FinBERT backtest results (Config 1 passes gate)
+- [2026-05-28] Modified: docs/sentiment_backtest_report.md — Kaggle large dataset backtest: DEFINITIVE FAIL (N=297, 50.2% hit rate)
+- [2026-05-28] Created: data/headlines_kaggle_2022_2024.csv — 7,912 headlines from Kaggle S&P 500 dataset (2022-2024)
+- [2026-05-28] Modified: docs/sentiment_backtest_report.md — Added FinBERT backtest results (Config 1 passes gate on small N)
 - [2026-05-28] Modified: .claude/sentiment-pipeline.md — Phase 4 marked complete
 - [2026-05-27] Created: docs/sentiment_backtest_report.md — Backtest results and analysis for 3 configs
 - [2026-05-27] Created: scripts/collect_headlines.py — Real headline collector (yfinance + RSS feeds)

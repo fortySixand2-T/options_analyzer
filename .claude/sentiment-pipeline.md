@@ -94,7 +94,7 @@ https://download.pytorch.org/whl/cpu` for smaller image.
 
 ---
 
-## Phase 4: Standalone Backtest ✅ COMPLETE — Config 1 passes gate with FinBERT
+## Phase 4: Standalone Backtest ✅ COMPLETE — GATE FAILED (Kaggle N=297, 50.2% hit rate)
 
 **Goal:** Validate the hypothesis — does sentiment predict next-day moves?
 

@@ -1,13 +1,56 @@
 # Sentiment Backtest Report
 
-**Date:** 2026-05-27 (updated 2026-05-28 with FinBERT results)
-**Data:** 149 real financial headlines from yfinance + Yahoo Finance RSS
-**Period:** 2026-05-05 to 2026-05-27 (15 trading days)
-**Source file:** data/headlines_real.csv
+**Date:** 2026-05-27 (updated 2026-05-28 with FinBERT + Kaggle results)
+**Data sources:** 149 real headlines (yfinance+RSS) + 7,912 Kaggle headlines (2022-2024)
+**Source files:** data/headlines_real.csv, data/headlines_kaggle_2022_2024.csv
 
 ---
 
-## Round 2: FinBERT Scoring (2026-05-28)
+## Round 3: Kaggle Large Dataset (2026-05-28) — DEFINITIVE
+
+**Scorer:** ProsusAI/finbert
+**Data:** 7,912 headlines from Kaggle "S&P 500 with Financial News Headlines (2008-2024)"
+**Period:** 2022-01-03 to 2024-03-08 (547 trading days, bear+recovery+bull regimes)
+**Docker:** Colima 4GB, batch_size=16, HuggingFace cache mounted
+
+### Results
+
+| Config | Ticker | Price | Primary | Velocity | Signal Days | Hit Rate | Sharpe | Correlation |
+|--------|--------|-------|---------|----------|-------------|----------|--------|-------------|
+| 1      | SPY    | SPY   | 24h     | 6h       | 297/547     | 50.2%    | -0.10  | -0.0041     |
+| 2      | SPY    | SPY   | 6h      | 1h       | 0/547       | 0%       | 0.00   | 0.0000      |
+| 3      | SPY    | QQQ   | 24h     | 6h       | 297/547     | 49.8%    | -0.09  | -0.0189     |
+
+### Decision Gate
+
+| Criterion          | Threshold | Config 1 | Config 2 | Config 3 |
+|--------------------|-----------|----------|----------|----------|
+| hit_rate > 52%     | 52%       | FAIL     | FAIL     | FAIL     |
+| Sharpe > 0.3       | 0.3       | FAIL     | FAIL     | FAIL     |
+| correlation > 0.05 | 0.05      | FAIL     | FAIL     | FAIL     |
+
+**DEFINITIVE FAIL — all configs fail all gates with N=297 signal days.**
+
+### Analysis
+
+1. **The signal is random.** 50.2% hit rate over 297 days is indistinguishable from coin flip.
+2. **No predictive correlation.** Near-zero correlation (-0.004) means sentiment score has no linear relationship to next-day returns.
+3. **Negative Sharpe** confirms no edge — you'd lose money following this signal.
+4. **Config 2 (6h window) produced zero signals** — daily-timestamped headlines don't work with sub-day windows.
+5. **Heavy negative bias**: 89% of signals were LEAN_NEGATIVE (265/297). FinBERT reads financial headlines as more negative than they are for market prediction.
+6. **STRONG_NEGATIVE contrarian hint**: 18 STRONG_NEGATIVE days had 55.6% hit rate on SPY — small N but worth investigating as a fade signal.
+7. **The earlier N=5 pass was noise.** With sufficient data, Config 1 goes from 60% → 50.2% hit rate.
+
+### Why This Dataset Is Conclusive
+
+- **547 trading days** spanning bear market (2022 H1), recovery (2022 H2-2023), and bull (2023-2024)
+- **297 signal days** — far above the 50+ minimum for statistical confidence
+- **Multiple regimes tested** — unlike the 15-day window which was pure bull
+- **Same scorer (FinBERT)** that produced the false-positive on small data
+
+---
+
+## Round 2: FinBERT Scoring (2026-05-28) — SUPERSEDED BY ROUND 3
 
 **Scorer:** ProsusAI/finbert (transformer model, ~420MB)
 **Docker memory:** 4GB (Colima VM)
@@ -83,11 +126,11 @@ Key improvements with FinBERT:
 
 ## Recommendations
 
-- **Config 1 (SPY, 24h+6h) with FinBERT is the candidate for Phase 5 integration**
-- Before integrating: source a larger headline dataset (6+ months) and re-validate with 50+ signal days
-- The 24h primary window with 6h velocity is the optimal configuration
-- Shorter windows (6h primary, 1h velocity) produce too few actionable signals
-- Keyword scorer is not reliable for production — FinBERT is required
+- **Do NOT proceed to Phase 5 integration** — the signal is definitively unvalidated
+- **Keep the module as a standalone dashboard tool** (Path C) — sentiment is informational, not predictive for next-day returns
+- **Investigate STRONG_NEGATIVE as contrarian signal** — 55.6% hit rate (n=18) could be real but needs more data
+- **Consider alternative signal targets**: instead of next-day returns, try intraday volatility, weekly returns, or regime-conditional signals
+- **The infrastructure works** — the pipeline, scorer, aggregator, and UI are solid. The signal hypothesis is what failed, not the code
 
 ## Files
 
