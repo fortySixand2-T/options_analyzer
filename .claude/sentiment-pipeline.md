@@ -151,27 +151,113 @@ via `scorer_factory.py`. Sample CSV has 55 headlines but is synthetic — need a
 
 ---
 
-## Phase 5: Integration (contingent on Phase 4 results)
+## Phase 5: Vol Regime Integration ⬜ NEXT
 
-**Goal:** Wire sentiment into the scanner's directional bias layer.
+**Goal:** Wire sentiment into vol regime classification (NOT directional bias — direction prediction failed).
 
-**Files to modify (outside sentiment/):**
-- `src/bias_detector.py` — add optional `sentiment_weight` parameter
-- `src/config.py` — add `SENTIMENT_WEIGHT` to scoring_weights
-- `src/scanner/scorer.py` — ⚠️ FROZEN — cannot modify. Use wrapper or new scorer
-- `SIGNALS.md` — document sentiment as optional Layer 2 input
-- `src/ui/app.py` — add `/api/sentiment/{ticker}` endpoint
-- `frontend/src/components/` — sentiment widget on dashboard
+**Validated signal:** Sentiment predicts next-day realized volatility (0.15-0.27 corr, 1.25-1.57x ratio). High negative sentiment → wider ranges. Low/positive → tighter ranges. Requires financial-quality headlines at ~15+/day density.
+
+### Step 1: Sentiment Vol Signal Wrapper
+
+**File:** `src/sentiment/vol_signal.py` (new)
+
+- `get_sentiment_vol_bias(ticker) → VolBias` (HIGH / LOW / NEUTRAL)
+- Reads latest sentiment from `get_sentiment(ticker)`
+- Maps: abs(score) > threshold AND negative → HIGH; positive/low abs → LOW; else NEUTRAL
+- Threshold configurable via `SENTIMENT_VOL_THRESHOLD` env var (start at 0.15)
+- Graceful fallback: returns NEUTRAL if no data or FinBERT unavailable
+
+### Step 2: Wire Into Vol Regime Detector
+
+**File:** `src/regime/detector.py` (modify)
+
+- Import `get_sentiment_vol_bias` from sentiment module
+- Add optional sentiment input to regime classification
+- When sentiment says HIGH → nudge regime toward HIGH_IV (increase effective IV rank by configurable amount)
+- When sentiment says LOW → nudge toward LOW_IV
+- Weight: `SENTIMENT_VOL_WEIGHT` env var, default 0.10-0.15 (10-15% influence)
+- When no sentiment data → regime behaves identically to before (zero-change fallback)
+
+### Step 3: Update Strategy Mapper
+
+**File:** `src/scanner/strategy_mapper.py` (modify)
+
+- No direct changes needed if regime detection handles the bias correctly
+- Verify: high sentiment → HIGH_IV regime → iron condors/credit spreads favored
+- Verify: low sentiment → LOW_IV regime → debit spreads/butterflies favored
+
+### Step 4: Update Sentiment UI Tab
+
+**File:** `frontend/src/components/Sentiment.jsx` (modify)
+**File:** `src/ui/sentiment_router.py` (modify)
+
+- Show vol expectation: "Expected Vol: ELEVATED / NORMAL / SUBDUED"
+- Remove directional language (direction is dead)
+- Show how sentiment is currently influencing vol regime classification
+- Add "Vol Influence: +X% toward HIGH_IV" indicator
+
+### Step 5: Config & Documentation
+
+**Files:**
+- `src/config.py` — add `SENTIMENT_VOL_WEIGHT`, `SENTIMENT_VOL_THRESHOLD`
+- `SIGNALS.md` — document sentiment as optional Vol Regime input (Layer 1 supplement)
+- `src/scanner/scorer.py` — ⚠️ FROZEN — do NOT modify. Sentiment influence flows through regime, not scorer
 
 **Acceptance criteria:**
-- [ ] `detect_bias(df, sentiment_signal=sig)` accepts optional SentimentSignal
-- [ ] Sentiment weight defaults to 0.10 (10% of directional bias score)
-- [ ] Weight is configurable via `SENTIMENT_WEIGHT` env var
-- [ ] When no sentiment data available, bias_detector behaves identically to before
-- [ ] API endpoint returns current sentiment signal as JSON
-- [ ] Dashboard shows sentiment gauge/indicator
-- [ ] Conviction score includes sentiment component (new scorer wrapper, not modifying frozen scorer.py)
-- [ ] Docker rebuild works with torch dependency
+- [ ] `get_sentiment_vol_bias("SPY")` returns HIGH/LOW/NEUTRAL
+- [ ] Regime detector accepts optional sentiment input, defaults to no-op
+- [ ] HIGH sentiment bias → regime classification nudges toward HIGH_IV
+- [ ] LOW sentiment bias → regime classification nudges toward LOW_IV
+- [ ] No sentiment data → behavior identical to current (zero regression)
+- [ ] Sentiment UI shows vol expectation, not direction
+- [ ] Docker rebuild works (torch already in image from Phase 2)
+- [ ] `./start.sh test` passes
+
+**Stop conditions:**
+- Do NOT modify `src/scanner/scorer.py` (frozen)
+- Do NOT wire into `src/bias_detector.py` (direction is dead)
+- Do NOT trust sentiment alone — it's a 10-15% supplement to IV rank, not a replacement
+
+---
+
+## Phase 6: Live Headline Pipeline ⬜ FUTURE
+
+**Goal:** Switch from CSV replay to real-time financial headline collection.
+
+**Files:**
+- `src/sentiment/providers/rss_provider.py` (new) — yfinance + Reuters/CNBC RSS
+- `scripts/collect_headlines.py` (modify) — scheduled collection via cron
+- `docker-compose.yml` (modify) — mount `.hf_cache:/home/appuser/.cache/huggingface`
+
+**Requirements:**
+- Financial sources only (Reuters, CNBC, yfinance RSS) — no Reddit/general news
+- Target: ~15-30 headlines/day minimum for meaningful signal
+- Proper timestamps (not daily — need intraday for velocity windows)
+- Scheduled collection every 1-4 hours
+- StockTwits (`api.stocktwits.com/api/2/streams/symbol/{TICKER}.json`) available as supplementary source (no auth needed, but unsupported — treat as best-effort)
+
+**Acceptance criteria:**
+- [ ] RSS provider fetches live headlines with real timestamps
+- [ ] Scheduled collection accumulates data in SQLite
+- [ ] HuggingFace cache mounted to avoid model re-downloads
+- [ ] 15+ headlines/day sustained for SPY/QQQ
+
+---
+
+## Phase 7: ThetaData Backfill & Validation ⬜ FUTURE
+
+**Goal:** Backtest the full pipeline (sentiment → vol regime → strategy selection) on historical chain data with real greeks.
+
+**Prerequisites:**
+- Theta Terminal running on host machine
+- Phase 5 integration complete
+- Sufficient live headline data accumulated (Phase 6)
+
+**Acceptance criteria:**
+- [ ] Chain-replay backtester runs with sentiment-augmented regime classification
+- [ ] Compare: with-sentiment vs without-sentiment on same period
+- [ ] Measure: does sentiment improve strategy selection accuracy?
+- [ ] If improvement < 2% win rate or < 0.1 Sharpe → reduce weight or remove
 
 ---
 
