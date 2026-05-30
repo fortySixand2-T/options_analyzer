@@ -31,6 +31,10 @@ class BacktestRequest(BaseModel):
     dealer_filter: bool = False             # only enter when dealer regime matches
     edge_threshold: float = 0.0             # min GARCH edge % to enter
     slippage_pct: float = 0.0               # % of premium lost to slippage (e.g., 3.0 = 3%)
+    # Fill realism (chain-replay only): "bid_ask" crosses the spread (buys pay
+    # ask, sells receive bid) for realistic fills; "mid" is the legacy optimistic
+    # behavior that overstates edge — see docs/pricing_validation_report.md.
+    fill_mode: str = "bid_ask"
     # Swing-specific filters
     vrp_filter: bool = False                # only enter when VRP > vrp_threshold
     vrp_threshold: float = 3.0             # min VRP % for swing credit strategies
@@ -61,6 +65,9 @@ class BacktestTrade(BaseModel):
     swing_bias_label: Optional[str] = None
     vrp_at_entry: Optional[float] = None    # VRP % at entry
     dealer_regime: Optional[str] = None     # LONG_GAMMA / SHORT_GAMMA at entry
+    # Fill transparency — how this trade's legs were priced and the spread cost
+    fill_mode: Optional[str] = None         # "bid_ask" (realistic) or "mid" (legacy)
+    avg_spread_pct: Optional[float] = None  # avg bid/ask spread % across legs at entry
 
 
 class BacktestStats(BaseModel):

@@ -16,8 +16,11 @@ DATA ISSUES (documented for transparency):
   Fewer strikes means coarser delta targeting.
 - OI data only exists for May 2026 snapshots. Dealer filter is a no-op
   on historical data before that.
-- Spread percentage is sometimes wide on far-OTM strikes. The backtester
-  uses mid price but logs spread width per trade.
+- Spread percentage is sometimes wide on far-OTM strikes. Fills are priced
+  at real bid/ask by default (buys pay the ask, sells receive the bid); set
+  request.fill_mode="mid" for legacy optimistic mid pricing. Spread width is
+  logged per trade as avg_spread_pct. See docs/pricing_validation_report.md
+  for why mid pricing overstates edge.
 - No intraday data — all prices are EOD snapshots. Intraday profit targets
   or stop losses can only be checked at next snapshot.
 - Some symbols (QQQ, IWM) only have data from May 2025 onward.
@@ -425,20 +428,59 @@ def _find_wing(options: List[dict], anchor_strike: float, direction: str) -> Opt
         return candidates[0] if candidates else None
 
 
-def _compute_entry_price(position: dict) -> float:
-    """Compute net entry price from mid prices. Positive = credit received."""
+def _leg_fill_price(quote: dict, side: str, action: str, fill_mode: str) -> float:
+    """Realistic fill price for a single leg.
+
+    Models crossing the bid/ask spread: a buy lifts the ask, a sell hits the
+    bid. On exit the action reverses — a short leg is bought back at the ask,
+    a long leg is sold at the bid — which charges the spread on both entry and
+    exit (the honest cost a real trader pays).
+
+    `fill_mode="mid"` reproduces the legacy optimistic behavior (mid for every
+    leg, ignoring the spread). Any other value ("bid_ask") uses real fills.
+
+    Falls back to mid when the needed bid/ask is missing or non-positive — this
+    happens on far-OTM/illiquid strikes (see DATA_ISSUES.md §4) — and to 0.0
+    when no usable quote exists at all (e.g. an expired/worthless leg).
+    """
+    mid = quote.get("mid") or 0.0
+    if fill_mode != "bid_ask":
+        return mid if mid > 0 else 0.0
+    # Is this leg being bought in this action? Buying on open = a "buy" leg;
+    # buying on close = covering a "sell" leg.
+    buying = (side == "buy") if action == "open" else (side == "sell")
+    if buying:
+        ask = quote.get("ask") or 0.0
+        return ask if ask > 0 else (mid if mid > 0 else 0.0)
+    bid = quote.get("bid") or 0.0
+    return bid if bid > 0 else (mid if mid > 0 else 0.0)
+
+
+def _compute_entry_price(position: dict, fill_mode: str = "bid_ask") -> float:
+    """Net entry premium. Positive = credit received, negative = debit paid.
+
+    With fill_mode="bid_ask" buys pay the ask and sells receive the bid; with
+    "mid" every leg is priced at mid (legacy, optimistic).
+    """
     net = 0.0
     for leg in position["legs"]:
-        mid = leg["contract"]["mid"]
+        price = _leg_fill_price(leg["contract"], leg["side"], "open", fill_mode)
         if leg["side"] == "sell":
-            net += mid
+            net += price
         else:
-            net -= mid
+            net -= price
     return net
 
 
-def _compute_exit_price(position: dict, exit_contracts: Dict) -> Optional[float]:
-    """Compute net exit price from exit snapshot mid prices."""
+def _compute_exit_price(position: dict, exit_contracts: Dict,
+                        fill_mode: str = "bid_ask") -> Optional[float]:
+    """Net premium to close the position, valued at the exit snapshot.
+
+    Uses the same leg orientation as entry (short legs positive, long legs
+    negative) so P&L = entry_net - current_value (credit) holds. Closing
+    reverses each leg: a short leg is bought back at the ask, a long leg is
+    sold at the bid. Returns None if any leg is absent from the exit snapshot.
+    """
     net = 0.0
     for leg in position["legs"]:
         strike = leg["contract"]["strike"]
@@ -447,11 +489,11 @@ def _compute_exit_price(position: dict, exit_contracts: Dict) -> Optional[float]
         exit_data = exit_contracts.get(key)
         if exit_data is None:
             return None
-        mid = exit_data["mid"] if exit_data["mid"] and exit_data["mid"] > 0 else 0.0
+        price = _leg_fill_price(exit_data, leg["side"], "close", fill_mode)
         if leg["side"] == "sell":
-            net += mid
+            net += price
         else:
-            net -= mid
+            net -= price
     return net
 
 
@@ -584,7 +626,7 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
             skipped_no_strikes += 1
             continue
 
-        entry_net = _compute_entry_price(position)
+        entry_net = _compute_entry_price(position, request.fill_mode)
         if abs(entry_net) < 0.01:
             skipped_no_strikes += 1
             continue
@@ -637,6 +679,10 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
         issues.append(f"{skipped_filter} entries skipped by signal filters")
     if exit_used_intrinsic > 0:
         issues.append(f"{exit_used_intrinsic} exits used intrinsic value (no matching contracts in exit snapshot)")
+    if request.fill_mode == "bid_ask":
+        issues.append("Fills priced at real bid/ask (buys pay ask, sells receive bid) — spread charged on entry and exit")
+    else:
+        issues.append("Fills priced at mid (optimistic — overstates edge; see docs/pricing_validation_report.md)")
 
     return trades, issues
 
@@ -647,7 +693,6 @@ def _check_exit(conn, symbol: str, current_snap: dict, position_info: dict,
     """Check if position should be exited at this snapshot."""
     position = position_info["position"]
     entry_net = position_info["entry_net"]
-    is_credit = position["is_credit"]
     expiry = position["expiry"]
     entry_date = position_info["entry_date"]
     dte_remaining = (date.fromisoformat(expiry) - date.fromisoformat(current_snap["date"])).days
@@ -659,7 +704,7 @@ def _check_exit(conn, symbol: str, current_snap: dict, position_info: dict,
     used_intrinsic = False
 
     if exit_contracts:
-        current_value = _compute_exit_price(position, exit_contracts)
+        current_value = _compute_exit_price(position, exit_contracts, request.fill_mode)
         if current_value is None:
             if dte_remaining <= 1:
                 current_value = _compute_intrinsic_exit(position, current_snap["spot"])
@@ -672,10 +717,15 @@ def _check_exit(conn, symbol: str, current_snap: dict, position_info: dict,
     else:
         return None
 
-    if is_credit:
-        pnl = entry_net - current_value
-    else:
-        pnl = current_value - entry_net
+    # P&L is entry_net - current_value for BOTH credit and debit. entry_net and
+    # current_value are computed in the same leg orientation (sell legs add,
+    # buy legs subtract), so this single formula holds regardless of sign:
+    #   credit: collect entry_net (+), buy back at current_value → entry - current
+    #   debit:  pay |entry_net| (entry_net < 0); the same difference yields the
+    #           correct signed gain (verified: a debit spread that appreciates
+    #           shows a positive P&L). The previous `current - entry` branch for
+    #           debits inverted the sign of every long-spread/butterfly trade.
+    pnl = entry_net - current_value
 
     use_strategy_rules = (request.exit_rule == "strategy")
     if use_strategy_rules:
@@ -727,6 +777,8 @@ def _check_exit(conn, symbol: str, current_snap: dict, position_info: dict,
         bias_label=position_info.get("bias_label"),
         edge_pct=round(position_info["edge_pct"], 2) if position_info.get("edge_pct") is not None else None,
         iv_at_entry=round(position_info["iv_at_entry"], 4),
+        fill_mode=request.fill_mode,
+        avg_spread_pct=round(position_info.get("avg_spread_pct", 0) or 0, 2),
     )
 
     return {"trade": trade, "_used_intrinsic": used_intrinsic}
