@@ -90,6 +90,12 @@ class BacktestStats(BaseModel):
     sortino_ratio: float = 0.0              # annualized, downside-deviation only
     pnl_skew: float = 0.0                   # skew of per-trade P&L (>0 = positive/convex)
     return_on_risk: float = 0.0             # avg P&L / avg premium at risk (expectancy per $ risked)
+    # Tail-risk metrics — the correct primary lens for NEGATIVE-skew premium-
+    # selling strategies (credit spreads, iron condors), where a high win rate
+    # and Sharpe hide a fat left tail. See STRATEGY_LITERATURE_REVIEW.md / F-015.
+    cvar_95: float = 0.0                    # expected shortfall: mean of the worst 5% of trade P&Ls
+    max_single_loss: float = 0.0            # worst single-trade P&L ($)
+    calmar_ratio: float = 0.0               # annualized P&L / max drawdown
     avg_dte_at_entry: float = 0.0
     avg_days_in_trade: float = 0.0
 

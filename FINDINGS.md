@@ -36,6 +36,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-012 | 2026-05-30 | Audit of scanner/sizing/market_state/edge surfaces (step 4) | Clean — live edge path deep-audited; unwired modules categorized (no deferred debt) |
 | F-013 | 2026-05-30 | Butterfly tested under wrong CONDITIONS (ATM not max-pain) and wrong METRICS (Sharpe for a convex payoff) | Metrics added (Sortino/skew/return-on-risk) + max-pain centering; proper validation OI-blocked |
 | F-014 | 2026-05-30 | Robustness/OOS harness built; surveyed strategies flag fragile/no-edge on current data | Harness shipped; first survey = no robust edge yet (data-limited) |
+| F-015 | 2026-05-30 | Each strategy has a different edge source → needs a different metric; we ranked all by Sharpe | Tail metrics (CVaR/maxLoss/Calmar) added; per-strategy literature review written |
 
 ---
 

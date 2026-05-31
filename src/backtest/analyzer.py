@@ -94,6 +94,15 @@ def analyze_results(trades: List[BacktestTrade],
     avg_risk = float(np.mean(risks)) if risks else 0.0
     return_on_risk = (avg_pnl / avg_risk) if avg_risk > 0 else 0.0
 
+    # Tail-risk metrics (F-015): the correct lens for negative-skew premium
+    # selling — a high win rate and Sharpe hide the fat left tail.
+    cvar_95 = _compute_cvar(pnls, 0.05)
+    max_single_loss = round(min(pnls), 2) if pnls else 0.0
+    # Calmar = annualized P&L / max drawdown. Annualize over the calendar span.
+    span_days = max((max(t.exit_date for t in trades) - min(t.entry_date for t in trades)).days, 1)
+    years = span_days / 365.25
+    calmar_ratio = ((total_pnl / years) / max_dd) if max_dd > 0 else 0.0
+
     # Average DTE and hold time
     avg_dte = float(np.mean([t.dte_at_entry for t in trades]))
     avg_days = float(np.mean([
@@ -116,6 +125,9 @@ def analyze_results(trades: List[BacktestTrade],
         sortino_ratio=round(sortino, 2),
         pnl_skew=round(pnl_skew, 2),
         return_on_risk=round(return_on_risk, 3),
+        cvar_95=round(cvar_95, 2),
+        max_single_loss=round(max_single_loss, 2),
+        calmar_ratio=round(calmar_ratio, 2),
         avg_dte_at_entry=round(avg_dte, 1),
         avg_days_in_trade=round(avg_days, 1),
     )
@@ -308,6 +320,18 @@ def _compute_sortino(pnls: List[float], trades_per_year: float = 52.0) -> float:
     if dd < 1e-10:
         return 0.0
     return float(np.mean(arr)) / dd * np.sqrt(trades_per_year)
+
+
+def _compute_cvar(pnls: List[float], alpha: float = 0.05) -> float:
+    """Conditional VaR / expected shortfall: mean of the worst `alpha` fraction
+    of trade P&Ls (at least one trade). The tail-loss number that matters most
+    for negative-skew premium selling — Sharpe/win-rate hide it. Negative = a
+    loss. Returns 0.0 with no trades."""
+    if not pnls:
+        return 0.0
+    arr = np.sort(np.array(pnls, dtype=float))
+    k = max(1, int(np.ceil(len(arr) * alpha)))
+    return float(np.mean(arr[:k]))
 
 
 def _compute_skew(pnls: List[float]) -> float:

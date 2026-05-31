@@ -121,6 +121,19 @@ class TestMaxPainAndSkewMetrics:
                      for k in (90.0, 100.0, 110.0)]
         assert _compute_max_pain(contracts, exp) is None  # no OI → caller falls back to ATM
 
+    def test_tail_metrics_known_answer(self):
+        # 19 small wins + one -500 loss: CVaR95 (worst 5% = worst 1) and
+        # max_single_loss must both surface the −500 tail (F-015).
+        from backtest.analyzer import analyze_results
+        from backtest.models import BacktestTrade
+        pnls = [10.0] * 19 + [-500.0]
+        trades = [BacktestTrade(entry_date=date(2024, 1, 1), exit_date=date(2024, 1, 3),
+                                entry_price=1.0, exit_price=0.5, pnl=p, pnl_pct=1.0,
+                                dte_at_entry=7, dte_at_exit=1, win=p > 0) for p in pnls]
+        stats = analyze_results(trades)
+        assert stats.max_single_loss == -500.0
+        assert stats.cvar_95 == -500.0   # worst 5% of 20 = worst 1 trade
+
     def test_positive_skew_payoff_reads_positive(self):
         # Many small losses + a few large wins (the butterfly/convex profile) → skew > 0.
         from backtest.analyzer import analyze_results
