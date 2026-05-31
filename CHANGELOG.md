@@ -796,3 +796,13 @@ data and IC-gated BEFORE touching the option backtest.
   guard for the cache bug. 80 backtest-suite tests passing.
 - [2026-05-31] Modified: FINDINGS.md — Added F-019 (execution test = IC necessary-but-not-sufficient;
   validated directional IC does not transmit through defined-risk debit spreads) and updated F-018 status.
+
+## 2026-05-31 (cont.) — dispatch hand-off plan
+
+- [2026-05-31] Created: docs/DISPATCH_PLAN.md — Self-contained, phased plan for an async/remote
+  ("claude dispatch") session to continue the regime-based edge research while the user is away:
+  Phase 1 (broaden the IC sweep across more tickers/indices, per-regime, add VRP/52w-high signals),
+  Phase 2 (match each validated signal to the right vehicle — directional→higher-delta/longer-DTE,
+  vol-regime→premium sellers judged on tail metrics), Phase 3 (cache-key completeness debt + Dolt QQQ
+  thinness), Phase 4 stretch (sentiment_backtest.db IC test). Includes ground rules, Docker how-to,
+  key-file map, acceptance criteria, and decision points.
