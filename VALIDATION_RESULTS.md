@@ -1,13 +1,23 @@
 # Validation Backtest Results
 
-> ⚠️ **CORRECTION 2026-05-30 — all `Butterfly` rows below are INVALID (see FINDINGS.md
-> F-009).** These results were produced by `local_backtest._price_strategy`, which had no
-> `butterfly` branch and silently priced butterfly as a **single long ATM call**. So every
-> "butterfly" figure here (e.g. +$23,535 / Sharpe 2.09 "best performer", "pure noise R²=0.02")
-> actually describes a long ATM call in a 2022-2026 bull market — NOT a butterfly. After the
-> fix, the BS-engine butterfly is a **loser: −$2,599, WR 35.2%, Sharpe −2.42** (SPY 2022-2026,
-> strategy exits), consistent with chain-replay. Disregard butterfly conclusions below pending
-> a clean re-validation; all other strategies are unaffected by this bug.
+> ⚠️ **CORRECTION 2026-05-30 (F-009) — the original `Butterfly` rows were INVALID; corrected
+> numbers below.** They were produced by `local_backtest._price_strategy`, which had no
+> `butterfly` branch and silently priced butterfly as a **single long ATM call** — so the old
+> "+$23,535 / Sharpe 2.09 best performer" and "pure noise R²=0.02" describe a long ATM call in
+> a 2022-2026 bull market, not a butterfly. After the fix, **re-validated butterfly (BS, 3%
+> slippage, SPY 2022-01→2026-04)** is a clear loser, consistent with chain-replay:
+>
+> | Config / Asset | Trades | Win Rate | Total P&L | Sharpe |
+> |---|---|---|---|---|
+> | SPY — strategy exits | 90 | 34.4% | **−$3,223** | **−3.11** |
+> | SPY — hold to expiry | 90 | 40.0% | −$1,852 | −1.81 |
+> | SPY — 50% target | 94 | 47.9% | −$1,365 | −1.38 |
+> | QQQ — strategy exits | 90 | 30.0% | −$3,318 | −3.30 |
+> | IWM — strategy exits | 90 | 34.4% | −$3,656 | −2.89 |
+>
+> **Butterfly is unprofitable in every config/asset.** The "best performer" and "no edge gate
+> needed" conclusions for butterfly elsewhere in this doc are void. Other strategies are
+> unaffected by this bug. (Spreads' true edge is separately limited by data — see FINDINGS.md.)
 
 SPY 2022-01-01 to 2026-04-25, 3% slippage on entry and exit, per-strategy exit rules.
 
@@ -16,7 +26,7 @@ SPY 2022-01-01 to 2026-04-25, 3% slippage on entry and exit, per-strategy exit r
 | Strategy | Best Config | Trades | Win Rate | Sharpe | Total P&L | Kelly |
 |---|---|---|---|---|---|---|
 | Long put spread | strategy exits + edge>5% + bias | 31 | 67.7% | **4.72** | $3,305 | 0.50 |
-| Butterfly | strategy exits, no filters | 89 | 50.6% | 2.09 | $23,535 | 0.30 |
+| ~~Butterfly~~ **(corrected)** | strategy exits | 90 | 34.4% | **−3.11** | **−$3,223** | n/a |
 | Long call spread | strategy exits + regime filter | 92 | 59.8% | 2.07 | $4,470 | 0.28 |
 | Short put spread | strategy exits + edge>5% + bias | 82 | 84.1% | 2.02 | $2,621 | 0.42 |
 | Iron condor | all configs negative | 90 | 42.2% | -2.39 | -$5,103 | -0.47 |

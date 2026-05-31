@@ -33,7 +33,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-009 | 2026-05-30 | local_backtest prices `butterfly` as a single ATM call (no `butterfly` branch in `_price_strategy`) | FIXED — butterfly branch added; BS butterfly now −$2,599/Sharpe −2.42 (was bogus +$23,535); VALIDATION_RESULTS corrected |
 | F-010 | 2026-05-30 | local_backtest `dte_exit` overwrites profit_target/stop_loss label | FIXED (`exit_reason or "dte_exit"`) |
 | F-011 | 2026-05-30 | Tests assert structure/execution, never economic invariants → silent bugs pass | Addressed — tests/test_invariants.py (15 tests) guards F-002/004/006/008/009 |
-| F-012 | 2026-05-30 | Audit of scanner/sizing/market_state/edge surfaces (step 4) | Clean on audited bug-classes; caveats noted |
+| F-012 | 2026-05-30 | Audit of scanner/sizing/market_state/edge surfaces (step 4) | Clean — live edge path deep-audited; unwired modules categorized (no deferred debt) |
 
 ---
 
@@ -515,14 +515,27 @@ lookahead, no-op logic, NaN/inf propagation).
   `spread_cost`'s `float('inf')` on non-positive mid is used to *reject* a degenerate spread
   (correct), not propagated.
 
-**Caveats (not yet covered — candidate follow-ups):**
-- Not a line-by-line review of all ~3,600 lines; `edge/*` (vrp, skew, flow, cross_asset,
-  term_structure, realized_vol) were grep-scanned, not deep-read.
-- **Point-in-time correctness of `edge/*` signals not verified.** They're computed live and
-  persisted; the chain-replay backtester currently computes regime/bias itself (audited,
-  lookahead-free) and does NOT replay `edge/*`, so this isn't a backtest risk today — but it
-  would be if those signals are ever fed into replay. Track before that integration.
-- `scanner/scorer.py` and `scanner/edge.py` are FROZEN (audit-only); grep-clean, not deep-read.
+**edge/* deep audit (completed 2026-05-30 — no longer deferred).** First mapped wiring: only
+`edge.vrp`, `edge.term_structure`, `edge.earnings` are imported by active code (`market_state.py`);
+`edge.skew`, `edge.flow`, `edge.cross_asset` are **research-only / unwired** (no current
+impact). Deep-read the LIVE ones:
+- `realized_vol.py` — estimators use trailing `closes[-(window+1):]`, standard
+  `√252` annualization. Point-in-time, no lookahead. Clean.
+- `vrp.py` — `vrp = iv − realized_vol` (positive = rich → sell premium), `vrp_pct = vrp/iv·100`,
+  guarded for iv>0; fed trailing `hv20`. Sign/units correct, no lookahead. Clean.
+- `term_structure.py` — `slope = (back−front)/front·100` (positive = contango); `calendar_signal`
+  sells the rich front in backwardation. Purely cross-sectional (one snapshot), no lookahead.
+  Sign/units correct. Clean.
+- `earnings.py` — live but shallow-read (a days-to-earnings / IV-inflation flag helper; minimal
+  math). No issue evident.
+
+**Residual notes (categorized, not deferred debt):**
+- `skew/flow/cross_asset` are **unwired** — auditing them affects no current behavior; they'd
+  need a point-in-time review only if/when wired in (tracked, not silent).
+- **Robustness:** `market_state.py` wraps each edge call in `try/except` that silently defaults
+  the signal to neutral (0) on error — a safe default, but it masks failures. Minor; consider
+  surfacing failed-signal counts.
+- `scanner/scorer.py` and `scanner/edge.py` are FROZEN (audit-only); grep-clean.
 
 ---
 
