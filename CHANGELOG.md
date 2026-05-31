@@ -806,3 +806,13 @@ data and IC-gated BEFORE touching the option backtest.
   vol-regime→premium sellers judged on tail metrics), Phase 3 (cache-key completeness debt + Dolt QQQ
   thinness), Phase 4 stretch (sentiment_backtest.db IC test). Includes ground rules, Docker how-to,
   key-file map, acceptance criteria, and decision points.
+
+- [2026-05-31] Modified: docs/DISPATCH_PLAN.md — Added a "Testing & Validation" section (applies to
+  every phase): (A) software testing discipline — unit tests for every new signal (orientation,
+  point-in-time/no-lookahead, edge cases), a regression test for every bug, pure-over-networked tests,
+  green-bar-before-commit with the exact Docker commands; (B) statistical validation gates — minimum
+  sample (n≥30; the F-019 n=4 trap), significance+magnitude (p<0.05 & |IC|≥0.03), fold+regime
+  stability, alpha-vs-beta (gating must help), no-lookahead, MULTIPLE-TESTING awareness for the wide
+  Phase-1 grid (~300 cells → tighten to p<0.01/|IC|≥0.05 and require ≥2 independent underlyings),
+  robustness/perturbation via robustness.py, and cache hygiene. Defines the acceptance bar for any
+  "we found an edge" claim.

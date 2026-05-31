@@ -51,6 +51,74 @@ as the regime is identifiable live (point-in-time gate).
 
 ---
 
+## Testing & Validation (applies to EVERY phase — read before any phase)
+
+This is the discipline that makes a result trustworthy. The whole project exists because earlier
+backtests lied (F-001…F-013); do not regress that. Two distinct activities — keep them separate:
+
+### A. Software testing (does the code do what it says?)
+
+- **Every new signal** gets unit tests in `tests/test_signal_lib.py` mirroring the existing pattern:
+  (1) **orientation** — a constructed input produces the expected sign; (2) **point-in-time / no
+  lookahead** — truncating future bars does not change a past value (the `*_pointintime` tests);
+  (3) **edge cases** — warmup region is NaN, required `aux` raises, gate abstains correctly.
+- **Every bug found → a regression test in the same commit** (e.g. `test_cache_key_includes_signal_filter`
+  guards the F-019 cache bug). A fix without a test will silently come back.
+- **Pure over networked.** Test the deterministic logic (IC math, gate, graduation) on synthetic
+  data with a KNOWN answer — never depend on yfinance in a unit test. Network lives only in the
+  CLI scripts, not the test suite.
+- **Green bar before every commit.** Run the backtest blast radius, then the full suite:
+  ```
+  # quick (bind-mount, no rebuild):
+  docker-compose run --rm --no-deps -v "$PWD/src:/app/src" -v "$PWD/tests:/app/tests" -v "$PWD/scripts:/app/scripts" -v "$PWD/data:/app/data" \
+    test python -m pytest tests/test_signal_lib.py tests/test_signal_eval.py tests/test_robustness.py tests/test_chain_replay.py tests/test_invariants.py tests/test_backtest.py -q
+  # canonical full suite (after `docker-compose build test`):
+  ./start.sh test
+  ```
+  Do not commit on a red bar. If a pre-existing test is genuinely obsolete, say so explicitly in the
+  commit message — don't silently delete or weaken it.
+
+### B. Statistical validation (is the EDGE real, or noise/beta/overfit?)
+
+Every claimed edge must clear ALL of these — they are gates, not nice-to-haves:
+
+1. **Sample size.** A verdict needs **n ≥ 30** observations (IC) or **≥ 30 trades** (execution).
+   The F-019 "+$241/trade" mirage was **n=4**. State `n` next to every number; if n is small, the
+   verdict is "insufficient sample," not a result.
+2. **Significance + magnitude.** Rank IC: `p < 0.05` AND `|IC| ≥ 0.03` (use the existing
+   `signal_eval.graduate`). Significant-but-tiny is not tradeable; large-but-insignificant is luck.
+3. **Stability.** Sign-stable across **time folds** (`fold_ic_signs`) AND across **vol regimes**
+   (`regime_ic_signs`). A signal alive in one period/regime and dead elsewhere is regime-fit.
+4. **Alpha vs beta.** For directional results, the SIGNAL must add value over the unconditional
+   position — gating must HELP (the F-017/F-019 test). A positive P&L that gets WORSE when you gate
+   on the signal is beta, not alpha.
+5. **No lookahead.** Signals use trailing windows only; regime gates are point-in-time (no
+   full-sample median/threshold). Forward returns are computed PER SYMBOL (never pool closes across
+   symbols — that creates fake adjacency; `signal_ic_sweep` already does this correctly).
+6. **Multiple-testing awareness (important in Phase 1).** Sweeping many signals × underlyings ×
+   regimes × horizons means some cells clear `p<0.05` by chance alone. With ~7 signals × 7 symbols ×
+   2 regimes × 3 horizons ≈ 300 tests, expect ~15 false positives at α=0.05. Mitigate: (a) tighten
+   the bar for the grid to `p < 0.01` and `|IC| ≥ 0.05`; (b) require the SAME (signal, regime,
+   horizon) to graduate on **multiple independent underlyings**, not one lucky ticker; (c) report how
+   many cells were tested so the reader can judge. Treat any single isolated significant cell as a
+   lead, not an edge.
+7. **Robustness / perturbation.** Before believing an execution result, run it through
+   `src/backtest/robustness.py` (`run_robustness`): the edge must be sign-consistent across time
+   folds, hold out-of-sample, and degrade *monotonically* (not chaotically) under the fill-mode ×
+   slippage grid. A result that flips under a 1% slippage perturbation is not real (that was F-004).
+8. **Cache hygiene.** Results are cached (`src/backtest/cache.py`). If you change engine logic, the
+   source-hash key (F-005) invalidates automatically; if you add a new result-affecting
+   `BacktestRequest` field, ADD IT TO `_cache_key` (Phase 3) or two runs will silently return the
+   same cached number — the exact F-019 cache bug. When in doubt, point `BACKTEST_CACHE_DB` at a
+   temp file for a clean run.
+
+**Acceptance for any "we found an edge" claim:** sample ≥ threshold, passes the strict gate,
+stable across folds+regimes, beats the unconditional baseline, survives robustness perturbation, and
+(if from the Phase-1 grid) reproduces on ≥2 underlyings. Anything short of that is logged as a lead
+or an honest negative — never upgraded to "edge."
+
+---
+
 ## Phase 1 — Broaden the signal sweep across tickers/indices, per-regime
 
 **Goal:** find which signals graduate on which underlyings in which vol regime. The user wants this
