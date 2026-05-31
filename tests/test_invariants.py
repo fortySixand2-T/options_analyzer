@@ -99,6 +99,40 @@ class TestStrategyPayoffInvariants:
         assert 0 <= v <= INC * 1.05         # a 1-wide credit spread can't exceed its width
 
 
+class TestMaxPainAndSkewMetrics:
+    """F-013: max-pain centering + skew-aware metrics."""
+
+    def test_max_pain_known_answer(self):
+        from backtest.chain_replay import _compute_max_pain
+        exp = "2026-06-19"
+        contracts = [
+            {"strike": 90.0, "option_type": "call", "open_interest": 200, "expiry": exp},
+            {"strike": 100.0, "option_type": "call", "open_interest": 50, "expiry": exp},
+            {"strike": 100.0, "option_type": "put", "open_interest": 50, "expiry": exp},
+            {"strike": 110.0, "option_type": "put", "open_interest": 100, "expiry": exp},
+        ]
+        # Heavy call OI at 90 pulls max pain down to 90 (those calls expire worthless there).
+        assert _compute_max_pain(contracts, exp) == 90.0
+
+    def test_max_pain_none_without_oi(self):
+        from backtest.chain_replay import _compute_max_pain
+        exp = "2026-06-19"
+        contracts = [{"strike": k, "option_type": "call", "open_interest": 0, "expiry": exp}
+                     for k in (90.0, 100.0, 110.0)]
+        assert _compute_max_pain(contracts, exp) is None  # no OI → caller falls back to ATM
+
+    def test_positive_skew_payoff_reads_positive(self):
+        # Many small losses + a few large wins (the butterfly/convex profile) → skew > 0.
+        from backtest.analyzer import analyze_results
+        from backtest.models import BacktestTrade
+        pnls = [-10.0] * 18 + [200.0, 220.0]
+        trades = [BacktestTrade(entry_date=date(2024, 1, 1), exit_date=date(2024, 1, 3),
+                                entry_price=1.0, exit_price=0.5, pnl=p, pnl_pct=1.0,
+                                dte_at_entry=7, dte_at_exit=1, win=p > 0) for p in pnls]
+        stats = analyze_results(trades)
+        assert stats.pnl_skew > 0
+
+
 class TestStatSanity:
     """F-011/F-005: stats must be sane and serializable."""
 

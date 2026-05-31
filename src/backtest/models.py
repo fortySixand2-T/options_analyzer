@@ -84,6 +84,12 @@ class BacktestStats(BaseModel):
     max_drawdown: float = 0.0               # $ worst peak-to-trough
     max_drawdown_pct: float = 0.0           # %
     sharpe_ratio: float = 0.0               # annualized
+    # Skew-aware metrics — Sharpe alone is misleading for convex, positively-
+    # skewed, defined-risk payoffs (e.g. butterflies): it penalizes variance
+    # symmetrically and assumes ~normal returns. See FINDINGS.md F-013.
+    sortino_ratio: float = 0.0              # annualized, downside-deviation only
+    pnl_skew: float = 0.0                   # skew of per-trade P&L (>0 = positive/convex)
+    return_on_risk: float = 0.0             # avg P&L / avg premium at risk (expectancy per $ risked)
     avg_dte_at_entry: float = 0.0
     avg_days_in_trade: float = 0.0
 

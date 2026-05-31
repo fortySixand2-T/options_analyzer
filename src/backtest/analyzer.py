@@ -79,10 +79,20 @@ def analyze_results(trades: List[BacktestTrade],
     if equity_curve is not None and len(equity_curve) >= 2:
         max_dd, max_dd_pct = _compute_max_drawdown(equity_curve)
         sharpe = _compute_sharpe_from_curve(equity_curve, periods_per_year)
+        sortino = _compute_sortino_from_curve(equity_curve, periods_per_year)
     else:
         equity = _compute_equity_curve(pnls)
         max_dd, max_dd_pct = _compute_max_drawdown(equity)
         sharpe = _compute_sharpe(pnls)
+        sortino = _compute_sortino(pnls)
+
+    # Skew-aware metrics (F-013): payoff skew and expectancy-per-$-risked. For
+    # convex/defined-risk payoffs these say more than Sharpe.
+    pnl_skew = _compute_skew(pnls)
+    # Premium at risk ≈ |entry premium| × 100 (a proxy for capital at risk).
+    risks = [abs(t.entry_price) * 100 for t in trades if t.entry_price]
+    avg_risk = float(np.mean(risks)) if risks else 0.0
+    return_on_risk = (avg_pnl / avg_risk) if avg_risk > 0 else 0.0
 
     # Average DTE and hold time
     avg_dte = float(np.mean([t.dte_at_entry for t in trades]))
@@ -103,6 +113,9 @@ def analyze_results(trades: List[BacktestTrade],
         max_drawdown=round(max_dd, 2),
         max_drawdown_pct=round(max_dd_pct, 1),
         sharpe_ratio=round(sharpe, 2),
+        sortino_ratio=round(sortino, 2),
+        pnl_skew=round(pnl_skew, 2),
+        return_on_risk=round(return_on_risk, 3),
         avg_dte_at_entry=round(avg_dte, 1),
         avg_days_in_trade=round(avg_days, 1),
     )
@@ -260,3 +273,50 @@ def _compute_sharpe_from_curve(equity_curve: List[float],
     if std < 1e-10:
         return 0.0
     return mean / std * np.sqrt(max(periods_per_year, 1e-9))
+
+
+def _downside_dev(arr: np.ndarray) -> float:
+    """Downside deviation: RMS of negative values only (target = 0)."""
+    downside = arr[arr < 0]
+    if downside.size == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(downside ** 2)))
+
+
+def _compute_sortino_from_curve(equity_curve: List[float], periods_per_year: float) -> float:
+    """Annualized Sortino from the time-indexed equity curve's periodic returns.
+
+    Like Sharpe but divides by DOWNSIDE deviation only — it does not penalize
+    upside variance, so it does not punish positively-skewed payoffs (F-013).
+    """
+    arr = np.asarray(equity_curve, dtype=float)
+    if arr.size < 3:
+        return 0.0
+    returns = np.diff(arr)
+    dd = _downside_dev(returns)
+    if dd < 1e-10:
+        return 0.0
+    return float(np.mean(returns)) / dd * np.sqrt(max(periods_per_year, 1e-9))
+
+
+def _compute_sortino(pnls: List[float], trades_per_year: float = 52.0) -> float:
+    """Per-trade Sortino fallback (no equity curve)."""
+    if len(pnls) < 2:
+        return 0.0
+    arr = np.array(pnls, dtype=float)
+    dd = _downside_dev(arr)
+    if dd < 1e-10:
+        return 0.0
+    return float(np.mean(arr)) / dd * np.sqrt(trades_per_year)
+
+
+def _compute_skew(pnls: List[float]) -> float:
+    """Skew of the per-trade P&L distribution (Fisher). >0 = positive/convex
+    (small frequent losses, rare large gains — the butterfly profile)."""
+    if len(pnls) < 3:
+        return 0.0
+    try:
+        from scipy.stats import skew
+        return float(skew(np.array(pnls, dtype=float)))
+    except Exception:
+        return 0.0

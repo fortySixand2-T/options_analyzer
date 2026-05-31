@@ -34,6 +34,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-010 | 2026-05-30 | local_backtest `dte_exit` overwrites profit_target/stop_loss label | FIXED (`exit_reason or "dte_exit"`) |
 | F-011 | 2026-05-30 | Tests assert structure/execution, never economic invariants → silent bugs pass | Addressed — tests/test_invariants.py (15 tests) guards F-002/004/006/008/009 |
 | F-012 | 2026-05-30 | Audit of scanner/sizing/market_state/edge surfaces (step 4) | Clean — live edge path deep-audited; unwired modules categorized (no deferred debt) |
+| F-013 | 2026-05-30 | Butterfly tested under wrong CONDITIONS (ATM not max-pain) and wrong METRICS (Sharpe for a convex payoff) | Metrics added (Sortino/skew/return-on-risk) + max-pain centering; proper validation OI-blocked |
 
 ---
 
@@ -548,3 +549,43 @@ those engines changes the key, so cached results self-invalidate on code change 
 bump, no need to clear `backtest_cache.db` after logic changes). Verified: cache still hits
 within a run (2.49s → 0.001s), and the cache-key tests pass. This removes the footgun that
 masked the F-004 fix for a turn.
+
+---
+
+## F-013 — Butterfly judged by the wrong metrics under the wrong conditions
+**Date:** 2026-05-30 · **Status:** Metrics + max-pain centering shipped; proper validation OI-blocked
+
+**Observed.** After fixing the butterfly *pricing* (F-009), we still concluded "butterfly =
+loser." But the *evaluation* is inappropriate for the structure on two axes:
+
+1. **Wrong metrics.** A long butterfly is a **defined-risk, positively-skewed, convex pin
+   bet** (small frequent losses, rare large gains). **Sharpe** penalizes variance
+   symmetrically and assumes ~normal returns, so it **systematically understates positive-
+   skew** payoffs and **flatters negative-skew** ones (premium selling). Ranking a butterfly
+   by Sharpe is a category error. Confirmed empirically once skew was measured: butterfly SPY
+   **skew +0.77** (convex) vs short_put_spread **skew −1.18** (the premium-seller's hidden
+   left tail Sharpe hides). The options-returns literature (variance risk premium; Coval &
+   Shumway 2001; Bakshi–Kapadia delta-hedged gains) is about *averages/VRP*, not a canonical
+   butterfly return — and warns precisely that skew/tails, not Sharpe, drive option-payoff
+   evaluation.
+2. **Wrong conditions.** Both engines centered the butterfly at **ATM**, though the spec says
+   **pin at max pain**; no IV-rank / OPEX / distance-to-pin gating. So our negative result was
+   for "an ATM butterfly on generic exits judged by Sharpe" — not butterflies-done-right.
+
+**Shipped.**
+- **Skew-aware metrics** in `analyzer`/`BacktestStats`: `sortino_ratio` (downside-only),
+  `pnl_skew` (Fisher skew of per-trade P&L), `return_on_risk` (expectancy ÷ avg premium at
+  risk). Reported for all strategies; guarded by invariant tests. Stop ranking convex/
+  defined-risk bets by Sharpe alone.
+- **Max-pain centering** in `chain_replay._select_strikes` butterfly: `_compute_max_pain`
+  (OI-weighted) centers the fly at the pin when OI exists, else falls back to ATM.
+
+**Still blocked (honest external limitation, not code debt).** Max pain needs **open
+interest**, which the historical DB largely lacks (DATA_ISSUES §3): max-pain centering fires
+on only **SPY 9/93, QQQ 6/58** entries; the rest fall back to ATM. So we **cannot yet
+properly validate "max-pain butterfly under the right conditions"** without historical OI
+(ThetaData / CBOE). Re-tested as-is (max-pain where possible): butterfly remains negative
+(SPY −$5,448, Sortino −0.42, skew +0.77, return-on-risk −0.23). **Verdict: butterfly is
+unproven-not-disproven** — the negative result is on a still-data-limited, partially-correct
+test. Other strategies' metrics now also carry Sortino/skew/return-on-risk for fairer
+comparison.

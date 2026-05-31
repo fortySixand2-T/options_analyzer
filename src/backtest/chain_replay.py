@@ -364,14 +364,20 @@ def _select_strikes(contracts: List[dict], spot: float, strategy: str,
         }
 
     elif strategy == "butterfly":
-        atm_calls = sorted(calls, key=lambda c: abs(c["strike"] - spot))
+        # Center at MAX PAIN when OI is available (the pin the strategy actually
+        # targets), else fall back to ATM. F-013: ATM-centering tested the wrong
+        # thing — a long butterfly's edge is pinning at max pain, not at spot.
+        # (OI is absent on most historical snapshots — DATA_ISSUES §3 — so this
+        # falls back to ATM there; max-pain centering only bites where OI exists.)
+        center_target = _compute_max_pain(contracts, expiry) or spot
+        atm_calls = sorted(calls, key=lambda c: abs(c["strike"] - center_target))
         if len(atm_calls) < 1:
             return None
         center = atm_calls[0]
         wings_above = [c for c in calls if c["strike"] > center["strike"]]
         wings_below = [c for c in calls if c["strike"] < center["strike"]]
         if not wings_above or not wings_below:
-            atm_puts = sorted(puts, key=lambda c: abs(c["strike"] - spot))
+            atm_puts = sorted(puts, key=lambda c: abs(c["strike"] - center_target))
             if len(atm_puts) < 1:
                 return None
             center_put = atm_puts[0]
@@ -446,6 +452,32 @@ def _find_wing(options: List[dict], anchor_strike: float, direction: str) -> Opt
     else:
         candidates = [o for o in options if o["strike"] > anchor_strike]
         return candidates[0] if candidates else None
+
+
+def _compute_max_pain(contracts: List[dict], expiry: str) -> Optional[float]:
+    """Max-pain strike: the settlement price that minimizes total ITM payout to
+    option holders, weighted by open interest.
+
+    Returns None when no OI is available (the common case in this DB — OI exists
+    only on recent snapshots, DATA_ISSUES.md §3), so callers fall back to ATM.
+    """
+    legs = [c for c in contracts
+            if c["expiry"] == expiry and (c.get("open_interest") or 0) > 0]
+    strikes = sorted({c["strike"] for c in legs})
+    if len(strikes) < 3:
+        return None
+
+    calls = [(c["strike"], c["open_interest"]) for c in legs if c["option_type"] == "call"]
+    puts = [(c["strike"], c["open_interest"]) for c in legs if c["option_type"] == "put"]
+
+    best_strike, best_pain = None, float("inf")
+    for K in strikes:
+        # Pain at settlement K = $ paid out on all ITM calls + ITM puts.
+        pain = (sum(oi * (K - cs) for cs, oi in calls if cs < K)
+                + sum(oi * (ps - K) for ps, oi in puts if ps > K))
+        if pain < best_pain:
+            best_pain, best_strike = pain, K
+    return best_strike
 
 
 def _leg_fill_price(quote: dict, side: str, action: str, fill_mode: str) -> float:
