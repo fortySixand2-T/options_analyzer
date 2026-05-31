@@ -249,13 +249,27 @@ def _select_strikes(contracts: List[dict], spot: float, strategy: str,
 
     Returns dict with strategy legs or None if insufficient strikes.
     """
+    if not contracts:
+        return None
+
+    # Constrain to a SINGLE expiry before picking legs. `contracts` spans the
+    # whole entry DTE window (multiple expiries, loaded ORDER BY expiry,strike),
+    # so selecting strikes from the mixed pool let a "vertical" take legs from
+    # DIFFERENT expiries — the longer-dated leg carries more time value, which
+    # produced impossible premiums (e.g. a +$4.51 "credit" on a $1-wide spread)
+    # and phantom profit. This was the real root cause of F-008 (NOT a marks /
+    # data-feed problem; the per-expiry chain is clean and monotonic). Pick the
+    # nearest expiry in the window (contracts are already ordered by expiry) so
+    # entry and exit (which use this expiry) are consistent.
+    expiry = contracts[0]["expiry"]
+    contracts = [c for c in contracts if c["expiry"] == expiry]
+
     puts = sorted([c for c in contracts if c["option_type"] == "put"], key=lambda c: c["strike"])
     calls = sorted([c for c in contracts if c["option_type"] == "call"], key=lambda c: c["strike"])
 
     if not puts or not calls:
         return None
 
-    expiry = contracts[0]["expiry"]
     dte = max((date.fromisoformat(expiry) - date.fromisoformat(contracts[0].get("_snap_date", expiry))).days, 1)
 
     otm_puts = [p for p in puts if p["strike"] < spot]

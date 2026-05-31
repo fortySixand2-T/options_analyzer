@@ -128,24 +128,29 @@ exit-clustering correlation but not intra-hold unrealized vol. Architectural con
 **performance is measured on a portfolio timeline, not a trade ledger** — the natural
 basis for the concurrency/return model and for the perturbation harness.
 
-### 1e. Mark fidelity becomes a correctness gate (F-008)
+### 1e. Strike selection must be single-expiry (F-008) — and a defined-risk invariant gate
 
-Tracing a "too good" result (QQQ `long_put_spread` 100% WR) exposed that close-based marks
-are **non-synchronous last trades**: adjacent illiquid strikes' last prints occur at
-different intraday moments, producing cross-sectionally **impossible** spread premiums
-(`|entry_net| > strike_span` in 40–96% of entries). Booked, they "decay to zero" into
-phantom profit — which had silently inflated spread results (SPY `long_put` +$5,164→−$19
-once gated; butterfly −$57k→−$5.9k).
+Tracing a "too good" result (QQQ `long_put_spread` 100% WR) exposed a **strike-selection
+bug**: `_select_strikes` chose legs from the *entire* entry DTE window, which spans multiple
+expiries, so a "vertical" took its two legs from **different expiries** — a calendar/diagonal
+whose value far exceeds the strike span. This produced impossible premiums
+(`|entry_net| > strike_span` in 40–96% of entries) that "decayed to zero" into phantom
+profit, silently inflating spread results (SPY `long_put` +$5,164→−$650; butterfly −$57k→−$5.1k).
 
-Two consequences for the architecture:
-- **A defined-risk invariant is now enforced at entry**: reject `|entry_net| > strike_span`.
-  Mark plausibility is a correctness gate, not just a stat.
-- **Trade-based pricing is structurally inadequate for these instruments.** Measured: the
-  $1-wide short-DTE legs trade about once a day or not at all, so neither daily nor minute
-  bars can give synchronized or even present marks. Only **continuous NBBO quotes** can —
-  which re-prioritizes the (gated) quotes feed from "nice-to-have realism" to "the thing
-  that makes spread backtesting trustworthy." Until then, chain-replay spread results are
-  provisional and the valid (post-gate) sample is small.
+> Correction trail: this was first mis-attributed to "every-other-day cadence" (data is
+> already daily) and then to "non-synchronous marks → need OPRA quotes" (the per-expiry chain
+> is actually clean and monotonic). It was a **free code bug**, caught by inspecting the
+> selected legs' expiries. Lesson: inspect the objects before escalating to a paid feed.
+
+Architectural consequences:
+- **Spread construction is now single-expiry by contract.** `_select_strikes` filters to the
+  nearest expiry before picking strikes, so all legs (and entry/exit) share one expiration.
+- **A defined-risk invariant is enforced at entry** as a cheap backstop: reject
+  `|entry_net| > strike_span` (catches the rare residual from wide/odd quotes).
+- After the fix, chain-replay spread results are realistic (credit spreads 80–85% WR,
+  modest PF; debit/fly mostly mediocre) — trustworthy enough for the OOS/perturbation gate,
+  with **no data subscription required**. (Real NBBO quotes remain a *nice-to-have* for true
+  bid/ask realism and F-007 intra-hold resolution, not a correctness blocker.)
 
 ### 1c. Emerging principle — perturbation stability as a design constraint
 

@@ -29,7 +29,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-005 | 2026-05-30 | Backtest result cache not invalidated on code change | Mitigated; follow-up open |
 | F-006 | 2026-05-30 | Concurrency makes overlapping trades correlated → inflated Sharpe/PF | Resolved (time-indexed MTM) |
 | F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Reframed — data already daily; granularity is exit-logic-bound; finer risk needs INTRADAY data |
-| F-008 | 2026-05-30 | Non-synchronous close marks → impossible spread premiums → phantom profit (40-96% of entries) | Mitigated (sanity gate); real fix needs synchronized NBBO quotes |
+| F-008 | 2026-05-30 | Impossible spread premiums → phantom profit. ROOT CAUSE (corrected): `_select_strikes` picked legs from DIFFERENT expiries | Fixed (same-expiry constraint) — free code fix, no data feed needed |
 
 ---
 
@@ -318,14 +318,45 @@ density and the real cause — and remedy (1) is a **no-op**:
 daily and the gap isn't cadence. Update: also measured **minute bars** (the next candidate
 lever) — they do **not** help either, because the actual short-DTE $1-wide legs barely trade
 (SPY 640 put: one print/day; adjacent strikes: zero). No *trade-based* source resolves this.
-The only real lever is **continuous NBBO quotes** (gated, OPRA), which would fix both F-007
-(intra-hold resolution) and F-008 (synchronized cross-section). Lesson logged: measure
+For F-007's own residual (intra-hold resolution on no-trade days) continuous NBBO quotes
+would help, but it is **minor**: SPY's MTM already shows a real drawdown ($6,337) and a
+believable Sharpe, and these short-DTE trades exit fast so there is little hold to mark.
+**Correction:** F-008 — which last turn I wrongly lumped in here as also "needing quotes" —
+turned out to be a free code bug (cross-expiry leg selection), not a marks/feed problem.
+So F-007 stands alone as a low-severity data nicety, not a blocker. Lesson logged: measure
 existing density/cause before proposing (or running) a remedy.
 
 ---
 
-## F-008 — Non-synchronous close marks create impossible spread premiums → phantom profit
-**Date:** 2026-05-30 · **Status:** Mitigated by a sanity gate; true fix needs synchronized NBBO quotes
+## F-008 — Impossible spread premiums → phantom profit
+**Date:** 2026-05-30 · **Status:** FIXED (same-expiry leg constraint — a free code fix)
+
+> **CORRECTION (2026-05-30, supersedes the marks hypothesis below).** The root cause is
+> **NOT** non-synchronous close marks and does **NOT** need a quote subscription. It is a
+> strike-selection bug: `_select_strikes` built `puts`/`calls` from the *entire* entry DTE
+> window — which spans **multiple expiries** — and sorted by strike only, so a "vertical"
+> took its two legs from **different expiries**. The longer-dated leg carries more time
+> value, so the "spread" premium was really a calendar/diagonal value, far exceeding the
+> strike span. Verified: every traced entry had mismatched leg expiries (e.g.
+> `['2026-04-30','2026-05-08']`), while each *per-expiry* chain is clean and monotonic.
+> **Fix:** constrain `_select_strikes` to a single (nearest) expiry before picking legs, so
+> entry and exit (which already use one expiry) are consistent. After the fix: cross-expiry
+> legs 0/all; impossible-premium rate QQQ 96%→~2% (1 residual), SPY 40%→0%. The F-008 sanity
+> gate (`|entry_net| > strike_span`) remains as a cheap backstop for the rare residual.
+>
+> **Corrected, trustworthy results** (full sample, same-expiry, exit_rule=strategy):
+> short_put_spread QQQ +$366/PF2.14/Sharpe1.64, SPY −$1,556/PF0.81; iron_condor QQQ
+> +$577/PF1.77, SPY −$905; long_call SPY +$1,029/PF1.06; butterfly negative both. Believable
+> mediocre-to-modest numbers — the prior 100%-WR/Sharpe-18 phantoms are gone.
+>
+> **Lesson (again):** I wrongly blamed the data twice (first "daily backfill", then "non-
+> synchronous marks → need OPRA quotes") before *inspecting the chain*, which showed it was
+> clean per-expiry and the legs spanned expiries — a free code bug. Inspect the actual
+> objects before escalating to an external/paid dependency. See [[diagnose-root-cause-before-remedy]].
+>
+> The original (incorrect) marks hypothesis is preserved below for the record.
+
+**[SUPERSEDED HYPOTHESIS]** Originally diagnosed as non-synchronous close marks; kept for history:
 
 **Observed.** QQQ `long_put_spread` (2025-05→2026-05): 55/55 trades exit `profit_target`,
 **median hold 1 day**, 100% win rate, Sharpe ~7.5, DD 0. Suspicious enough to inspect.
