@@ -30,6 +30,9 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-006 | 2026-05-30 | Concurrency makes overlapping trades correlated → inflated Sharpe/PF | Resolved (time-indexed MTM) |
 | F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Reframed — data already daily; granularity is exit-logic-bound; finer risk needs INTRADAY data |
 | F-008 | 2026-05-30 | Impossible spread premiums → phantom profit. ROOT CAUSE (corrected): `_select_strikes` picked legs from DIFFERENT expiries | Fixed (same-expiry constraint) — free code fix, no data feed needed |
+| F-009 | 2026-05-30 | local_backtest prices `butterfly` as a single ATM call (no `butterfly` branch in `_price_strategy`) | Open (audit) — HIGH; invalidates butterfly BS results |
+| F-010 | 2026-05-30 | local_backtest `dte_exit` overwrites profit_target/stop_loss label | Open (audit) — LOW (mislabel) |
+| F-011 | 2026-05-30 | Tests assert structure/execution, never economic invariants → silent bugs pass | Open — plan below |
 
 ---
 
@@ -400,3 +403,93 @@ shrinks the valid sample (QQQ long_put → 2 trades), revealing we have **too fe
 spread trades on current data** to judge these strategies. The proper fix is synchronized
 NBBO quote marks (OPRA, gated). Until then, treat chain-replay spread results as
 **provisional**, and prefer strategies/underlyings where the valid sample survives the gate.
+
+---
+
+## F-009 — local_backtest prices `butterfly` as a single ATM call
+**Date:** 2026-05-30 · **Status:** Open (found in code audit) — HIGH
+
+**Observed.** `_price_strategy` in `local_backtest.py` has branches for `iron_butterfly`
+but **none for `butterfly`** (the active strategy name). A `butterfly` request therefore
+falls through to the `else` branch → `price_fn(spot, atm, T, r, iv, "call")` — it is valued
+as a **single long ATM call**, not a 4-leg butterfly.
+
+**Why it matters.** `butterfly` is an active, defined-risk strategy. The BS backtester has
+been valuing it as a long call the whole time. `VALIDATION_RESULTS.md` reported butterfly
+hold-to-expiry as the **best performer (+$11,459, Sharpe 1.23)** — that result is really a
+**long ATM call** in a 2022-2026 bull market, not a butterfly. The butterfly validation
+conclusion is invalid. (chain_replay builds 4 real legs and is structurally correct after
+the F-008 fix; this bug is local_backtest-only.)
+
+**Fix (planned).** Add a `butterfly` branch to `_price_strategy` with the correct payoff
+(buy 1 lower, sell 2 center, buy 1 upper; debit) and re-run the butterfly validation.
+
+---
+
+## F-010 — local_backtest `dte_exit` overwrites the profit/stop exit label
+**Date:** 2026-05-30 · **Status:** Open (found in code audit) — LOW
+
+**Observed.** In `_simulate_trades`, `if dte_remaining <= time_exit_dte: exit_reason = "dte_exit"`
+**unconditionally overwrites** any `profit_target`/`stop_loss` set just above. chain_replay
+uses the correct `exit_reason = exit_reason or "dte_exit"`.
+
+**Why it matters.** Same *class* as a P&L bug fixed earlier (dte overriding P&L exits), but
+here it only affects the exit-reason *label* on the final bar (the P&L is unchanged), so it
+distorts exit-reason breakdowns rather than returns. Low severity; fix for consistency.
+
+---
+
+## F-011 — Tests assert structure/execution, never economic invariants
+**Date:** 2026-05-30 · **Status:** Open — remediation plan below
+
+**Observed.** Every silent bug this session (F-002 sign, F-003 fake spread, F-004 path,
+F-006 return-series, F-008 cross-expiry, F-009 butterfly→call) passed the full suite. Why:
+the tests assert the pipeline **runs and produces plausibly-shaped output** — "produces
+trades", "total_trades ≥ 5", "win_rate is a float", "equity_curve has length", "result has
+regime_breakdown" — and a few synthetic known-answer checks (intrinsic exit). They never
+assert **economic/financial invariants** or **per-strategy known-answer pricing**. They also
+run against the live DB (no fixtures), so they can only bound shape, not values.
+
+**Why it matters.** This is *the* reason the bugs were invisible: wrong-but-runnable numbers
+sail through structural checks. Plugging individual bugs without closing this gap guarantees
+the next silent bug also ships.
+
+**Remediation — invariant test layer (do this before the OOS/perturbation harness).**
+Add `tests/test_invariants.py` (fixture-based + small real-data sample) asserting:
+1. **Defined-risk bound:** every spread's `|entry_net| ≤ strike_span` (would catch F-008).
+2. **Single expiry:** all legs of a vertical/condor/fly share one expiry (F-008).
+3. **Per-strategy payoff known-answers:** butterfly peaks at center & risk = debit; condor
+   credit ≤ wing width; etc. — drives `_price_strategy` correctness (catches F-009).
+4. **Slippage monotonicity:** higher `slippage_pct` ⇒ P&L only decreases (F-006/slippage).
+5. **Perturbation stability:** a <1% fill perturbation does not change the trade *count*
+   (catches F-004 regressions).
+6. **P&L sign known-answers:** a constructed winning/losing scenario yields the right sign
+   per strategy and per backtester (catches F-002).
+7. **Stat sanity:** `0 ≤ win_rate ≤ 100`; `profit_factor` serializable (no raw `inf`);
+   `total_pnl ≈ equity_curve[-1]`.
+8. **Exit-label correctness:** profit/stop not overwritten by dte (catches F-010).
+
+---
+
+# Remediation Plan (audit → fixes → invariants, before the OOS harness)
+
+**Order (each step ends green + a committed invariant test that would have caught it):**
+
+1. **F-009 (HIGH):** add `butterfly` to `_price_strategy`; re-run + correct the butterfly
+   entries in VALIDATION_RESULTS.md. Add payoff known-answer test (invariant #3).
+2. **F-010 (LOW):** `exit_reason = exit_reason or "dte_exit"` in local_backtest. Add #8.
+3. **F-011 (systemic):** build `tests/test_invariants.py` (#1–#8). This is the real
+   deliverable — it converts each past bug into a permanent guard.
+4. **Extend the audit** to the not-yet-reviewed surfaces with the same lens: `src/scanner/`
+   (scorer, strategy_pricer, strategy_mapper), `src/market_state.py`, `src/edge/*`,
+   `src/sizing.py`/`portfolio.py`. Log anything as F-0NN.
+5. **Cache-version key (F-005):** add a logic/source-hash to the backtest cache key so a
+   code change self-invalidates stale results (this masked F-004 for a turn).
+
+**Only after 1–5 is green** proceed to the OOS / perturbation harness — it must run on a
+backtester whose results are trustworthy, or it will optimize against artifacts.
+
+**Audit coverage note.** This pass focused on the two backtest engines + their signal/
+lookahead paths. Lookahead was checked and is clean (rolling vol, regime, bias all use
+past-only windows in both engines). Strike selection, P&L sign, pricing, and exit logic are
+covered by F-001…F-010. Surfaces in step 4 are NOT yet audited.
