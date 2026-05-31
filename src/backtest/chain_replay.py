@@ -590,8 +590,6 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
     skipped_no_exit = 0
     skipped_filter = 0
     exit_used_intrinsic = 0
-    open_position = None
-    next_entry_idx = 0
     entry_interval = 5
 
     exit_rules = _get_exit_rules(request.strategy)
@@ -604,23 +602,25 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
 
     ohlcv_df = _fetch_ohlcv_for_bias(request.symbol, request.start_date, request.end_date)
 
-    for idx, snap in enumerate(snapshots):
-        if open_position:
-            trade_result = _check_exit(
-                conn, request.symbol, snap, open_position,
-                exit_rules, request, rolling_vol, idx,
-            )
-            if trade_result:
-                if trade_result.get("_used_intrinsic"):
-                    exit_used_intrinsic += 1
-                bt = trade_result["trade"]
-                trades.append(bt)
-                open_position = None
-                next_entry_idx = idx + 3
-            continue
-
-        if idx < next_entry_idx:
-            continue
+    # Path-stable design: entries fire on a FIXED snapshot cadence, independent
+    # of any prior trade's outcome, and each position's exit is found by an
+    # independent forward scan. This decouples the trade SET from P&L, so
+    # perturbing fills / slippage / exit thresholds changes each trade's
+    # OUTCOME but not WHICH trades exist — the prerequisite for meaningful
+    # perturbation and robustness analysis.
+    #
+    # The previous design held one position at a time and set the next entry to
+    # `exit_idx + 3`, so the entry calendar depended on prior exit timing. A
+    # sub-1% P&L perturbation then shifted an exit by one snapshot and
+    # reshuffled the entire downstream trade sequence (observed: long_put_spread
+    # QQQ flipping 51% -> 100% win rate between 0% and 1% slippage). See
+    # FINDINGS.md (F-004) and ARCHITECTURE_EVOLUTION.md.
+    #
+    # Positions may now overlap (concurrency is allowed); per-trade P&L is
+    # summed, which is the correct basis for measuring per-trade edge.
+    n = len(snapshots)
+    for idx in range(0, n, entry_interval):
+        snap = snapshots[idx]
 
         iv = rolling_vol[idx] if idx < len(rolling_vol) else 0.20
         regime = _classify_regime(iv, rolling_vol, idx)
@@ -699,7 +699,22 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
             "iv_at_entry": iv,
             "avg_spread_pct": np.mean(spread_pcts) if spread_pcts else 0,
         }
-        next_entry_idx = idx + entry_interval
+
+        # Independent forward scan for this position's exit — does not touch or
+        # depend on any other position, so the trade set stays fixed.
+        for j in range(idx + 1, n):
+            trade_result = _check_exit(
+                conn, request.symbol, snapshots[j], open_position,
+                exit_rules, request, rolling_vol, j,
+            )
+            if trade_result:
+                if trade_result.get("_used_intrinsic"):
+                    exit_used_intrinsic += 1
+                trades.append(trade_result["trade"])
+                break
+        else:
+            # Ran off the end of the data without an exit trigger.
+            skipped_no_exit += 1
 
     if skipped_no_strikes > 0:
         issues.append(f"{skipped_no_strikes} entries skipped — insufficient strikes in chain")

@@ -1,0 +1,190 @@
+<!--
+  FINDINGS.md — append-only, sequenced log of investigation findings.
+
+  Convention:
+  - One entry per finding, numbered F-001, F-002, ... NEVER renumber or delete;
+    findings are immutable once written. If a finding is later overturned, add a
+    NEW finding that supersedes it and update the older entry's Status line to
+    "Superseded by F-NNN" (leave its body intact for the historical record).
+  - Newest finding at the BOTTOM (chronological). The index table at the top is
+    regenerated when a finding is added.
+  - Each finding records: what was observed, the evidence, why it matters, the
+    resolution, and any follow-up. This is the narrative companion to
+    CHANGELOG.md (which records file-level edits) and ARCHITECTURE_EVOLUTION.md
+    (which records how the design is changing).
+-->
+
+# Findings Log
+
+A running, append-only record of what we've learned while hardening the
+backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
+`ARCHITECTURE_EVOLUTION.md` (design changes).
+
+| ID | Date | Finding | Status |
+|----|------|---------|--------|
+| F-001 | 2026-05-30 | Chain-replay priced fills at mid with no slippage (optimistic) | Resolved |
+| F-002 | 2026-05-30 | Debit-spread P&L sign inversion in chain-replay | Fixed |
+| F-003 | 2026-05-30 | Alpaca backfill fabricated bid/ask from OHLC range (~27% fake spreads) | Fixed + data migrated |
+| F-004 | 2026-05-30 | Sequential single-position loop was path-dependent | Fixed (decoupled) |
+| F-005 | 2026-05-30 | Backtest result cache not invalidated on code change | Mitigated; follow-up open |
+| F-006 | 2026-05-30 | Concurrency makes overlapping trades correlated → inflated Sharpe/PF | Open (design) |
+
+---
+
+## F-001 — Chain-replay priced fills at mid, ignoring spread and slippage
+**Date:** 2026-05-30 · **Status:** Resolved
+
+**Observed.** `chain_replay` already used *real* snapshot quotes (not Black-Scholes),
+but priced both entry and exit at the **mid** and applied **no slippage at all**
+(`request.slippage_pct` was silently ignored). `local_backtest` (BS) was the only
+backtester modeling slippage.
+
+**Evidence.** `_compute_entry_price` / `_compute_exit_price` read `leg["contract"]["mid"]`;
+`grep slippage src/backtest/chain_replay.py` returned nothing. The team's own
+`docs/pricing_validation_report.md` had already shown mid pricing is "fantasy"
+(swing strategies: 97% WR / Sharpe 3.4 at mid vs 45% / −0.21 at real bid/ask).
+
+**Why it matters.** Mid fills overstate edge by the full half-spread on every leg,
+on both entry and exit — most damaging to multi-leg, spread-sensitive structures.
+
+**Resolution.** Added `_leg_fill_price()` (buys lift the ask, sells hit the bid;
+exits reverse) gated by `request.fill_mode` (`"bid_ask"` default, `"mid"` legacy
+for A/B). A/B on the stable Dolt window (SPY 2023-01→2024-06): bid/ask shaved P&L
+on every strategy (short_put 959→934, long_call 4284→4230, butterfly −2384→−2702).
+
+**Follow-up.** See F-003 (the 2025+ "bid/ask" turned out to be fabricated).
+
+---
+
+## F-002 — Debit-spread P&L sign inversion in chain-replay
+**Date:** 2026-05-30 · **Status:** Fixed
+
+**Observed.** While A/B-testing fills, debit spreads moved the *wrong* way — worse
+fills produced *better* reported P&L.
+
+**Evidence.** `_check_exit` used `pnl = entry_net - current_value` for credit but
+`current_value - entry_net` for debit. Both `entry_net` and `current_value` are in
+the same leg orientation (sell legs +, buy legs −), so the unified formula
+`entry_net - current_value` is correct for *both*. Synthetic proof: a long call
+spread that appreciated 2.00→2.50 (a +0.50 winner) reported **−0.50**. After the
+fix it reports +0.50.
+
+**Why it matters.** Every debit strategy (long call/put spreads, butterfly) had its
+P&L sign flipped — chain-replay reported the reliable long-call-spread winner as a
+loser.
+
+**Resolution.** Collapsed to the single formula `pnl = entry_net - current_value`.
+The fix makes `long_call_spread` profitable in chain-replay (+$3,602, PF 1.48,
+Sharpe 1.32 on the 2022-2024 Dolt window), reconciling it with
+`VALIDATION_RESULTS.md`.
+
+---
+
+## F-003 — Alpaca backfill fabricated bid/ask from each bar's OHLC range
+**Date:** 2026-05-30 · **Status:** Fixed + existing data migrated
+
+**Observed.** After F-001/F-002, butterflies and long spreads on 2025+ data still
+looked catastrophic (WR ~0%, PF ~0) while the same strategies were sane on
+2020-2024 data (2024 butterfly: +$928, capped losses).
+
+**Evidence.** Alpaca options history is OHLC **bars**, not quotes. The backfill
+(`backfill_pipeline._estimate_bid_ask`) set `bid = min(open, close)`,
+`ask = max(open, close)` — treating a bar's intrabar price *movement* as a quoted
+*spread*. DB audit: `label='backfill'` rows (2025+) had an implied spread of
+**~25-27%** vs ~5-8% on real-quote Dolt rows. The bar **close** was preserved in the
+`last` column. Both repos pull the same Alpaca option bars; options-algo-trader uses
+the bar **close** as the fill — options_analyzer was alone in fabricating a spread.
+
+**Why it matters.** A 4-leg butterfly crossing a fake 25% spread four times is
+unfillable by construction — the contamination, not the strategy, produced the
+catastrophe. It silently corrupted every 2025+ chain-replay result.
+
+**Resolution.** `_estimate_bid_ask` now uses the bar close as a single traded price
+(`bid == ask == mid == close`), mirroring options-algo-trader; real fill cost is
+modeled by `slippage_pct`, not a fabricated spread. `scripts/migrate_backfill_fills.py`
+repaired existing rows: **512,759** `label='backfill'` contracts collapsed to the
+real close (avg fabricated spread 26.9% → 0%); real-quote sources (`dolt`, yfinance
+`eod`/`midday`/`shortdte`) left untouched. DB backed up first.
+
+**Follow-up.** True bid/ask requires Alpaca's options **quotes** endpoint
+(`/v1beta1/options/quotes`, available ~Feb 2024) — tracked as backlog item #2. Until
+then 2025+ fills are close±slippage, not true NBBO.
+
+---
+
+## F-004 — The sequential single-position loop was path-dependent
+**Date:** 2026-05-30 · **Status:** Fixed (loop decoupled)
+
+**Observed.** Even after the slippage math was made a provably strict per-trade cost
+(`pnl' = pnl − sₑ − sₓ`), a tiny slippage change produced impossible *aggregate*
+swings: `long_put_spread` QQQ flipped **51% → 100% win rate** (and Sharpe ~18)
+between 0% and 1% slippage.
+
+**Evidence.** The trade **count** changed with slippage (66 → 55 → 69) — proof the
+trade *set* itself was moving, not just per-trade outcomes. Root cause: the loop held
+one position at a time and set the next entry to `exit_idx + 3`, so the entry
+calendar depended on the prior trade's exit timing. A sub-1% P&L perturbation shifted
+one exit by a snapshot and reshuffled the entire downstream sequence (classic
+path-dependence in a serialized single-position backtester).
+
+**Why it matters.** Path-dependence makes the backtester chaotic under perturbation:
+slippage, fill mode, and exit-threshold sweeps measure *trade-set reshuffling*, not
+*sensitivity*. It also undermines confidence in the point estimates. This is the
+prerequisite blocker for any perturbation/robustness analysis (and for trusting
+slippage at all).
+
+**Resolution.** Decoupled trade selection from exits: entries now fire on a **fixed
+snapshot cadence** (`range(0, n, entry_interval)`), independent of any prior trade,
+and each position's exit is found by an **independent forward scan**. Positions may
+overlap (concurrency allowed). Validated (cache cleared — see F-005): trade count is
+now **fixed** across slippage (long_put SPY 132/132/132; QQQ 55/55/55), win rate is
+**stable**, and P&L **decreases monotonically** with slippage (long_put SPY
+16486→16102→15718). Perturbation now measures sensitivity, not chaos.
+
+---
+
+## F-005 — Backtest result cache is not invalidated on code change
+**Date:** 2026-05-30 · **Status:** Mitigated (manual clear); follow-up open
+
+**Observed.** Immediately after the F-004 fix, the stability check *still* showed the
+old chaotic numbers.
+
+**Evidence.** `data/backtest_cache.db` keys results on request parameters only
+(strategy, dates, fill_mode, slippage, …) — **not** on a code/logic version. After a
+backtester logic change, identical request params returned **stale pre-fix results**.
+Clearing the cache (118 rows) immediately revealed the correct, path-stable behavior.
+
+**Why it matters.** Any backtester logic change silently serves wrong cached results
+until the cache is manually cleared — a serious correctness footgun during iteration.
+
+**Resolution / follow-up.** Mitigated by clearing the cache after logic changes. OPEN:
+add a `logic_version` (or source hash) component to `_cache_key()` so caches
+self-invalidate when backtester logic changes.
+
+---
+
+## F-006 — Concurrency makes overlapping trades correlated → inflated Sharpe/PF
+**Date:** 2026-05-30 · **Status:** Open (design decision)
+
+**Observed.** The F-004 fix allows concurrent overlapping positions. In a strongly
+one-directional period this inflates risk-adjusted metrics: `long_put_spread` QQQ
+(2025-05→2026-05) shows **100% WR, PF ∞, Sharpe ~18** — now stable across slippage,
+but not credible as an edge.
+
+**Evidence.** With entries every ~10 days and holds of similar length, many positions
+overlap. In a trending year they are highly correlated bets on the *same* move, so
+they win together. Sharpe assumes independent returns; correlated overlapping trades
+violate that and overstate Sharpe/PF.
+
+**Why it matters.** Concurrency was necessary for path-stability (F-004) and is fine
+for measuring *per-trade mean edge*, but the equity-curve Sharpe/PF/`max_drawdown`
+now treat correlated trades as independent samples.
+
+**Resolution options (open).**
+1. Report a **concurrency-adjusted** equity curve (mark-to-market across overlapping
+   positions) rather than a naive cumsum of per-trade P&L.
+2. Cap concurrency / dedupe near-identical overlapping entries.
+3. Keep concurrency for the *trade set* but compute Sharpe on a non-overlapping or
+   calendar-resampled return series.
+Decision pending; until then, treat Sharpe/PF on trending single-direction windows as
+upper bounds and lean on win rate + mean P&L + OOS for judgment.
