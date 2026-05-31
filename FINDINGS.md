@@ -27,7 +27,8 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-003 | 2026-05-30 | Alpaca backfill fabricated bid/ask from OHLC range (~27% fake spreads) | Fixed + data migrated |
 | F-004 | 2026-05-30 | Sequential single-position loop was path-dependent | Fixed (decoupled) |
 | F-005 | 2026-05-30 | Backtest result cache not invalidated on code change | Mitigated; follow-up open |
-| F-006 | 2026-05-30 | Concurrency makes overlapping trades correlated → inflated Sharpe/PF | Open (design) |
+| F-006 | 2026-05-30 | Concurrency makes overlapping trades correlated → inflated Sharpe/PF | Resolved (time-indexed MTM) |
+| F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Open (data-limited) |
 
 ---
 
@@ -164,7 +165,7 @@ self-invalidate when backtester logic changes.
 ---
 
 ## F-006 — Concurrency makes overlapping trades correlated → inflated Sharpe/PF
-**Date:** 2026-05-30 · **Status:** Open (design decision)
+**Date:** 2026-05-30 · **Status:** Resolved (risk metrics now computed on a time-indexed mark-to-market curve)
 
 **Observed.** The F-004 fix allows concurrent overlapping positions. In a strongly
 one-directional period this inflates risk-adjusted metrics: `long_put_spread` QQQ
@@ -180,11 +181,54 @@ violate that and overstate Sharpe/PF.
 for measuring *per-trade mean edge*, but the equity-curve Sharpe/PF/`max_drawdown`
 now treat correlated trades as independent samples.
 
-**Resolution options (open).**
-1. Report a **concurrency-adjusted** equity curve (mark-to-market across overlapping
-   positions) rather than a naive cumsum of per-trade P&L.
-2. Cap concurrency / dedupe near-identical overlapping entries.
-3. Keep concurrency for the *trade set* but compute Sharpe on a non-overlapping or
-   calendar-resampled return series.
-Decision pending; until then, treat Sharpe/PF on trending single-direction windows as
-upper bounds and lean on win rate + mean P&L + OOS for judgment.
+**Resolution (chose option 1/3).** Risk metrics are now computed from a **time-indexed
+mark-to-market portfolio curve** instead of the per-trade P&L series. `chain_replay`
+builds, per snapshot, the portfolio's realized+unrealized $ value (each position
+contributes its mark while open and its realized P&L thereafter); `analyzer.analyze_results`
+computes Sharpe and max-drawdown from that curve's periodic returns, annualized by the
+actual snapshots-per-year. Effect: a day the market moves is one high-variance period
+(correlated positions move together), instead of N independent "wins". Per-trade
+descriptive stats (win rate, PF, avg win/loss) are unchanged — they correctly describe
+the trade sample.
+
+**Evidence of fix.** `long_put_spread` SPY Sharpe dropped from the per-trade ~18 to
+**1.76**, with a now-meaningful max drawdown of $6,337 (was ~0); stable across slippage
+(1.76 → 1.69 at 2%). `butterfly` SPY correctly −2.73.
+
+**Residual / caveats.** (1) `long_put_spread` QQQ (2025-05→2026-05) still shows Sharpe
+~7.5 / max-DD 0 — but this is now a *regime/sample* artifact (a thin, one-directional
+down-year where 55 overlapping bearish spreads all won), to be caught by the OOS /
+cross-asset axis, not a statistical-independence bug. (2) The MTM curve is data-limited
+— see **F-007**. (3) Profit factor can still be `inf` when there are no losing trades;
+this also breaks the result cache's JSON round-trip (minor — forces a cache miss). Both
+are sample artifacts, not return-series bugs.
+
+---
+
+## F-007 — Intra-hold marks are sparse, so the MTM curve degrades to time-indexed realized P&L
+**Date:** 2026-05-30 · **Status:** Open (data-limited; partial)
+
+**Observed.** The mark-to-market curve from F-006 was expected to vary continuously
+during each position's hold. Instead it changes ~once per trade.
+
+**Evidence.** Diffing the equity curve: SPY `long_put_spread` had 132 non-zero steps
+for 132 trades (54 down / 78 up); QQQ had 56 non-zero steps for 55 trades (0 down).
+Each trade contributes ≈ one step, at its exit — intra-hold marks are mostly missing.
+Root cause: pricing a position at an intermediate snapshot needs *all* legs' exact
+strike+expiry present in that snapshot. With every-other-day snapshots and coarse
+strike grids (DATA_ISSUES.md §1, §2), intermediate snapshots frequently lack a leg, so
+`_compute_exit_price` returns None and the scan carries the last known mark forward.
+
+**Why it matters.** The "MTM curve" is therefore closer to a **time-indexed realized-P&L
+curve** (steps at exit dates) than a continuous mark-to-market. It still fixes the worst
+of F-006 — Sharpe is calendar-annualized and simultaneous *exits* cluster into one
+period (the dominant correlation channel for short-DTE trades that exit near expiry) —
+but it does not capture intra-hold unrealized volatility, so a position that round-trips
+underwater and recovers shows no interim drawdown.
+
+**Resolution (partial / follow-up).** Accept the time-indexed realized curve as a large
+improvement over the per-trade-index cumsum (F-006). True continuous MTM needs denser,
+fuller chain data: daily collection (already running) plus the Alpaca options **quotes**
+endpoint (backlog #2). A cheaper interim option — fall back to a Black-Scholes mark when
+chain legs are missing intra-hold — would reintroduce model pricing and is deliberately
+deferred. Until then, treat max-drawdown as a *lower bound* on interim risk.

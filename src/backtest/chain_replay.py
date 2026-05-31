@@ -88,7 +88,7 @@ def run_chain_replay(request: BacktestRequest) -> BacktestResult:
 
     rolling_vol = _compute_rolling_vol_from_snapshots(snapshots)
 
-    trades, issues = _simulate_chain_trades(
+    trades, issues, equity = _simulate_chain_trades(
         conn=conn,
         snapshots=snapshots,
         rolling_vol=rolling_vol,
@@ -96,10 +96,16 @@ def run_chain_replay(request: BacktestRequest) -> BacktestResult:
     )
     conn.close()
 
-    stats = analyze_results(trades)
-    equity = [0.0]
-    for t in trades:
-        equity.append(equity[-1] + t.pnl)
+    # Annualization for the mark-to-market Sharpe: number of snapshot/return
+    # periods per calendar year over the actual span.
+    span_days = (date.fromisoformat(snapshots[-1]["date"])
+                 - date.fromisoformat(snapshots[0]["date"])).days
+    years = max(span_days / 365.25, 1e-9)
+    periods_per_year = len(snapshots) / years
+
+    # Risk metrics use the time-indexed mark-to-market curve (F-006); per-trade
+    # descriptive stats (win rate, PF, avg win/loss) come from the trade list.
+    stats = analyze_results(trades, equity_curve=equity, periods_per_year=periods_per_year)
 
     result = BacktestResult(
         request=request,
@@ -619,6 +625,11 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
     # Positions may now overlap (concurrency is allowed); per-trade P&L is
     # summed, which is the correct basis for measuring per-trade edge.
     n = len(snapshots)
+    # Time-indexed mark-to-market portfolio curve (one entry per snapshot).
+    # Each position adds its unrealized mark while open and its realized P&L
+    # thereafter, so overlapping positions are aggregated on one timeline —
+    # the correct basis for Sharpe/drawdown when trades overlap (F-006).
+    portfolio_mtm = [0.0] * n
     for idx in range(0, n, entry_interval):
         snap = snapshots[idx]
 
@@ -700,21 +711,42 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
             "avg_spread_pct": np.mean(spread_pcts) if spread_pcts else 0,
         }
 
-        # Independent forward scan for this position's exit — does not touch or
-        # depend on any other position, so the trade set stays fixed.
+        # Independent forward scan for this position's exit, recording the
+        # mark-to-market P&L at every snapshot so overlapping positions can be
+        # aggregated onto one timeline (F-006). Does not touch any other
+        # position, so the trade set stays fixed under P&L perturbation (F-004).
+        last_mark = 0.0
+        exit_j = None
+        realized = None
         for j in range(idx + 1, n):
-            trade_result = _check_exit(
+            res = _check_exit(
                 conn, request.symbol, snapshots[j], open_position,
                 exit_rules, request, rolling_vol, j,
             )
-            if trade_result:
-                if trade_result.get("_used_intrinsic"):
+            if res is None:
+                # Can't reprice here (no contracts, not expiry) — carry the
+                # last known mark forward.
+                portfolio_mtm[j] += last_mark
+                continue
+            last_mark = res["pnl"]
+            portfolio_mtm[j] += last_mark
+            if res["trade"] is not None:
+                if res.get("_used_intrinsic"):
                     exit_used_intrinsic += 1
-                trades.append(trade_result["trade"])
+                trades.append(res["trade"])
+                exit_j = j
+                realized = res["pnl"]
                 break
         else:
-            # Ran off the end of the data without an exit trigger.
+            # Ran off the end of the data without an exit trigger — position
+            # left open; its unrealized marks are already in portfolio_mtm.
             skipped_no_exit += 1
+
+        # A closed position's realized P&L persists in the account for every
+        # later snapshot.
+        if exit_j is not None and realized is not None:
+            for j in range(exit_j + 1, n):
+                portfolio_mtm[j] += realized
 
     if skipped_no_strikes > 0:
         issues.append(f"{skipped_no_strikes} entries skipped — insufficient strikes in chain")
@@ -730,15 +762,23 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
         issues.append("Fills priced at mid (optimistic — overstates edge; see docs/pricing_validation_report.md)")
     if request.slippage_pct:
         issues.append(f"Explicit net slippage of {request.slippage_pct}% applied (adverse) on entry and snapshot exits — models fill cost for close-priced Alpaca-backfilled data (bid==ask==close).")
-        issues.append("WARNING: per-trade slippage is a strict cost, but this sequential single-position loop is path-sensitive — perturbing P&L shifts exit timing and thus which trades are entered next, so AGGREGATE results under slippage are unstable. Decouple trade selection from P&L before trusting slippage sweeps.")
 
-    return trades, issues
+    return trades, issues, portfolio_mtm
 
 
 def _check_exit(conn, symbol: str, current_snap: dict, position_info: dict,
                 exit_rules: dict, request: BacktestRequest,
                 rolling_vol: np.ndarray, idx: int) -> Optional[dict]:
-    """Check if position should be exited at this snapshot."""
+    """Value the position at this snapshot and decide whether to exit.
+
+    Returns None if the position cannot be valued here (no matching contracts
+    and not yet at expiry). Otherwise returns:
+        {"pnl":  mark-to-market P&L (×100) at this snapshot,
+         "trade": BacktestTrade if an exit triggered this snapshot, else None,
+         "_used_intrinsic": bool}
+    The caller records `pnl` every snapshot to build the mark-to-market
+    portfolio curve and closes the position when `trade` is not None.
+    """
     position = position_info["position"]
     entry_net = position_info["entry_net"]
     expiry = position["expiry"]
@@ -809,33 +849,34 @@ def _check_exit(conn, symbol: str, current_snap: dict, position_info: dict,
     if dte_remaining <= time_exit_dte:
         exit_reason = exit_reason or "dte_exit"
 
-    if not exit_reason:
-        return None
-
-    dte_at_entry = position_info["dte"]
     final_pnl = pnl * 100
 
-    trade = BacktestTrade(
-        entry_date=date.fromisoformat(position_info["entry_date"]),
-        exit_date=date.fromisoformat(current_snap["date"]),
-        entry_price=round(entry_net, 4),
-        exit_price=round(current_value, 4),
-        pnl=round(final_pnl, 2),
-        pnl_pct=round(pnl / max(abs(entry_net), 0.01) * 100, 1),
-        dte_at_entry=dte_at_entry,
-        dte_at_exit=max(dte_remaining, 0),
-        regime=position_info["regime"],
-        win=pnl > 0,
-        exit_reason=exit_reason,
-        bias_score=position_info.get("bias_score"),
-        bias_label=position_info.get("bias_label"),
-        edge_pct=round(position_info["edge_pct"], 2) if position_info.get("edge_pct") is not None else None,
-        iv_at_entry=round(position_info["iv_at_entry"], 4),
-        fill_mode=request.fill_mode,
-        avg_spread_pct=round(position_info.get("avg_spread_pct", 0) or 0, 2),
-    )
+    # Always report the mark-to-market P&L; attach a closed trade only when an
+    # exit actually triggered at this snapshot.
+    trade = None
+    if exit_reason:
+        dte_at_entry = position_info["dte"]
+        trade = BacktestTrade(
+            entry_date=date.fromisoformat(position_info["entry_date"]),
+            exit_date=date.fromisoformat(current_snap["date"]),
+            entry_price=round(entry_net, 4),
+            exit_price=round(current_value, 4),
+            pnl=round(final_pnl, 2),
+            pnl_pct=round(pnl / max(abs(entry_net), 0.01) * 100, 1),
+            dte_at_entry=dte_at_entry,
+            dte_at_exit=max(dte_remaining, 0),
+            regime=position_info["regime"],
+            win=pnl > 0,
+            exit_reason=exit_reason,
+            bias_score=position_info.get("bias_score"),
+            bias_label=position_info.get("bias_label"),
+            edge_pct=round(position_info["edge_pct"], 2) if position_info.get("edge_pct") is not None else None,
+            iv_at_entry=round(position_info["iv_at_entry"], 4),
+            fill_mode=request.fill_mode,
+            avg_spread_pct=round(position_info.get("avg_spread_pct", 0) or 0, 2),
+        )
 
-    return {"trade": trade, "_used_intrinsic": used_intrinsic}
+    return {"pnl": round(final_pnl, 2), "trade": trade, "_used_intrinsic": used_intrinsic}
 
 
 def _get_exit_rules(strategy: str) -> dict:

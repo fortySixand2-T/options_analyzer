@@ -18,13 +18,28 @@ from .models import BacktestStats, BacktestTrade
 logger = logging.getLogger(__name__)
 
 
-def analyze_results(trades: List[BacktestTrade]) -> BacktestStats:
+def analyze_results(trades: List[BacktestTrade],
+                    equity_curve: List[float] = None,
+                    periods_per_year: float = 52.0) -> BacktestStats:
     """Compute aggregate statistics from a list of trades.
 
     Parameters
     ----------
     trades : List[BacktestTrade]
         Completed trades with P&L data.
+    equity_curve : List[float], optional
+        A TIME-INDEXED mark-to-market portfolio curve (one value per snapshot/
+        period, realized + unrealized $). When provided, Sharpe and max drawdown
+        are computed from this curve's periodic returns rather than from the
+        per-trade P&L series. This is the correct basis when positions overlap:
+        simultaneous correlated moves register as a single high-variance period
+        instead of N independent "wins" (which inflated Sharpe — see FINDINGS.md
+        F-006). When omitted, falls back to the legacy per-trade computation
+        (used by local_backtest and unit tests).
+    periods_per_year : float
+        Annualization factor for the equity-curve Sharpe — the number of
+        snapshot/return periods per year (≈ snapshots ÷ years spanned). For the
+        per-trade fallback this is the assumed trades/year.
 
     Returns
     -------
@@ -52,12 +67,17 @@ def analyze_results(trades: List[BacktestTrade]) -> BacktestStats:
     gross_losses = abs(sum(t.pnl for t in losses))
     profit_factor = gross_wins / gross_losses if gross_losses > 0 else float('inf')
 
-    # Equity curve and drawdown
-    equity = _compute_equity_curve(pnls)
-    max_dd, max_dd_pct = _compute_max_drawdown(equity)
-
-    # Sharpe ratio (annualized, assuming ~52 trades/year for weeklies)
-    sharpe = _compute_sharpe(pnls)
+    # Equity curve, drawdown, and Sharpe.
+    # Prefer a supplied TIME-INDEXED mark-to-market curve (correct when trades
+    # overlap — F-006). Fall back to the per-trade cumsum for callers that don't
+    # supply one (local_backtest, unit tests).
+    if equity_curve is not None and len(equity_curve) >= 2:
+        max_dd, max_dd_pct = _compute_max_drawdown(equity_curve)
+        sharpe = _compute_sharpe_from_curve(equity_curve, periods_per_year)
+    else:
+        equity = _compute_equity_curve(pnls)
+        max_dd, max_dd_pct = _compute_max_drawdown(equity)
+        sharpe = _compute_sharpe(pnls)
 
     # Average DTE and hold time
     avg_dte = float(np.mean([t.dte_at_entry for t in trades]))
@@ -198,7 +218,11 @@ def _compute_max_drawdown(equity: List[float]):
 
 
 def _compute_sharpe(pnls: List[float], trades_per_year: float = 52.0) -> float:
-    """Annualized Sharpe ratio from trade P&Ls."""
+    """Annualized Sharpe ratio from a per-trade P&L series (legacy fallback).
+
+    Treats each trade as an independent period — only valid when trades do not
+    overlap. For overlapping positions use _compute_sharpe_from_curve.
+    """
     if len(pnls) < 2:
         return 0.0
     arr = np.array(pnls)
@@ -207,3 +231,27 @@ def _compute_sharpe(pnls: List[float], trades_per_year: float = 52.0) -> float:
     if std < 1e-10:
         return 0.0
     return mean / std * np.sqrt(trades_per_year)
+
+
+def _compute_sharpe_from_curve(equity_curve: List[float],
+                               periods_per_year: float) -> float:
+    """Annualized Sharpe from a time-indexed mark-to-market equity curve.
+
+    Returns are the per-period $ changes of the portfolio's realized+unrealized
+    value. Because every open position is marked on the SAME timeline, a day
+    when the market moves shows up as one large-variance period (correlated
+    positions move together), correctly penalizing Sharpe — unlike the
+    per-trade series, which counts correlated overlapping winners as many
+    independent samples (F-006).
+    """
+    arr = np.asarray(equity_curve, dtype=float)
+    if arr.size < 3:
+        return 0.0
+    returns = np.diff(arr)
+    if returns.size < 2:
+        return 0.0
+    mean = float(np.mean(returns))
+    std = float(np.std(returns, ddof=1))
+    if std < 1e-10:
+        return 0.0
+    return mean / std * np.sqrt(max(periods_per_year, 1e-9))

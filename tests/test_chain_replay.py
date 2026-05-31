@@ -264,7 +264,9 @@ class TestFullBacktest:
         )
         result = run_chain_replay(req)
         if result.stats.total_trades > 0:
-            assert len(result.equity_curve) == result.stats.total_trades + 1
+            # Equity curve is now a TIME-INDEXED mark-to-market portfolio curve
+            # (one point per snapshot), not a per-trade cumsum — see F-006.
+            assert len(result.equity_curve) >= 2
             assert result.equity_curve[0] == 0.0
 
     def test_result_has_regime_breakdown(self):

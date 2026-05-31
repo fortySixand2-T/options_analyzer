@@ -106,6 +106,28 @@ New trade-off introduced: concurrent overlapping positions are **correlated** in
 trending periods, inflating Sharpe/PF (F-006). Resolving the portfolio/return-series
 model is the next architectural decision.
 
+### 1d. Performance measurement: per-trade series → time-indexed mark-to-market
+
+Allowing concurrent positions (1b) broke the per-trade Sharpe: overlapping trades are
+correlated, so counting them as independent samples (annualized √52/trades) inflated
+Sharpe to ~18 on trending windows (F-006).
+
+```
+was:   Sharpe/drawdown from the per-trade P&L series, annualized by trade count
+now:   Sharpe/drawdown from a TIME-INDEXED mark-to-market portfolio curve,
+       annualized by actual snapshots-per-year
+```
+
+`chain_replay` now builds a portfolio curve over snapshots (each position adds its mark
+while open, its realized P&L thereafter); `analyzer.analyze_results` takes that curve and
+computes risk metrics from its periodic returns (per-trade *descriptive* stats — win
+rate, PF — are unchanged). SPY `long_put_spread` Sharpe fell 18 → 1.76 with a meaningful
+drawdown. Caveat (F-007): with sparse snapshots the curve currently approximates a
+*time-indexed realized* curve (intra-hold marks often unavailable), so it captures
+exit-clustering correlation but not intra-hold unrealized vol. Architectural consequence:
+**performance is measured on a portfolio timeline, not a trade ledger** — the natural
+basis for the concurrency/return model and for the perturbation harness.
+
 ### 1c. Emerging principle — perturbation stability as a design constraint
 
 A backtester intended for robustness testing must satisfy: *small, economically-
@@ -125,10 +147,10 @@ backtester logic version (F-005), so it can serve stale results across code chan
    the planned **OOS / walk-forward gate** (Step 2 of the synthesis plan) into one
    axis of a broader sensitivity framework.
 
-2. **Concurrency / return-series model (F-006).** Decide how overlapping positions
-   aggregate: mark-to-market portfolio equity curve, concurrency cap, or
-   calendar-resampled returns — so Sharpe/PF stop treating correlated trades as
-   independent.
+2. **Concurrency / return-series model (F-006 — DONE; F-007 follow-up).** Risk metrics
+   now use a time-indexed mark-to-market portfolio curve. Remaining: make the curve a
+   *continuous* MTM (intra-hold marks are sparse, F-007) via denser data / the quotes
+   endpoint, so drawdown reflects interim risk, not just exit-to-exit.
 
 3. **True bid/ask for 2025+ (backlog #2).** Wire Alpaca's options **quotes** endpoint
    so the recent era has real NBBO spreads, giving the provenance perturbation axis a
