@@ -152,9 +152,14 @@ backtester logic version (F-005), so it can serve stale results across code chan
    *continuous* MTM (intra-hold marks are sparse, F-007) via denser data / the quotes
    endpoint, so drawdown reflects interim risk, not just exit-to-exit.
 
-3. **True bid/ask for 2025+ (backlog #2).** Wire Alpaca's options **quotes** endpoint
-   so the recent era has real NBBO spreads, giving the provenance perturbation axis a
-   true-spread leg instead of close±slippage.
+3. **True bid/ask + continuous marks (backlog #2 — BLOCKED on entitlement).** The
+   `get_option_quotes()` client method is implemented, graceful, and unit-tested, but
+   Alpaca's historical **quotes** endpoint returns 404 on this plan — historical option
+   quotes need an OPRA subscription (bars/trades work; quotes don't). Until a paid
+   options-data feed (OPRA via Alpaca, or Polygon) is enabled, real NBBO spreads and
+   continuous intra-hold marks (F-007) aren't available; the alternative is a
+   Black-Scholes intra-hold fallback (model pricing). Decision pending — see FINDINGS.md
+   F-007.
 
 4. **Cache invalidation (F-005).** Add a logic-version/source-hash component to the
    backtest cache key.

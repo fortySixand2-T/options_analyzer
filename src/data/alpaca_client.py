@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://data.alpaca.markets"
 BARS_URL = f"{BASE_URL}/v1beta1/options/bars"
+QUOTES_URL = f"{BASE_URL}/v1beta1/options/quotes"
 STOCK_BARS_URL = f"{BASE_URL}/v2/stocks/bars"
 
 MAX_SYMBOLS_PER_REQUEST = 100
@@ -69,7 +70,11 @@ class AlpacaOptionsClient:
                 return resp.json()
 
             except requests.exceptions.HTTPError as e:
-                if resp.status_code in (400, 422):
+                # 400/422 = bad/empty request; 403/404 = endpoint not entitled
+                # on this plan (e.g. historical option quotes need an OPRA
+                # subscription — see FINDINGS.md F-007). Treat all as "no data"
+                # rather than raising, so callers degrade gracefully.
+                if resp.status_code in (400, 403, 404, 422):
                     logger.debug("No data (HTTP %d): %s", resp.status_code, e)
                     return {}
                 logger.error("HTTP %d: %s", resp.status_code, e)
@@ -184,6 +189,90 @@ class AlpacaOptionsClient:
                 time.sleep(RATE_LIMIT_DELAY)
 
         return all_bars
+
+    def get_option_quotes(
+        self,
+        symbols: List[str],
+        date: str,
+        window_start: str = "13:30:00",
+        window_end: str = "20:00:00",
+    ) -> Dict[str, dict]:
+        """Fetch end-of-day NBBO quotes for OCC option symbols on a date.
+
+        This is the data source that fixes F-007 (sparse intra-hold marks):
+        unlike bars/trades — which exist only on days a contract actually traded
+        — quotes are continuously posted during market hours, so a position can
+        be marked on the in-between days too, giving a true mark-to-market
+        equity curve (and an honest drawdown).
+
+        Returns ``{occ: {"bid", "ask", "mid", "ts"}}`` using the LATEST quote
+        within [window_start, window_end] UTC on ``date`` (``sort=desc`` →
+        first row per symbol is the most recent). Symbols with no usable quote
+        are simply absent.
+
+        IMPORTANT — entitlement: historical option quotes require an OPRA data
+        subscription. On plans without it Alpaca returns HTTP 404, which
+        ``_request`` maps to an empty result, so this method yields ``{}`` (no
+        marks) rather than erroring. Verified 2026-05-30: this account is NOT
+        entitled (bars/trades 200, quotes 404). See FINDINGS.md F-007.
+
+        Args:
+            symbols: OCC symbols (e.g. ["SPY260511P00640000"]).
+            date: "YYYY-MM-DD".
+            window_start/window_end: UTC time-of-day bounds for the EOD quote.
+
+        Returns:
+            Dict mapping OCC symbol to {bid, ask, mid, ts}.
+        """
+        result: Dict[str, dict] = {}
+        start = f"{date}T{window_start}Z"
+        end = f"{date}T{window_end}Z"
+
+        for i in range(0, len(symbols), MAX_SYMBOLS_PER_REQUEST):
+            batch = symbols[i:i + MAX_SYMBOLS_PER_REQUEST]
+            params = {
+                "symbols": ",".join(batch),
+                "start": start,
+                "end": end,
+                "limit": 1000,
+                "sort": "desc",  # newest first → first row per symbol is EOD
+            }
+
+            data = self._request(QUOTES_URL, params)
+            quotes = data.get("quotes", {}) if data else {}
+
+            for sym, q_list in quotes.items():
+                if sym in result:
+                    continue
+                if isinstance(q_list, list):
+                    q = q_list[0] if q_list else None
+                elif isinstance(q_list, dict):
+                    q = q_list
+                else:
+                    q = None
+                if not q:
+                    continue
+
+                bid = float(q.get("bp", 0) or 0)   # bid price
+                ask = float(q.get("ap", 0) or 0)   # ask price
+                if bid <= 0 and ask <= 0:
+                    continue
+                if bid > 0 and ask > 0:
+                    mid = (bid + ask) / 2
+                else:
+                    mid = bid or ask
+
+                result[sym] = {
+                    "bid": round(bid, 4),
+                    "ask": round(ask, 4),
+                    "mid": round(mid, 4),
+                    "ts": q.get("t", ""),
+                }
+
+            if i + MAX_SYMBOLS_PER_REQUEST < len(symbols):
+                time.sleep(RATE_LIMIT_DELAY)
+
+        return result
 
     def discover_contracts(
         self,

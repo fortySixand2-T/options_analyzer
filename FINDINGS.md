@@ -28,7 +28,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-004 | 2026-05-30 | Sequential single-position loop was path-dependent | Fixed (decoupled) |
 | F-005 | 2026-05-30 | Backtest result cache not invalidated on code change | Mitigated; follow-up open |
 | F-006 | 2026-05-30 | Concurrency makes overlapping trades correlated → inflated Sharpe/PF | Resolved (time-indexed MTM) |
-| F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Open (data-limited) |
+| F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Open — blocked on OPRA quotes entitlement |
 
 ---
 
@@ -232,3 +232,37 @@ fuller chain data: daily collection (already running) plus the Alpaca options **
 endpoint (backlog #2). A cheaper interim option — fall back to a Black-Scholes mark when
 chain legs are missing intra-hold — would reintroduce model pricing and is deliberately
 deferred. Until then, treat max-drawdown as a *lower bound* on interim risk.
+
+### Update 2026-05-30 — tried the Alpaca quotes endpoint; it is **gated** on this plan
+The natural fix is continuous **quotes** (always-posted bid/ask, unlike trades/bars which
+exist only on days the contract actually traded — exactly the no-trade gap that sparsifies
+intra-hold marks). Probed Alpaca directly with real, traded contracts:
+
+| Endpoint | Result |
+|---|---|
+| `/v1beta1/options/bars` | 200 ✓ (has data) |
+| `/v1beta1/options/trades` | 200 ✓ (has data) |
+| `/v1beta1/options/quotes` (historical) | **404** ✗ |
+| `/v1beta1/options/quotes/latest` | 200 (real-time only; empty) |
+
+The 404 is **entitlement-level** (same `v1beta1/options/` prefix as the working endpoints;
+auth is valid). **Historical option quotes require an OPRA data subscription this account
+does not have.** Neither bars nor trades can substitute — both are *traded* data and so
+share the exact no-trade-day sparsity that causes F-007; only continuous quotes fill it.
+
+**Done now:** implemented `AlpacaOptionsClient.get_option_quotes()` (correct endpoint,
+EOD-quote selection via `sort=desc`, one-sided/zero-quote filtering) and made `_request`
+treat 403/404 as "no data / not entitled" rather than raising — so the live path degrades
+gracefully (returns `{}`) and the code is **ready the moment a subscription is enabled**.
+Unit-tested with mocked responses (`tests/test_alpaca_quotes.py`, 3 tests) independent of
+entitlement. NOT yet wired into `chain_replay` — with no live quotes it would be a no-op.
+
+**Decision required (the user's call):**
+1. **Enable an OPRA / paid options-data subscription** (Alpaca or Polygon ~$29–99/mo) →
+   then wire `get_option_quotes()` into the backtester's intra-hold marking → true
+   continuous MTM and honest drawdown. (Polygon is an alternative quote source.)
+2. **Black-Scholes intra-hold fallback** — mark missing legs with BS from the underlying
+   spot (which we *do* have every snapshot) + entry IV. Continuous marks with no new data,
+   but reintroduces model pricing (less honest than real quotes; mind IV drift).
+3. **Accept the limitation** — keep the time-indexed realized curve from F-006 and treat
+   max-drawdown as a lower bound, leaning on win rate + mean P&L + OOS for judgment.
