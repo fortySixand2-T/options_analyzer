@@ -62,10 +62,15 @@ def analyze_results(trades: List[BacktestTrade],
     avg_pnl = float(np.mean(pnls))
     total_pnl = sum(pnls)
 
-    # Profit factor
+    # Profit factor. Cap at a large finite value when there are no losses —
+    # raw float('inf') is not JSON-serializable and broke the result cache
+    # round-trip (it round-tripped to None). 999.0 reads clearly as "no losses".
     gross_wins = sum(t.pnl for t in wins)
     gross_losses = abs(sum(t.pnl for t in losses))
-    profit_factor = gross_wins / gross_losses if gross_losses > 0 else float('inf')
+    if gross_losses > 0:
+        profit_factor = gross_wins / gross_losses
+    else:
+        profit_factor = 999.0 if gross_wins > 0 else 0.0
 
     # Equity curve, drawdown, and Sharpe.
     # Prefer a supplied TIME-INDEXED mark-to-market curve (correct when trades
