@@ -179,6 +179,147 @@ def test_graduate_inverted_direction():
     assert v["graduates"] is True and v["direction"] == "inverted"
 
 
+# ── vrp_proxy ────────────────────────────────────────────────────────────────
+
+def test_vrp_proxy_requires_aux():
+    """vrp_proxy must raise ValueError when aux is absent."""
+    try:
+        sl.vrp_proxy(_ohlcv([100.0] * 40))
+        assert False, "expected ValueError without VIX aux"
+    except ValueError:
+        pass
+
+
+def test_vrp_proxy_positive_when_iv_exceeds_rv():
+    """High VIX relative to calm price action → large positive VRP (bullish)."""
+    n = 60
+    # Flat price series → RV ≈ 0; VIX = 25 → VRP ≈ +25.
+    df = _ohlcv([100.0] * n)
+    df.index = list(range(n))
+    vix = pd.Series([25.0] * n, index=df.index)
+    sig = sl.vrp_proxy(df, {"vix": vix})
+    assert sig.iloc[-1] > 15.0   # large positive premium
+
+
+def test_vrp_proxy_negative_when_rv_exceeds_iv():
+    """High RV (volatile price) with low VIX → negative VRP (bearish / costly vol)."""
+    n = 60
+    rng = np.random.default_rng(42)
+    # Highly volatile price series; VIX = 10 (low).
+    pct = rng.normal(0, 0.03, n)       # ~3 % daily moves → ~47 % annualised RV
+    prices = [100.0]
+    for r in pct:
+        prices.append(prices[-1] * (1 + r))
+    df = _ohlcv(prices[:n])
+    df.index = list(range(n))
+    vix = pd.Series([10.0] * n, index=df.index)
+    sig = sl.vrp_proxy(df, {"vix": vix})
+    # Need at least rv_window=21 bars to have a non-NaN value.
+    valid = sig.dropna()
+    assert len(valid) > 0
+    assert valid.iloc[-1] < 0   # RV >> VIX → negative VRP
+
+
+def test_vrp_proxy_warmup_nan():
+    """First rv_window bars should be NaN (rolling window not yet full)."""
+    n = 50
+    df = _ohlcv([100.0] * n)
+    df.index = list(range(n))
+    vix = pd.Series([20.0] * n, index=df.index)
+    sig = sl.vrp_proxy(df, {"vix": vix}, rv_window=21)
+    # Bars 0-20 should be NaN (pct_change NaN + rolling(21) NaN until bar 21).
+    assert np.isnan(sig.iloc[10])
+
+
+def test_vrp_proxy_pointintime():
+    """Truncating future bars must not change a past VRP value."""
+    n = 80
+    rng = np.random.default_rng(7)
+    prices = list(100.0 * np.cumprod(1 + rng.normal(0, 0.01, n)))
+    df_full = _ohlcv(prices)
+    df_full.index = list(range(n))
+    df_trunc = _ohlcv(prices[:60])
+    df_trunc.index = list(range(60))
+    vix = pd.Series([20.0] * n)
+    s_full = sl.vrp_proxy(df_full, {"vix": vix})
+    s_trunc = sl.vrp_proxy(df_trunc, {"vix": vix.iloc[:60]})
+    assert abs(float(s_full.iloc[55]) - float(s_trunc.iloc[55])) < 1e-9
+
+
+# ── high52w_proximity ─────────────────────────────────────────────────────────
+
+def test_high52w_at_new_high_equals_one():
+    """When price is at its 252-day high, proximity should be exactly 1.0."""
+    # Create a price series that ends AT the 252-day rolling max.
+    prices = list(np.linspace(80, 100, 260))   # steadily rising
+    df = _ohlcv(prices)
+    df.index = list(range(len(prices)))
+    sig = sl.high52w_proximity(df)
+    # Last bar = highest price in any 252-day window starting from bar 0.
+    assert abs(sig.iloc[-1] - 1.0) < 1e-9
+
+
+def test_high52w_below_one_when_off_high():
+    """When price is below its 252-day high, proximity should be < 1."""
+    # Rise, then drop; last bar is below the window max.
+    prices = list(np.linspace(80, 120, 260)) + [100.0] * 10
+    df = _ohlcv(prices)
+    df.index = list(range(len(prices)))
+    sig = sl.high52w_proximity(df)
+    assert sig.iloc[-1] < 1.0
+
+
+def test_high52w_warmup_nan():
+    """Bars before the 252nd observation should be NaN (min_periods=lookback)."""
+    prices = list(np.linspace(100, 150, 300))
+    df = _ohlcv(prices)
+    df.index = list(range(len(prices)))
+    sig = sl.high52w_proximity(df)
+    assert np.isnan(sig.iloc[100])   # before lookback=252 is satisfied
+    assert not np.isnan(sig.iloc[255])
+
+
+def test_high52w_no_aux_needed():
+    """high52w_proximity must work with aux=None (no exogenous data)."""
+    prices = list(np.linspace(100, 150, 300))
+    df = _ohlcv(prices)
+    df.index = list(range(len(prices)))
+    sig = sl.high52w_proximity(df, aux=None)   # must not raise
+    assert sig.iloc[-1] > 0
+
+
+def test_high52w_pointintime():
+    """Truncating future bars must not change a past proximity value."""
+    prices = list(np.linspace(80, 130, 320)) + list(np.linspace(130, 95, 40))
+    n_full = len(prices)
+    df_full = _ohlcv(prices)
+    df_full.index = list(range(n_full))
+    df_trunc = _ohlcv(prices[:300])
+    df_trunc.index = list(range(300))
+    s_full = sl.high52w_proximity(df_full)
+    s_trunc = sl.high52w_proximity(df_trunc)
+    # Value at bar 280 (inside both series, past 252-bar warmup) must be equal.
+    assert abs(float(s_full.iloc[280]) - float(s_trunc.iloc[280])) < 1e-9
+
+
+def test_high52w_not_in_needs_vix():
+    """high52w_proximity must NOT appear in NEEDS_VIX (no exogenous data)."""
+    assert "high52w_proximity" not in sl.NEEDS_VIX
+
+
+def test_vrp_proxy_in_needs_vix():
+    """vrp_proxy requires VIX and must appear in NEEDS_VIX."""
+    assert "vrp_proxy" in sl.NEEDS_VIX
+
+
+# ── regression / registry ─────────────────────────────────────────────────────
+
+def test_signals_registry_contains_new_signals():
+    """Both new signals must appear in the SIGNALS registry."""
+    assert "vrp_proxy" in sl.SIGNALS
+    assert "high52w_proximity" in sl.SIGNALS
+
+
 def test_cache_key_includes_signal_filter():
     # F-019 regression: toggling the signal filter MUST change the cache key,
     # else the gated run silently returns the cached unconditional result.

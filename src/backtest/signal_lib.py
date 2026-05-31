@@ -18,12 +18,14 @@ POINT-IN-TIME (every value uses only data available up to and including that
 day — the trailing-window construction guarantees no lookahead). The forward
 return is supplied later by the IC harness (signal_eval), never here.
 
-The three signals below were chosen (F-018 agent survey) as the most
+The five signals below were chosen (F-018 / F-020 agent survey) as the most
 orthogonal, free/cheap, literature-backed candidates:
 
   - short_term_reversal : price-overreaction axis (Jegadeesh 1990, Lehmann 1990)
   - ts_momentum         : trend/underreaction axis (Moskowitz-Ooi-Pedersen 2012)
   - vix_term_structure  : implied-vol / fear axis  (Bollerslev-Tauchen-Zhou 2009)
+  - vrp_proxy           : vol-risk-premium axis    (Bollerslev-Tauchen-Zhou 2009)
+  - high52w_proximity   : 52-wk-high momentum axis (George-Hwang 2004)
 
 Sign convention: each signal is oriented so that a POSITIVE value is the
 hypothesised bullish reading. The IC test reports the realised sign regardless
@@ -134,12 +136,58 @@ def conditioned_reversal(df: pd.DataFrame, aux: Optional[Dict] = None,
     return reversal.where(calm)                  # NaN on non-calm days
 
 
-# Registry of testable signals → (function, needs_vix_term_structure_aux?).
+def vrp_proxy(df: pd.DataFrame, aux: Optional[Dict] = None,
+              rv_window: int = 21) -> pd.Series:
+    """Volatility risk premium proxy: VIX − trailing annualised realised vol.
+
+    VRP = implied volatility (VIX, in percentage points) minus trailing
+    realised volatility (close-to-close, annualised to match VIX scale).
+    When VRP > 0 the market is paying more for protection than recent realised
+    moves warrant — the classic sell-vol / calm-regime reading.
+
+    Per Bollerslev-Tauchen-Zhou (2009), high VRP predicts higher future equity
+    returns: a large premium signals that variance-risk buyers are fearful but
+    the market has been calm, and that fear-premium tends to mean-revert
+    (market rallies, vol sellers profit). Positive VRP → BULLISH signal.
+
+    Requires aux['vix'] as a date-indexed Series of VIX closing levels.
+    Point-in-time: RV is a trailing window; VIX is today's close — no lookahead.
+    """
+    if not aux or "vix" not in aux:
+        raise ValueError("vrp_proxy requires aux['vix']")
+    c = _close(df)
+    # Annualised RV in percentage-point terms to match VIX scale.
+    rv = c.pct_change().rolling(rv_window).std() * np.sqrt(252.0) * 100.0
+    vix = aux["vix"].reindex(df.index).ffill()
+    return vix - rv   # positive = IV premium = calm/bullish signal
+
+
+def high52w_proximity(df: pd.DataFrame, aux: Optional[Dict] = None,
+                      lookback: int = 252) -> pd.Series:
+    """52-week-high proximity: today's close divided by the trailing 252-day high.
+
+    Instruments trading near their annual high tend to outperform those far
+    from it (George-Hwang 2004): anchoring and under-reaction cause investors to
+    resist buying near highs, creating a positive continuation premium.
+    Signal = close / 252-day-rolling-max, in (0, 1]. At 1.0 = AT the high.
+    Positive (near-high) → BULLISH continuation signal.
+
+    No exogenous data required. Fully point-in-time: the rolling max uses only
+    the `lookback`-day trailing window; warmup region (first 252 bars) is NaN.
+    """
+    c = _close(df)
+    rolling_high = c.rolling(lookback, min_periods=lookback).max()
+    return c / rolling_high   # 1.0 = at the 52-week high; lower = further below
+
+
+# Registry of testable signals.
 SIGNALS: Dict[str, Callable[..., pd.Series]] = {
     "short_term_reversal": short_term_reversal,
     "ts_momentum": ts_momentum,
     "vix_term_structure": vix_term_structure,
+    "vrp_proxy": vrp_proxy,
+    "high52w_proximity": high52w_proximity,
 }
 
 # Signals that require the VIX/VIX3M exogenous series in `aux`.
-NEEDS_VIX = {"vix_term_structure"}
+NEEDS_VIX = {"vix_term_structure", "vrp_proxy"}
