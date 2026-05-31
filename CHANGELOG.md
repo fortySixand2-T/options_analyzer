@@ -1,5 +1,9 @@
 # Changelog
 
+- [2026-05-31] Phase 4 — sentiment_ic_test.py created and run (F-021). scripts/sentiment_ic_test.py: fully offline FinBERT IC test — reads scored_headlines directly from data/sentiment_backtest.db (zero src/sentiment/ imports per sentinel rule); uses SPY spot prices from data/chain_snapshots.db for forward returns (no yfinance); computes exponentially-decayed (halflife=96h) composite signal per trading day, strictly point-in-time. Fixed rolling-vol shape bug (loop start 63→64) and replaced non-existent _spearman import with scipy.stats.spearmanr. RESULT: 115,552 scored SPY headlines, n=556 dates (2020-01-04→2024-03-04). IC: 3d=−0.056 (p=0.19), 5d=−0.037 (p=0.39), 10d=−0.066 (p=0.12). Best across all lookbacks/confidence settings: 14d lookback, 10d horizon, IC=−0.079, p=0.065 — not significant. Consistent bearish bias, no graduation. Does NOT warrant execution testing. FINDINGS.md: added F-021.
+
+- [2026-05-31] Phase 3 — cache key completeness audit (F-020). src/backtest/cache.py: added min_score, vrp_filter, vrp_threshold, swing_bias_filter, option_style to _cache_key (all were result-affecting but absent — F-005-class latent bugs). Added RESULT_AFFECTING_FIELDS frozenset (canonical allow-list for sentinel test). tests/test_signal_lib.py: added test_cache_key_covers_vrp_and_swing_bias_filters, test_cache_key_covers_option_style_and_min_score, test_cache_key_sentinel_all_result_affecting_fields_present (iterates RESULT_AFFECTING_FIELDS vs BacktestRequest.model_fields — fails if any listed field is absent from the model). DATA_ISSUES.md: Issue #8 — Dolt QQQ 0-trade at 10-14 DTE; restricts execution tests to SPY on current data. FINDINGS.md: added F-020.
+
 - [2026-05-30] Added (F-017): metric routing + directional-signal IC, and a Dolt-only alpha evaluation. src/backtest/signal_eval.py — compute_directional_ic (correlation of bias score vs forward underlying return; separates alpha from beta) + ic_verdict. src/backtest/robustness.py — PRIMARY_METRIC map + primary_metrics() routing each strategy to its edge-appropriate metric (tail/CVaR/Calmar for sellers, directional-IC/return-on-risk for debit spreads, return-on-risk/skew for butterfly), wired into run_robustness output. VERDICT on clean Dolt data (SPY 2020-2024, real quotes): NO demonstrable alpha. Only long_call_spread is positive (+$7,445) but it's BETA — gating on the bias signal HURTS it (+$7,445 → +$2,670) and the bias IC is noise/inverted (Spearman ~0, significant only when inverted at 10d). Sellers lose (short_put -$650, short_call -$4,476, IC -$5,454; VRP gate doesn't help); long_put/butterfly lose. The trustworthy backtester refuses to manufacture an edge; next edge work needs a signal with real IC. Tests: ic_verdict classifier + primary_metric routing. 743 tests pass.
 
 - [2026-05-30] Modified: FINDINGS.md (F-016) — reviewed Alpaca's Historical Option Data doc (per user). Confirms: historical option QUOTES (bid/ask time series) require the paid OPRA feed (our client defaults to the free 'indicative' feed → /v1beta1/options/quotes returns 404, explaining the F-003/F-007 gate); historical option data only since Feb 2024; no OI from Alpaca. NEW provenance caveat: our 2025+ backfill bars/trades are indicative-feed DERIVATIVES, delayed 15 min and approximate — not consolidated OPRA prints — so the bar close we price against is itself an indicative derivative (Dolt 2020-2024 = real recorded quotes; yfinance fwd = real bid/ask). Added a data map: OPRA (paid) unblocks true bid/ask but NOT open interest — max-pain (F-013) and the iron-condor dealer-gamma gate still need a separate OI source (yfinance fwd / ThetaData / CBOE). External spend decision, not code debt.
@@ -816,3 +820,45 @@ data and IC-gated BEFORE touching the option backtest.
   Phase-1 grid (~300 cells → tighten to p<0.01/|IC|≥0.05 and require ≥2 independent underlyings),
   robustness/perturbation via robustness.py, and cache hygiene. Defines the acceptance bar for any
   "we found an edge" claim.
+
+## 2026-05-31 — Phase 1 (partial) + Phase 3: new signals, cache fix, data docs
+
+**Phase 1 — Signal additions (IC sweep pending network access):**
+- `src/backtest/signal_lib.py`: added `vrp_proxy` (VIX − trailing 21d annualised RV,
+  Bollerslev-Tauchen-Zhou 2009; positive = IV premium = calm/bullish) and
+  `high52w_proximity` (close / 252d rolling high, George-Hwang 2004; near-high =
+  continuation premium). Both are strictly point-in-time, added to `SIGNALS` and
+  `NEEDS_VIX` (vrp only). Signal module docstring updated to list all 5 signals.
+- `tests/test_signal_lib.py`: 13 new unit tests covering orientation, warmup NaN,
+  point-in-time (no-lookahead), requires_aux, registry membership, and NEEDS_VIX
+  classification for both new signals.
+- All 101 backtest blast-radius tests pass.
+- IC sweep across SPY/QQQ/IWM/DIA/XLK/XLF/XLE (Phase 1 Step 1) requires yfinance
+  network access — blocked in CI sandbox; run locally with:
+  `PYTHONPATH=src python scripts/signal_ic_sweep.py --symbols SPY,QQQ,IWM,DIA,XLK,XLF,XLE --start 2020-01-01 --end 2024-12-31`
+
+**Phase 3 — Cache key completeness:**
+- `src/backtest/cache.py`: added `min_score`, `vrp_filter`, `vrp_threshold`,
+  `swing_bias_filter`, `option_style` to `_cache_key`. All were result-affecting
+  fields on `BacktestRequest` but absent from the key — a latent F-005-class bug
+  (two runs with different filter values could silently return the same cached result).
+  Added `RESULT_AFFECTING_FIELDS` frozenset as the canonical allow-list.
+- `tests/test_signal_lib.py`: 4 new cache-key regression tests: vrp_filter,
+  vrp_threshold, swing_bias_filter, option_style, min_score each change the key;
+  plus a sentinel test that iterates `RESULT_AFFECTING_FIELDS` against
+  `BacktestRequest.model_fields` and fails immediately if any listed field is stale.
+- `DATA_ISSUES.md` (Issue #8, 2026-05-31): documented Dolt QQQ 0-trade result at
+  10–14 DTE as a data gap, restricted execution tests to SPY on current data.
+
+**Phase 1 — sweep RUN + warmup bug fix (F-022), 2026-05-31 (review of dispatch work):**
+- `scripts/signal_ic_sweep.py`: BUG FIX — WARMUP_DAYS 120 → 420. Dispatch added the 252-day
+  high52w_proximity signal to SIGNALS but left the sweep's warmup at 120 calendar days (~82
+  trading), so that signal was NaN through most of 2020 and skipped the COVID regime (silent
+  under-sampling). 420 calendar days (~290 trading) covers the 252-day lookback + slack.
+- Ran the previously network-blocked multi-ticker sweep across SPY/QQQ/IWM/DIA/XLK/XLF/XLE,
+  2020-2024. Result (F-022): ts_momentum (IC −0.091 @10d) and high52w_proximity (IC −0.102 @10d)
+  GRADUATE on all 7 underlyings, both inverted — broad-index 10-day mean-reversion (one phenomenon,
+  two redundant expressions). Confirms+broadens F-018. vrp_proxy and vix_term_structure fail as
+  directional signals; short_term_reversal remains regime-conditional.
+- FINDINGS.md: added F-022 (index row + full entry). Reviewed dispatch's F-020 (cache) and F-021
+  (sentiment) work — both sound, kept as-is.

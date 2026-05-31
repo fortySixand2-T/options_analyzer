@@ -36,7 +36,12 @@ from backtest.signal_eval import (  # noqa: E402
     ic_table, fold_ic_signs, graduate, _sign,
 )
 
-WARMUP_DAYS = 120  # buffer so trailing-window signals are defined from `start`
+# Buffer so trailing-window signals are defined from `start`. Must cover the
+# LONGEST lookback of any signal in SIGNALS — high52w_proximity uses a 252-day
+# (≈1y) rolling high, so 120 calendar days (~82 trading) left it NaN through
+# most of 2020 and skipped the COVID regime. 420 calendar days ≈ 290 trading,
+# enough for 252 + slack.
+WARMUP_DAYS = 420
 
 
 def _corr(xs, ys):

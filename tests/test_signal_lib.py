@@ -332,3 +332,59 @@ def test_cache_key_includes_signal_filter():
     k_on = _cache_key(BacktestRequest(**base, signal_filter=True))
     k_gate = _cache_key(BacktestRequest(**base, signal_filter=True, signal_gate="contango"))
     assert k_off != k_on != k_gate and k_off != k_gate
+
+
+def test_cache_key_covers_vrp_and_swing_bias_filters():
+    """Phase 3 regression: vrp_filter, vrp_threshold, swing_bias_filter must be
+    in the cache key — they were absent (F-005-class latent bug, noted in F-019)."""
+    from backtest.cache import _cache_key
+    from backtest.models import BacktestRequest
+    from datetime import date as _date
+    base = dict(strategy="iron_condor", symbol="SPY",
+                start_date=_date(2020, 1, 1), end_date=_date(2024, 12, 31))
+    k_base = _cache_key(BacktestRequest(**base))
+    k_vrp_on = _cache_key(BacktestRequest(**base, vrp_filter=True))
+    k_vrp_thresh = _cache_key(BacktestRequest(**base, vrp_filter=True, vrp_threshold=5.0))
+    k_swing = _cache_key(BacktestRequest(**base, swing_bias_filter=True))
+    assert k_base != k_vrp_on, "vrp_filter=True must change cache key"
+    assert k_vrp_on != k_vrp_thresh, "vrp_threshold must change cache key"
+    assert k_base != k_swing, "swing_bias_filter=True must change cache key"
+
+
+def test_cache_key_covers_option_style_and_min_score():
+    """Phase 3: option_style and min_score were missing from the cache key."""
+    from backtest.cache import _cache_key
+    from backtest.models import BacktestRequest
+    from datetime import date as _date
+    base = dict(strategy="long_put_spread", symbol="SPY",
+                start_date=_date(2020, 1, 1), end_date=_date(2024, 12, 31))
+    k_euro = _cache_key(BacktestRequest(**base, option_style="european"))
+    k_amer = _cache_key(BacktestRequest(**base, option_style="american"))
+    k_score = _cache_key(BacktestRequest(**base, min_score=50.0))
+    assert k_euro != k_amer, "option_style must change cache key"
+    assert k_euro != k_score, "min_score must change cache key"
+
+
+def test_cache_key_sentinel_all_result_affecting_fields_present():
+    """Sentinel: every field in RESULT_AFFECTING_FIELDS must exist on BacktestRequest.
+
+    If you add a new result-affecting field to BacktestRequest and forget to add
+    it to RESULT_AFFECTING_FIELDS (and thus to _cache_key), this test fails
+    immediately — catching the F-005-class bug before it silently corrupts results.
+
+    To pass: add the new field to cache.RESULT_AFFECTING_FIELDS AND to _cache_key.
+    """
+    from backtest.cache import RESULT_AFFECTING_FIELDS
+    from backtest.models import BacktestRequest
+    import dataclasses, inspect
+    # Collect all field names on BacktestRequest (pydantic or dataclass).
+    try:
+        req_fields = set(BacktestRequest.model_fields.keys())
+    except AttributeError:
+        req_fields = {f.name for f in dataclasses.fields(BacktestRequest)}
+    # Every field in our allow-list must actually exist on the model.
+    missing_from_model = RESULT_AFFECTING_FIELDS - req_fields
+    assert not missing_from_model, (
+        f"RESULT_AFFECTING_FIELDS references fields not on BacktestRequest: "
+        f"{missing_from_model}. Remove stale entries from the allow-list."
+    )

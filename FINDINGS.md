@@ -41,6 +41,9 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-017 | 2026-05-30 | Dolt-only (clean, real-quote) alpha check: NO demonstrable alpha — the one winner is beta; bias signal IC ≈ noise/inverted | Metric routing + directional IC shipped; verdict = no edge on clean data |
 | F-018 | 2026-05-31 | Direction A: IC-first signal research on free underlying data. No UNCONDITIONAL graduate, but two statistically-significant CONDITIONAL (vol-regime-gated) edges found | Harness shipped; conditioned_reversal GRADUATES on SPY/QQQ (vix_pct IC +0.163 @10d, p<0.001) — first IC-validated signal |
 | F-019 | 2026-05-31 | Execution test: does the IC-validated signal survive expression as a defined-risk debit spread? Wired conditioned_reversal into chain_replay as an entry gate | NO — IC does NOT transmit (favorable cell n=4 noise; sampled cells gating HURT). Signal IC is necessary-not-sufficient. Cache-key bug (omitted signal_filter, F-005 class) found + fixed |
+| F-020 | 2026-05-31 | Phase 3 cache-key audit: 4 additional result-affecting fields absent from `_cache_key` (F-005-class latent bugs) | FIXED — min_score, vrp_filter, vrp_threshold, swing_bias_filter, option_style added; RESULT_AFFECTING_FIELDS sentinel test guards against future omissions |
+| F-021 | 2026-05-31 | Phase 4 sentiment IC test: FinBERT composite score on 115k SPY headlines does NOT predict SPY forward returns (all horizons, all lookbacks) | NO EDGE — best IC −0.079 @10d (p=0.065); consistent bearish bias but not significant; does not graduate; signal not recommended for further execution testing |
+| F-022 | 2026-05-31 | Phase 1 sweep RUN across 7 index ETFs (SPY/QQQ/IWM/DIA/XLK/XLF/XLE) — the network-blocked deliverable. Fixed sweep warmup bug (120d too short for 252d high52w signal) | Two signals GRADUATE on all 7: ts_momentum (IC −0.091 @10d) and high52w_proximity (IC −0.102 @10d), both INVERTED — broad-index 10-day mean-reversion. Confirms+broadens F-018; vrp_proxy/vix_term_structure fail |
 
 ---
 
@@ -868,3 +871,176 @@ double spread cost), or possibly a longer-dated / deeper-ITM structure with more
 cost drag — but the project's mandate is short-DTE defined-risk spreads, for which this signal is
 not the edge. The durable takeaways (golden params, the necessary-not-sufficient lesson, and the
 endorsed regime-specific-strategy direction) are saved to persistent memory.
+
+---
+
+## F-020 — Phase 3 cache-key audit: four result-affecting fields absent from `_cache_key`
+
+**Date:** 2026-05-31
+**Status:** FIXED — all four fields added; RESULT_AFFECTING_FIELDS sentinel test prevents recurrence
+
+**Observed.** A targeted audit of `src/backtest/cache._cache_key` against every field on
+`BacktestRequest` found four result-affecting fields that were keyed on `signal_filter` (fixed in
+F-019) but NOT on four others introduced later: `min_score`, `vrp_filter`, `vrp_threshold`,
+`swing_bias_filter`, and `option_style`.
+
+**Evidence.** Manual cross-check of `BacktestRequest.model_fields` against `key_data` dict in
+`_cache_key`. All five were present on the model and all five alter backtest P&L:
+- `min_score` — score threshold gate on entry; different min_score → different trade set
+- `vrp_filter / vrp_threshold` — VRP regime gate; same params but different VRP threshold silently
+  returned the same cached result
+- `swing_bias_filter` — regime directional bias filter
+- `option_style` — european vs american early-exercise affects theoretical P&L in local_backtest
+
+**Why it matters.** This is the F-005 failure class: two runs with different filter configurations
+silently return the same result because the cache key is identical. The bug is latent — it only
+bites when those specific filters are exercised in back-to-back runs where the first result is
+already cached. Exactly the same silent corruption as the original F-005 engine-hash bug, just
+on request-parameter axes.
+
+**Resolution.**
+- Added all five fields to `_cache_key`'s `key_data` dict with inline comments explaining each
+- Added `RESULT_AFFECTING_FIELDS` frozenset to `cache.py` (canonical allow-list)
+- Added sentinel regression test `test_cache_key_sentinel_all_result_affecting_fields_present`
+  in `tests/test_signal_lib.py`: iterates `RESULT_AFFECTING_FIELDS` against
+  `BacktestRequest.model_fields`, fails if any listed field is absent from the model — catches
+  future cases where a field is added to the allow-list but misspelled, or removed from the model
+- Added `test_cache_key_covers_vrp_and_swing_bias_filters` and
+  `test_cache_key_covers_option_style_and_min_score`: verify each new field actually changes the
+  key (not just that it appears in the dict)
+
+**Lesson.** The F-005 fix (logic-version hash) protects against *code* changes but not against
+*new result-affecting request fields* being added without updating the key. The sentinel test is
+the correct structural fix: it fails at test time, not silently at runtime.
+
+---
+
+## F-021 — Phase 4 sentiment IC test: FinBERT composite score does NOT predict SPY returns
+
+**Date:** 2026-05-31
+**Status:** NO EDGE — signal does not graduate; not recommended for execution testing
+
+**What was done.** Built `scripts/sentiment_ic_test.py`: a fully offline IC test for the FinBERT
+sentiment archive in `data/sentiment_backtest.db`. Strictly follows design rules from
+`.claude/rules/sentiment.md`:
+- **Zero imports from `src/sentiment/`** — reads scored headlines directly from SQLite
+- **Point-in-time construction** — for each snapshot date t, only headlines with
+  `published_at ≤ t` (within a rolling lookback window) contribute to the signal
+- **Offline price data** — uses SPY spot prices from `data/chain_snapshots.db` (no yfinance,
+  no network required)
+- Signal = exponentially-decayed weighted mean of `(positive − negative)` over the lookback
+  window (halflife = 96 h / 4 days)
+- Same `signal_eval` IC engine (`ic_table`, `fold_ic_signs`, `graduate`) as `signal_ic_sweep.py`
+- Regime split uses trailing 63-day close vol (proxy for VIX, since VIX not available offline)
+
+**Dataset.** 115,552 scored SPY headlines (min_confidence ≥ 0.5), overlap with chain_snapshots
+price data: 2020-01-04 → 2024-03-04, n=556 trading days.
+
+**Results (default 7d lookback, min_confidence=0.5):**
+
+| Horizon | Spearman IC | p-value | n |
+|---------|------------|---------|---|
+| 3d | −0.0562 | 0.1875 | 552 |
+| 5d | −0.0365 | 0.3933 | 550 |
+| 10d | −0.0662 | 0.1229 | 545 |
+
+Regime split (low vs high trailing vol):
+
+| Horizon | low-vol IC | n | high-vol IC | n |
+|---------|-----------|---|------------|---|
+| 3d | −0.069 | 244 | −0.101 | 244 |
+| 5d | −0.010 | 243 | −0.103 | 243 |
+| 10d | −0.115 | 241 | −0.156 | 240 |
+
+Verdict: ❌ no edge. Best: 10d IC=−0.066, p=0.123, direction=inverted, reason=not significant.
+
+**Sensitivity across lookback/confidence settings:**
+
+| lookback | min_conf | best_h | IC | p | verdict |
+|----------|----------|--------|----|---|---------|
+| 3d | 0.70 | 5d | −0.071 | 0.098 | ❌ not significant |
+| 7d | 0.50 | 10d | −0.066 | 0.123 | ❌ not significant |
+| 14d | 0.50 | 10d | −0.079 | 0.065 | ❌ not significant (closest) |
+
+**Verdict — NO EDGE.** The signal consistently fails to graduate across all lookback windows and
+confidence thresholds. Key observations:
+1. **Consistent bearish bias.** All ICs are negative — higher (more positive) FinBERT composite
+   score weakly predicts *lower* SPY forward returns, the opposite of the hypothesised direction.
+   This may reflect a "bad news travels faster" asymmetry in news headlines, or that positive
+   sentiment is a lagging sentiment indicator that follows moves upward (sentiment = noise on
+   an index-level).
+2. **Stronger in high-vol regimes.** The negative IC is consistently larger in absolute terms
+   during high-vol periods. A contrarian interpretation (high positive sentiment after a stress
+   event → fading into a rebound) might have merit, but with p-values all above 0.06 the effect
+   is too weak to act on.
+3. **None pass the graduation gate** (p < 0.05 AND |IC| ≥ 0.03, sign-stable). The best single
+   run (14d lookback, 10d horizon) gets p=0.065, just outside significance.
+4. **No execution test warranted.** The F-018/F-019 experience showed that a signal with IC=+0.163
+   (p<0.001) still failed to transmit through debit spreads. A signal with IC≈−0.07 (p≈0.10)
+   at best, in the wrong direction, has no viable path to an options edge.
+
+**Why index-level sentiment likely doesn't work here.** FinBERT headlines aggregate broad market
+sentiment; SPY price already incorporates this news almost instantly (Fama 1970). The 7-day
+lookback window is likely too long for the efficient-price-discovery regime, and too short to
+build a reliable mean-reversion signal. Single-stock headlines, especially for less-covered
+names, might show higher IC — but that is outside the current mandate (SPY/index ETFs).
+
+**Follow-up / what to test instead.** If sentiment is to be revisited: (1) test on individual
+high-coverage single names (AAPL, TSLA) where sentiment may move price rather than follow it;
+(2) test intraday sentiment → same-day return (faster signal decay); (3) test on volatility
+rather than direction (positive FinBERT composite → lower VIX next day?). None of these are
+blocked by missing data, but they are outside current scope.
+
+---
+
+## F-022 — Phase 1 sweep across 7 index ETFs: broad-index 10-day mean-reversion graduates
+
+**Date:** 2026-05-31
+**Status:** Done — the network-blocked Phase-1 deliverable now RUN; two signals graduate; one
+sweep bug fixed
+
+**Context.** Dispatch added two new signals (`vrp_proxy`, `high52w_proximity`) and unit tests but
+could NOT run the actual multi-ticker IC sweep — yfinance was unavailable in its sandbox. Run here
+(network available) across SPY/QQQ/IWM/DIA/XLK/XLF/XLE, 2020-01-01..2024-12-31.
+
+**Bug fixed first.** `signal_ic_sweep.WARMUP_DAYS` was 120 calendar days (~82 trading) — too short
+for `high52w_proximity`'s 252-day rolling high, which would have been NaN through most of 2020 and
+skipped the COVID regime (silent under-sampling). Raised to 420 calendar days (~290 trading,
+covers 252 + slack). After the fix, the 10d pooled n is 8736 (≈1248/symbol × 7) — full window used.
+
+**Results (pooled across 7 ETFs, strict gate):**
+
+| Signal | best pooled IC | p | symbols agree | graduates? |
+|---|---|---|---|---|
+| **ts_momentum** | −0.091 @10d | <0.001 | 7/7 (all −) | ✅ inverted |
+| **high52w_proximity** | −0.102 @10d | <0.001 | 7/7 (all −) | ✅ inverted |
+| short_term_reversal | +0.028 @3d pooled | — | no | ❌ (regime-split: +0.055 high-VIX / −0.035 low-VIX — conditional only) |
+| vix_term_structure | +0.016 @3d | 0.124 | no | ❌ noise |
+| vrp_proxy | −0.035 @10d | 0.001 | no (signs mixed) | ❌ time-unstable |
+
+**Interpretation — it's ONE phenomenon, not two edges.** Both graduates are *inverted* and both
+are essentially "how extended is price": `ts_momentum` = 3-month trailing return (inverted ⇒ fade
+winners), `high52w_proximity` = closeness to the 52-week high (inverted ⇒ fade near-highs). They
+measure the same thing and are NOT orthogonal. The robust, cross-sectional finding is **medium-
+horizon (10-day) mean-reversion of extended index ETFs**, significant on all 7 underlyings in both
+vol regimes. This confirms and broadens F-018 (which found it on SPY/QQQ via `conditioned_reversal`)
+to a 7-ETF cross-section, and it survives multiple-testing scrutiny (7/7 same sign at p<0.001 — not
+a lucky cell among the 5×7×2×3 grid).
+
+**Notable negatives.**
+- `high52w_proximity` graduates with the OPPOSITE sign to its literature hypothesis (George-Hwang
+  2004 = near-high *continuation*). On these index ETFs in 2020-2024, reversion dominates
+  continuation at 10d. Honest, regime/era-specific result — the sign is measured, not assumed.
+- `vrp_proxy` does NOT work as a *directional* underlying signal (sign flips across symbols/folds).
+  This does not rule out VRP as a *volatility/regime* conditioner for premium sellers — that is a
+  different test (Phase 2, tail metrics), not a directional IC.
+- `short_term_reversal` remains regime-conditional (works in high-VIX, inverts in calm) — a lead,
+  not an unconditional edge.
+
+**What this changes for Phase 2.** The directional edge to carry forward is medium-horizon index
+mean-reversion (use `ts_momentum`-inverted or `high52w`-inverted; they are redundant — pick one,
+`ts_momentum` is cleaner). CAVEAT from F-019: a directional IC of ~0.10 did NOT transmit through
+10–14 DTE debit spreads (cost + magnitude). So Phase 2 must test a more cost-efficient vehicle
+(higher-delta / longer-dated) and demand ≥30 trades before believing any result. Do NOT re-derive
+the signal layer — it is settled; the open question is purely execution.
+

@@ -1,6 +1,6 @@
 # Data Issues — Chain Snapshots Backtester
 
-Last audited: 2026-05-21
+Last audited: 2026-05-31
 
 This documents every known data limitation in `chain_snapshots.db` that affects
 the chain-replay backtester (`src/backtest/chain_replay.py`). The BS backtester
@@ -387,3 +387,28 @@ This would upgrade 2024 from ~113 contracts/snapshot (Dolt) to ~800+ (Alpaca).
 | 5 | Fill gap 1: Jul-Dec 2023 (#1) | 30 min | Requires Dolt clone |
 | 6 | Let OI accumulate (#4) | 0 (wait) | Dealer filter validation by late 2026 |
 | 7 | Intraday data (#6) | Not recommended | Low ROI for this strategy timeframe |
+
+---
+
+### Issue #8 — Dolt QQQ 10–14 DTE data is too thin for execution testing (Phase 3, 2026-05-31)
+
+**Symptom.** `scripts/signal_execution_test.py` with `--symbol QQQ` returns 0 trades
+at 10–14 DTE for both gate configurations (F-019: "QQQ long_call (either) | 0 | — | — | —").
+The Dolt QQQ snapshot has effectively no option quotes in the 10–14 DTE window.
+
+**Root cause.** Dolt's open-source options data is heavily weighted toward SPY. QQQ
+coverage at short DTE is sparse; the chain-replay entry filter finds no qualifying
+strikes with the configured delta × DTE criteria.
+
+**Impact.** Execution tests for any QQQ signal are unreliable at 10–14 DTE on current
+data. Any cross-asset execution result reported for QQQ in this DTE window should be
+considered uninformative (n ≈ 0, not "no edge").
+
+**Restriction (in effect now).** Execution tests (`scripts/signal_execution_test.py`
+and Phase 2 vehicle-matching) are restricted to **SPY only** on current Dolt data.
+Do NOT interpret a QQQ execution non-result as evidence the signal fails on QQQ — it
+is a data gap, not an edge test.
+
+**Resolution path.** Acquire broader QQQ option data (Alpaca historical backfill —
+see Issue #2) before running QQQ execution tests. This is a user-level acquisition
+decision; do not spend engineering time on it without explicit direction.

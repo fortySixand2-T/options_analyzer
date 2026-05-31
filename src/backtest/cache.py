@@ -57,7 +57,20 @@ _LOGIC_VERSION = _compute_logic_version()
 
 
 def _cache_key(request: BacktestRequest) -> str:
-    """Deterministic cache key from request parameters."""
+    """Deterministic cache key from ALL result-affecting request parameters.
+
+    Every field on BacktestRequest that can change the backtest outcome MUST
+    appear here. If a new result-affecting field is added to BacktestRequest
+    but omitted here, two runs with different filter configs silently return
+    the same cached result — the exact F-005/F-019 failure mode.
+
+    The sentinel test `test_cache_key_covers_all_result_affecting_fields` in
+    tests/test_signal_lib.py will fail if a field in the RESULT_AFFECTING_FIELDS
+    allow-list is missing, ensuring this never regresses silently.
+
+    Phase-3 additions (2026-05-31): vrp_filter, vrp_threshold, swing_bias_filter,
+    option_style, min_score — all were result-affecting but absent from the key.
+    """
     key_data = {
         "strategy": request.strategy,
         "symbol": request.symbol,
@@ -70,18 +83,40 @@ def _cache_key(request: BacktestRequest) -> str:
         "exit_loss": request.exit_loss_pct,
         "exit_dte": request.exit_dte,
         "exit_rule": request.exit_rule,
+        "min_score": request.min_score,            # Phase 3: was missing
         "regime_filter": request.regime_filter,
         "bias_filter": request.bias_filter,
-        "signal_filter": request.signal_filter,   # F-019: gated vs unconditional differ
+        "signal_filter": request.signal_filter,    # F-019: gated vs unconditional differ
         "signal_gate": request.signal_gate,
         "dealer_filter": request.dealer_filter,
         "edge_threshold": request.edge_threshold,
         "slippage_pct": request.slippage_pct,
-        "fill_mode": request.fill_mode,  # bid/ask vs mid fills produce different P&L
-        "logic_version": _LOGIC_VERSION,  # invalidate cache when engine source changes (F-005)
+        "fill_mode": request.fill_mode,            # bid/ask vs mid fills produce different P&L
+        "vrp_filter": request.vrp_filter,          # Phase 3: was missing (F-005-class latent bug)
+        "vrp_threshold": request.vrp_threshold,    # Phase 3: companion to vrp_filter
+        "swing_bias_filter": request.swing_bias_filter,  # Phase 3: was missing
+        "option_style": request.option_style,      # Phase 3: european/american → different P&L
+        "logic_version": _LOGIC_VERSION,           # invalidate cache when engine source changes (F-005)
     }
     raw = json.dumps(key_data, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+# Allow-list of every result-affecting BacktestRequest field name. Used by the
+# sentinel test to catch future omissions before they silently corrupt results.
+# When you add a new result-affecting field to BacktestRequest, add it here too.
+RESULT_AFFECTING_FIELDS = frozenset({
+    "strategy", "symbol", "start_date", "end_date",
+    "entry_delta", "entry_dte_min", "entry_dte_max",
+    "exit_profit_pct", "exit_loss_pct", "exit_dte", "exit_rule",
+    "min_score",
+    "regime_filter", "bias_filter",
+    "signal_filter", "signal_gate",
+    "dealer_filter", "edge_threshold",
+    "slippage_pct", "fill_mode",
+    "vrp_filter", "vrp_threshold", "swing_bias_filter",
+    "option_style",
+})
 
 
 def _init_db(conn: sqlite3.Connection):
