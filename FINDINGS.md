@@ -30,8 +30,8 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-006 | 2026-05-30 | Concurrency makes overlapping trades correlated → inflated Sharpe/PF | Resolved (time-indexed MTM) |
 | F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Reframed — data already daily; granularity is exit-logic-bound; finer risk needs INTRADAY data |
 | F-008 | 2026-05-30 | Impossible spread premiums → phantom profit. ROOT CAUSE (corrected): `_select_strikes` picked legs from DIFFERENT expiries | Fixed (same-expiry constraint) — free code fix, no data feed needed |
-| F-009 | 2026-05-30 | local_backtest prices `butterfly` as a single ATM call (no `butterfly` branch in `_price_strategy`) | Open (audit) — HIGH; invalidates butterfly BS results |
-| F-010 | 2026-05-30 | local_backtest `dte_exit` overwrites profit_target/stop_loss label | Open (audit) — LOW (mislabel) |
+| F-009 | 2026-05-30 | local_backtest prices `butterfly` as a single ATM call (no `butterfly` branch in `_price_strategy`) | FIXED — butterfly branch added; BS butterfly now −$2,599/Sharpe −2.42 (was bogus +$23,535); VALIDATION_RESULTS corrected |
+| F-010 | 2026-05-30 | local_backtest `dte_exit` overwrites profit_target/stop_loss label | FIXED (`exit_reason or "dte_exit"`) |
 | F-011 | 2026-05-30 | Tests assert structure/execution, never economic invariants → silent bugs pass | Open — plan below |
 
 ---

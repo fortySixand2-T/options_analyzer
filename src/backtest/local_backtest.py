@@ -463,7 +463,9 @@ def _simulate_trades(closes, dates, rolling_vol, request, params, ohlcv_df=None)
                         exit_reason = "stop_loss"
 
             if dte_remaining <= time_exit_dte:
-                exit_reason = "dte_exit"
+                # Don't clobber a profit_target/stop_loss already triggered this
+                # bar (F-010) — match chain_replay's precedence.
+                exit_reason = exit_reason or "dte_exit"
 
             if exit_reason:
                 regime = _classify_regime(
@@ -671,6 +673,16 @@ def _price_strategy(spot, entry_spot, iv, T, r, strategy, is_credit, pricer=None
             call = price_fn(spot, atm, T, r, iv, "call")
             put = price_fn(spot, atm, T, r, iv, "put")
             return call + put
+
+        elif strategy in ("butterfly",):
+            # Long call butterfly: buy 1 lower, sell 2 center (ATM), buy 1 upper,
+            # one strike increment per wing. Net debit; value rises toward the
+            # wing width as spot pins the center. (F-009: previously this active
+            # strategy had no branch and was mispriced as a single ATM call.)
+            buy_low = price_fn(spot, atm - inc, T, r, iv, "call")
+            sell_center = price_fn(spot, atm, T, r, iv, "call")
+            buy_high = price_fn(spot, atm + inc, T, r, iv, "call")
+            return buy_low + buy_high - 2 * sell_center
 
         elif strategy in ("iron_butterfly",):
             wing_width = inc * 5

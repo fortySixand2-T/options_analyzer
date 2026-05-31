@@ -1,5 +1,14 @@
 # Validation Backtest Results
 
+> ⚠️ **CORRECTION 2026-05-30 — all `Butterfly` rows below are INVALID (see FINDINGS.md
+> F-009).** These results were produced by `local_backtest._price_strategy`, which had no
+> `butterfly` branch and silently priced butterfly as a **single long ATM call**. So every
+> "butterfly" figure here (e.g. +$23,535 / Sharpe 2.09 "best performer", "pure noise R²=0.02")
+> actually describes a long ATM call in a 2022-2026 bull market — NOT a butterfly. After the
+> fix, the BS-engine butterfly is a **loser: −$2,599, WR 35.2%, Sharpe −2.42** (SPY 2022-2026,
+> strategy exits), consistent with chain-replay. Disregard butterfly conclusions below pending
+> a clean re-validation; all other strategies are unaffected by this bug.
+
 SPY 2022-01-01 to 2026-04-25, 3% slippage on entry and exit, per-strategy exit rules.
 
 ## Strategy Rankings
