@@ -28,7 +28,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-004 | 2026-05-30 | Sequential single-position loop was path-dependent | Fixed (decoupled) |
 | F-005 | 2026-05-30 | Backtest result cache not invalidated on code change | Mitigated; follow-up open |
 | F-006 | 2026-05-30 | Concurrency makes overlapping trades correlated → inflated Sharpe/PF | Resolved (time-indexed MTM) |
-| F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Open — blocked on OPRA quotes entitlement |
+| F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Open — mostly fixable via daily bar backfill (free); far-OTM wings need OPRA quotes |
 
 ---
 
@@ -266,3 +266,31 @@ entitlement. NOT yet wired into `chain_replay` — with no live quotes it would 
    but reintroduces model pricing (less honest than real quotes; mind IV drift).
 3. **Accept the limitation** — keep the time-indexed realized curve from F-006 and treat
    max-drawdown as a lower bound, leaning on win rate + mean P&L + OOS for judgment.
+
+### Update 2026-05-30 (b) — measured: the gap is mostly *cadence*, and liquidity bites only far-OTM
+Question raised: is the sparse-marks problem *all* options or only non-ATM? Measured SPY
+daily **bar** coverage over a 15-trading-day window by moneyness:
+
+| Moneyness | Days with a bar | Coverage |
+|---|---|---|
+| ATM | 15/15 | **100%** |
+| ~3% OTM | 15/15 | **100%** |
+| ~7% OTM | 15/15 | **100%** |
+| ~12% OTM | 0/15 | **0%** |
+
+So there are really *two* gaps, and they have different fixes:
+- **Collection cadence (dominant, universal, FREE to fix).** The intra-hold sparsity in the
+  backtest is mostly because we only *stored* every-other-day snapshots and `chain_replay`
+  reads the stored DB — not because the data doesn't exist. Alpaca **has daily bars** for
+  ATM-to-~7%-OTM strikes (the legs our credit/debit spreads use). Re-backfilling SPY/QQQ/IWM
+  **daily** with the already-entitled bars endpoint gives daily marks for those legs — no
+  subscription needed.
+- **Liquidity (far-OTM only, needs quotes).** Deep wings (~12%+ OTM — the protective legs of
+  iron condors and butterflies) genuinely don't trade most days (0% bar coverage), so only
+  *continuous quotes* can mark them. This is the residual that still needs the OPRA feed.
+
+**Revised remedy / priority.** (1) Daily bar backfill (free, entitled) resolves most of
+F-007 for spreads. (2) The gated quotes endpoint (`get_option_quotes`, ready) is then a
+narrower need — far-OTM wings + true bid/ask realism — which lowers the urgency of the
+subscription decision above. Single-stock / less-liquid underlyings degrade earlier than
+SPY (measurement is best-case).

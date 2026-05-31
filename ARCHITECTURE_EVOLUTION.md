@@ -152,14 +152,15 @@ backtester logic version (F-005), so it can serve stale results across code chan
    *continuous* MTM (intra-hold marks are sparse, F-007) via denser data / the quotes
    endpoint, so drawdown reflects interim risk, not just exit-to-exit.
 
-3. **True bid/ask + continuous marks (backlog #2 — BLOCKED on entitlement).** The
-   `get_option_quotes()` client method is implemented, graceful, and unit-tested, but
-   Alpaca's historical **quotes** endpoint returns 404 on this plan — historical option
-   quotes need an OPRA subscription (bars/trades work; quotes don't). Until a paid
-   options-data feed (OPRA via Alpaca, or Polygon) is enabled, real NBBO spreads and
-   continuous intra-hold marks (F-007) aren't available; the alternative is a
-   Black-Scholes intra-hold fallback (model pricing). Decision pending — see FINDINGS.md
-   F-007.
+3. **Continuous intra-hold marks (F-007) — two gaps, two fixes.** Measurement (FINDINGS
+   F-007 update b) split this: (a) the *dominant* gap is collection **cadence** — we only
+   stored every-other-day snapshots, but Alpaca has daily **bars** for ATM-to-~7%-OTM
+   strikes (the legs our spreads use). A **daily bar re-backfill** (already-entitled, free)
+   fixes most of it. (b) The residual is **far-OTM wings** (~12%+, condor/fly protective
+   legs) which don't trade daily and so need continuous **quotes** — gated behind an OPRA
+   subscription (the `get_option_quotes()` client is implemented and ready; Alpaca returns
+   404 on this plan). Net: most of F-007 is a free data-collection task; the paywall is now
+   a narrower need (deep wings + true bid/ask realism). Decision pending — see FINDINGS.md.
 
 4. **Cache invalidation (F-005).** Add a logic-version/source-hash component to the
    backtest cache key.
