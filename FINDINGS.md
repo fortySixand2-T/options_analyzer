@@ -44,6 +44,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-020 | 2026-05-31 | Phase 3 cache-key audit: 4 additional result-affecting fields absent from `_cache_key` (F-005-class latent bugs) | FIXED — min_score, vrp_filter, vrp_threshold, swing_bias_filter, option_style added; RESULT_AFFECTING_FIELDS sentinel test guards against future omissions |
 | F-021 | 2026-05-31 | Phase 4 sentiment IC test: FinBERT composite score on 115k SPY headlines does NOT predict SPY forward returns (all horizons, all lookbacks) | NO EDGE — best IC −0.079 @10d (p=0.065); consistent bearish bias but not significant; does not graduate; signal not recommended for further execution testing |
 | F-022 | 2026-05-31 | Phase 1 sweep RUN across 7 index ETFs (SPY/QQQ/IWM/DIA/XLK/XLF/XLE) — the network-blocked deliverable. Fixed sweep warmup bug (120d too short for 252d high52w signal) | Two signals GRADUATE on all 7: ts_momentum (IC −0.091 @10d) and high52w_proximity (IC −0.102 @10d), both INVERTED — broad-index 10-day mean-reversion. Confirms+broadens F-018; vrp_proxy/vix_term_structure fail |
+| F-023 | 2026-05-31 | Phase 2 vehicle sweep: does the validated directional signal transmit through a better debit-spread vehicle? Added DTE/ITM-depth/cadence knobs | NO at any vehicle — unconditional wins everywhere (beta), gating HURTS. Directional thread closed for the defined-risk-spread mandate. Next edge = vol-regime conditioner for premium SELLERS (tail metrics) |
 
 ---
 
@@ -1043,4 +1044,60 @@ mean-reversion (use `ts_momentum`-inverted or `high52w`-inverted; they are redun
 10–14 DTE debit spreads (cost + magnitude). So Phase 2 must test a more cost-efficient vehicle
 (higher-delta / longer-dated) and demand ≥30 trades before believing any result. Do NOT re-derive
 the signal layer — it is settled; the open question is purely execution.
+
+---
+
+## F-023 — Phase 2 vehicle sweep: the directional edge does NOT transmit at ANY vehicle
+
+**Date:** 2026-05-31
+**Status:** Done — definitive NO across DTE × ITM-depth × cadence × both gates. Directional-signal
+thread is closed for the defined-risk-spread mandate.
+
+**What was done.** F-019 showed the mean-reversion signal failed through a narrow ATM debit spread,
+but on n=4 — possibly just sample. Phase 2 added three vehicle knobs to the backtester (F-023) to
+test the "wrong vehicle, not wrong signal" hypothesis and to fix the sample problem:
+- `entry_interval` (BacktestRequest) — entry cadence; smaller ⇒ more entries (sample-size knob).
+- `debit_itm_pct` — places the LONG leg that far ITM (more delta, less theta drag).
+- `debit_width_pct` — debit-spread width as a fraction of spot.
+All default to the legacy narrow-ATM behaviour (verified by `tests/test_vehicle_knobs.py`); all
+three added to `_cache_key` + `RESULT_AFFECTING_FIELDS` (auto-guarded by the sentinel test).
+`scripts/signal_vehicle_sweep.py` sweeps DTE {10-14, 21-35, 30-45} × ITM {0, 3%, 6%} (width 5%),
+gated vs unconditional long_call_spread, on SPY 2020-2024, both gates.
+
+**Result — NO vehicle rescues it (SPY, width 5%):**
+
+| | unconditional $/trade (ror) | gated $/trade (ror) | n (gated) |
+|---|---|---|---|
+| 10-14 DTE, ATM | +101 (0.185) | +60 (0.095) | 62 |
+| 21-35 DTE, ATM | +164 (0.223) | +1 (0.001) | 65 |
+| 30-45 DTE, ATM | +327 (0.400) | −176 (−0.194) | 5 |
+| 10-14 DTE, 6% ITM | +36 (0.019) | +142 (0.091) | 62 |
+
+(contango gate, entry_interval=2; vix_pct/interval=1 gives the same picture with smaller n.)
+
+**Verdict — the directional IC does NOT transmit, and gating HURTS.** Three robust observations:
+1. **Unconditional is positive in every cell** ($36–$374/trade) — the bull-market beta of being
+   long delta (F-017), strongest at longer DTE where the spread carries more delta to the drift.
+2. **Gating subtracts value in almost every cell** (gated < unconditional). The signal selects
+   post-drawdown "laggard in calm" days and discards the high-beta up-drift days where the long
+   call actually earns; the residual reversion can't cover the spread's bid/ask + theta cost.
+3. **The lone "✅" (contango/10-14/6% ITM, gated $142 > unconditional $36) is an artifact** — gating
+   "wins" only because the deep-ITM unconditional baseline collapsed there (ror 0.019); the same
+   gate/ITM at 21-35 DTE is −$98. Not a real, structure-robust edge.
+
+Longer DTE *widening* the unconditional-minus-gated gap is the tell: this is delta/beta, not signal.
+
+**Conclusion.** Across DTE, ITM depth, spread width, entry cadence and both vol gates, the validated
+medium-horizon mean-reversion signal (real IC ~0.10 on the underlying, F-018/F-022) has **no
+expression as a short-DTE defined-risk debit spread that beats simply being long**. This closes the
+DIRECTIONAL thread for the project's mandate: a sign-only edge of that size is structurally
+unmonetizable through debit spreads (it would need a delta-1 / underlying position — out of mandate;
+see [[signal-ic-necessary-not-sufficient]]). The two-layer framework is now fully demonstrated: the
+signal layer found genuine alpha, the execution layer conclusively rejects it for this vehicle class.
+
+**Where edge research goes next (NOT directional).** The untested family is the VOLATILITY/regime
+edge for PREMIUM SELLERS: use a vol-regime signal (VRP / term structure) to CONDITION
+short_put_spread / iron_condor and judge on TAIL metrics (CVaR/Calmar/max-loss), not directional IC.
+`vrp_proxy` failed as a *directional* signal (F-022) but was never tested as a *seller's vol
+conditioner* — that is the open Phase-2(b)/Phase-5 question, and it is a different test entirely.
 

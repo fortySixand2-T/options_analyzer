@@ -47,6 +47,13 @@ class BacktestRequest(BaseModel):
     vrp_threshold: float = 3.0             # min VRP % for swing credit strategies
     swing_bias_filter: bool = False         # use swing bias (SMA 20/50/200) instead of short-term
     option_style: str = "european"         # "european" (BS) or "american" (LSMC MC)
+    # Phase 2 (F-023) vehicle knobs — match a validated DIRECTIONAL signal to a
+    # more cost-efficient option structure. Defaults reproduce the legacy
+    # narrow-ATM debit spread exactly (itm=0 → ATM long leg; width=0 → adjacent
+    # short strike), so existing results are unchanged.
+    entry_interval: int = 5                 # snapshots between entries (sample-size knob)
+    debit_itm_pct: float = 0.0              # long leg this far ITM (frac of spot): more delta, less theta
+    debit_width_pct: float = 0.0            # debit-spread width as frac of spot (0 = adjacent strike)
 
 
 class BacktestTrade(BaseModel):

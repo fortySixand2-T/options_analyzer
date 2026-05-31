@@ -96,6 +96,9 @@ def _cache_key(request: BacktestRequest) -> str:
         "vrp_threshold": request.vrp_threshold,    # Phase 3: companion to vrp_filter
         "swing_bias_filter": request.swing_bias_filter,  # Phase 3: was missing
         "option_style": request.option_style,      # Phase 3: european/american → different P&L
+        "entry_interval": request.entry_interval,   # Phase 2 (F-023): changes the trade set
+        "debit_itm_pct": request.debit_itm_pct,     # Phase 2 (F-023): changes long-leg strike
+        "debit_width_pct": request.debit_width_pct, # Phase 2 (F-023): changes short-leg strike
         "logic_version": _LOGIC_VERSION,           # invalidate cache when engine source changes (F-005)
     }
     raw = json.dumps(key_data, sort_keys=True)
@@ -116,6 +119,7 @@ RESULT_AFFECTING_FIELDS = frozenset({
     "slippage_pct", "fill_mode",
     "vrp_filter", "vrp_threshold", "swing_bias_filter",
     "option_style",
+    "entry_interval", "debit_itm_pct", "debit_width_pct",
 })
 
 

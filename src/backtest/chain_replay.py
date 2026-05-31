@@ -240,12 +240,19 @@ def _classify_regime(iv: float, rolling_vol: np.ndarray, idx: int) -> str:
 
 
 def _select_strikes(contracts: List[dict], spot: float, strategy: str,
-                    target_delta: float) -> Optional[dict]:
+                    target_delta: float, itm_pct: float = 0.0,
+                    width_pct: float = 0.0) -> Optional[dict]:
     """Select strikes for the strategy from real chain contracts.
 
     Uses IV-implied delta approximation: for OTM options, lower IV and
     further-from-spot = lower delta. We pick the strike closest to the
     target delta on each side.
+
+    Debit spreads (long_call_spread / long_put_spread) additionally honour the
+    Phase-2 (F-023) vehicle knobs: `itm_pct` places the LONG leg that far ITM
+    (more delta, less theta — a more cost-efficient way to express a directional
+    signal), and `width_pct` sets the spread width as a fraction of spot. Both
+    default to 0.0, which reproduces the legacy narrow-ATM spread exactly.
 
     Returns dict with strategy legs or None if insufficient strikes.
     """
@@ -328,14 +335,20 @@ def _select_strikes(contracts: List[dict], spot: float, strategy: str,
         }
 
     elif strategy == "long_call_spread":
-        atm_calls = sorted(calls, key=lambda c: abs(c["strike"] - spot))
-        if len(atm_calls) < 2:
+        if len(calls) < 2:
             return None
-        buy_call = atm_calls[0]
-        otm_above = [c for c in calls if c["strike"] > buy_call["strike"]]
-        if not otm_above:
+        # Long leg: `itm_pct` below spot (ITM = deeper delta) — 0.0 ⇒ ATM.
+        buy_target = spot * (1.0 - itm_pct)
+        buy_call = min(calls, key=lambda c: abs(c["strike"] - buy_target))
+        above = [c for c in calls if c["strike"] > buy_call["strike"]]
+        if not above:
             return None
-        sell_call = otm_above[0]
+        # Short leg: `width_pct`*spot above the long strike — 0.0 ⇒ adjacent.
+        if width_pct > 0:
+            sell_target = buy_call["strike"] + spot * width_pct
+            sell_call = min(above, key=lambda c: abs(c["strike"] - sell_target))
+        else:
+            sell_call = above[0]
         return {
             "legs": [
                 {"contract": buy_call, "side": "buy"},
@@ -346,14 +359,19 @@ def _select_strikes(contracts: List[dict], spot: float, strategy: str,
         }
 
     elif strategy == "long_put_spread":
-        atm_puts = sorted(puts, key=lambda c: abs(c["strike"] - spot))
-        if len(atm_puts) < 2:
+        if len(puts) < 2:
             return None
-        buy_put = atm_puts[0]
-        otm_below = [p for p in puts if p["strike"] < buy_put["strike"]]
-        if not otm_below:
+        # Long leg: `itm_pct` above spot (ITM put) — 0.0 ⇒ ATM.
+        buy_target = spot * (1.0 + itm_pct)
+        buy_put = min(puts, key=lambda p: abs(p["strike"] - buy_target))
+        below = [p for p in puts if p["strike"] < buy_put["strike"]]
+        if not below:
             return None
-        sell_put = otm_below[-1]
+        if width_pct > 0:
+            sell_target = buy_put["strike"] - spot * width_pct
+            sell_put = min(below, key=lambda p: abs(p["strike"] - sell_target))
+        else:
+            sell_put = below[-1]
         return {
             "legs": [
                 {"contract": buy_put, "side": "buy"},
@@ -643,7 +661,11 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
     skipped_filter = 0
     skipped_bad_premium = 0
     exit_used_intrinsic = 0
-    entry_interval = 5
+    # Entry cadence (Phase 2 / F-023): a smaller interval yields more entries —
+    # needed to get a meaningful sample on signal-gated runs where the gate fires
+    # rarely (F-019 long-call side was n=4). Overlapping trades are allowed by the
+    # F-004/F-006 decoupled design. Default 5 preserves prior behaviour.
+    entry_interval = max(1, request.entry_interval)
 
     exit_rules = _get_exit_rules(request.strategy)
 
@@ -732,6 +754,7 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
 
         position = _select_strikes(
             contracts, snap["spot"], request.strategy, request.entry_delta,
+            itm_pct=request.debit_itm_pct, width_pct=request.debit_width_pct,
         )
         if not position:
             skipped_no_strikes += 1

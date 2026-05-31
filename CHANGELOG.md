@@ -862,3 +862,24 @@ data and IC-gated BEFORE touching the option backtest.
   directional signals; short_term_reversal remains regime-conditional.
 - FINDINGS.md: added F-022 (index row + full entry). Reviewed dispatch's F-020 (cache) and F-021
   (sentiment) work — both sound, kept as-is.
+
+## 2026-05-31 (cont.) — F-023: Phase 2 vehicle sweep (directional thread closed)
+
+- [2026-05-31] Modified: src/backtest/models.py — Added 3 Phase-2 vehicle knobs to BacktestRequest:
+  entry_interval (entry cadence / sample-size knob), debit_itm_pct (long-leg ITM depth → more delta,
+  less theta), debit_width_pct (debit-spread width as frac of spot). Defaults reproduce the legacy
+  narrow-ATM spread exactly.
+- [2026-05-31] Modified: src/backtest/chain_replay.py — _select_strikes honours itm_pct/width_pct for
+  long_call_spread/long_put_spread (deeper-ITM long leg + configurable width); entry cadence now reads
+  request.entry_interval (was hardcoded 5). Defaults unchanged.
+- [2026-05-31] Modified: src/backtest/cache.py — Added entry_interval/debit_itm_pct/debit_width_pct to
+  _cache_key + RESULT_AFFECTING_FIELDS (sentinel test auto-covers them).
+- [2026-05-31] Created: scripts/signal_vehicle_sweep.py — Sweeps DTE × ITM-depth (width 5%), gated vs
+  unconditional long_call_spread, both vol gates, flagging cells where gating beats unconditional with
+  n≥30.
+- [2026-05-31] Created: tests/test_vehicle_knobs.py — 7 tests for _select_strikes ITM/width behaviour +
+  the guarantee that defaults reproduce the legacy ATM-adjacent spread.
+- [2026-05-31] Modified: FINDINGS.md — F-023: across DTE {10-14,21-35,30-45} × ITM {0,3,6%} × cadence ×
+  both gates, the validated directional signal does NOT beat the unconditional spread anywhere; gating
+  HURTS. Unconditional is positive (beta) everywhere. Directional-signal thread CLOSED for the
+  defined-risk-spread mandate. Next edge = vol-regime conditioner for premium SELLERS (tail metrics).
