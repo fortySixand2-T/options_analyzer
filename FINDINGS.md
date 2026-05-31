@@ -39,6 +39,8 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-015 | 2026-05-30 | Each strategy has a different edge source → needs a different metric; we ranked all by Sharpe | Tail metrics (CVaR/maxLoss/Calmar) added; per-strategy literature review written |
 | F-016 | 2026-05-30 | Alpaca docs: historical quotes need paid OPRA; our 2025+ bars are free "indicative" DERIVATIVES (delayed, approximate) | Confirmed data map; provenance caveat logged (external decision) |
 | F-017 | 2026-05-30 | Dolt-only (clean, real-quote) alpha check: NO demonstrable alpha — the one winner is beta; bias signal IC ≈ noise/inverted | Metric routing + directional IC shipped; verdict = no edge on clean data |
+| F-018 | 2026-05-31 | Direction A: IC-first signal research on free underlying data. No UNCONDITIONAL graduate, but two statistically-significant CONDITIONAL (vol-regime-gated) edges found | Harness shipped; conditioned_reversal GRADUATES on SPY/QQQ (vix_pct IC +0.163 @10d, p<0.001) — first IC-validated signal |
+| F-019 | 2026-05-31 | Execution test: does the IC-validated signal survive expression as a defined-risk debit spread? Wired conditioned_reversal into chain_replay as an entry gate | NO — IC does NOT transmit (favorable cell n=4 noise; sampled cells gating HURT). Signal IC is necessary-not-sufficient. Cache-key bug (omitted signal_filter, F-005 class) found + fixed |
 
 ---
 
@@ -702,3 +704,167 @@ demonstrable alpha**: premium sellers are net losers (tail-bitten), the directio
 pure beta (signal IC is noise), butterfly loses. This is the honest, valuable output of a now-
 trustworthy backtester — it refuses to manufacture an edge. **Next edge work must start from a
 signal with real IC** (or a genuinely conditioned VRP harvest), not from the current bias score.
+
+---
+
+## F-018 — Direction A: IC-first signal research (signal layer ≠ execution layer)
+
+**Date:** 2026-05-31
+**Status:** Harness shipped; first sweep = no unconditional edge, two significant CONDITIONAL leads
+
+**Premise.** F-017 closed with "next edge work must start from a signal with real IC." This is
+that work. The reframe (desk-quant style): a tradeable edge is two independent layers with very
+different data needs — (1) a **signal** that predicts the UNDERLYING's forward return, which
+needs only cheap underlying OHLCV (decades, free), and (2) an **execution** wrapper that harvests
+it through options, which needs the scarce/expensive option BBO+OI. Every prior result fused the
+two (bias_score → option P&L), so a weak/absent signal was indistinguishable from option
+mechanics and beta. The workaround for our data limits is therefore to **research signals on free
+underlying data, gate hard by IC, and only let survivors touch the option backtest.**
+
+**Evaluation method (three agents, read-only).** A data-inventory agent confirmed the binding
+limit: underlying signal research is wide open (yfinance, ^VIX/^VIX3M, 119k-headline
+sentiment_backtest.db) while OI is 79% zeros (max-pain/GEX blocked) and there is no real BBO
+without OPRA. A literature agent shortlisted the most orthogonal free/cheap, evidence-backed
+signals. A forensic agent established WHY the old bias_detector fails IC: it encodes
+mean-reversion as if it were momentum (RSI<30 → bullish) and is otherwise a coincident/lagging
+trend descriptor built for regime *classification*, not return *prediction* — keep it as a gate,
+don't use it for directional alpha.
+
+**What shipped.**
+- `src/backtest/signal_lib.py` — point-in-time signals (trailing-window ⇒ no lookahead):
+  `short_term_reversal` (−5d return), `ts_momentum` (63d return / RV20, vol-scaled),
+  `vix_term_structure` (VIX/VIX3M−1, z-scored; sign left to the data, not hardcoded).
+- `src/backtest/signal_eval.py` — a generic IC engine: `forward_returns`, `ic_at_horizon`
+  (Spearman+Pearson with p), `ic_table`, `fold_ic_signs` (time stability), `regime_ic_signs`
+  (vol-regime stability), and a **strict graduation gate** `graduate()`: a signal advances only
+  if at its best horizon it is significant (p<0.05), economically real (|IC|≥0.03), and
+  sign-stable across BOTH time folds AND vol regimes. A consistently negative IC graduates as
+  `direction="inverted"` (use −signal).
+- `scripts/signal_ic_sweep.py` — pools (signal, forward-return) pairs across symbols (forward
+  returns computed per-symbol to avoid fake adjacency), reports pooled + per-symbol + regime-split
+  IC, and flags conditional (single-regime) edges.
+
+**Result — SPY/QQQ/AAPL/NFLX, 2020-01-01..2024-12-31 (yfinance):**
+
+| Signal | pooled best IC | p | symbol signs agree | graduates? |
+|---|---|---|---|---|
+| short_term_reversal | +0.028 @3d | 0.050 | no (1/4 flip) | ❌ |
+| ts_momentum | −0.087 @10d | <0.001 | YES (−,−,−,−) | ❌ (1/12 fold flip) |
+| vix_term_structure | −0.015 @5d | 0.286 | no | ❌ |
+
+No signal clears the strict UNCONDITIONAL gate. But the regime split surfaces two
+statistically-significant CONDITIONAL edges the pooled numbers hide:
+
+1. **Medium-horizon reversal in CALM markets** — `ts_momentum` low-VIX @10d: **IC = −0.107,
+   p<0.001, n=2496** (also low-VIX @5d −0.052 p=0.009; high-VIX @10d −0.050 p=0.013). The sign is
+   negative in *every* symbol and *both* regimes — i.e. 3-month winners mean-revert over the next
+   1–2 weeks, strongest when vol is low. This is the single strongest, most stable relationship in
+   the study; it failed the unconditional gate only on 1 of 12 time folds (the COVID V-rebound, a
+   momentum-crash regime). This is a genuine IC lead.
+2. **Regime-switching short-term reversal** — `short_term_reversal` flips sign by regime:
+   low-VIX @5d **IC −0.063 p=0.002** (calm ⇒ short-term *momentum* continues) vs high-VIX @3d
+   **+0.047 p=0.019** / @5d **+0.046 p=0.020** (stress ⇒ recent losers *bounce*). Pooled, the two
+   halves cancel to ~0; conditioned on VIX, each side is real. Textbook short-horizon
+   momentum/long-horizon reversal term structure, modulated by the vol regime.
+
+`vix_term_structure` is noise on its own (best conditional cell only −0.040 p=0.048) — useful as
+the *regime gate* for the other two, not as a standalone signal.
+
+**Why it matters.** This is the first **real, IC-validated directional signal** in the project —
+the thing F-017 said edge work must start from. It is conditional (vol-regime-gated), not
+unconditional, which is itself informative and matches the literature. The strict gate worked as
+intended: it refused to graduate beta/noise but pointed precisely at where the signal lives.
+
+**Follow-up (next iteration of A).** Construct a regime-conditioned signal — e.g. calm-market
+3-month reversal at 10d, or a VIX-gated reversal that goes momentum in calm / reversal in stress —
+and re-run it through the same strict gate as a single conditioned series; if it graduates, only
+THEN express it through a 10–14 DTE debit spread on the clean Dolt window and check that gating on
+the signal HELPS (the F-017 test the old bias score failed). No deferred debt: the harness, tests,
+and docs are complete; the next step is a new experiment, not unfinished work here.
+
+**Iteration 2 (2026-05-31) — the conditioned signal GRADUATES (index-only).** Built
+`signal_lib.conditioned_reversal`: −(vol-scaled 63d return) emitted only on calm days, with a
+strictly point-in-time gate. VIX data confirmed reliable (yfinance ^VIX/^VIX3M: 1258 trading days
+2020-2024, zero NaN, max 4-day gap, VIX range 11.9–82.7 incl. the real COVID spike).
+
+| Universe | gate='contango' (calm 94% of days) | gate='vix_pct' (VIX < trailing median) |
+|---|---|---|
+| SPY/QQQ/AAPL/NFLX | IC +0.075 @10d p<0.001 — ❌ (1–2 single-name-crash folds flip) | IC +0.114 @10d p<0.001 — ❌ (NFLX-2022 / AAPL folds flip) |
+| **SPY/QQQ only** | **IC +0.102 @10d p<0.001 — ✅ GRADUATES** | **IC +0.163 @10d p<0.001 — ✅ GRADUATES** |
+
+The strict gate's only objection at the 4-symbol level was time-instability concentrated in
+single-name crash cells (NFLX −70% in 2022, AAPL late-2023) — the textbook reversal/momentum-crash
+failure mode (buying a falling knife). Restricting to index ETFs, which lack those idiosyncratic
+drawdowns, the signal passes EVERY gate: significant (p<0.001), economically large (rank IC
+0.10–0.16 at 10d — high for equity return prediction), and sign-stable across all time folds and
+both symbols. The `vix_pct` gate (selects ~58% of days) is materially stronger than `contango`
+(barely a gate at 94% calm), so it is the preferred conditioner.
+
+**This is the first IC-validated directional signal in the project** — the thing F-017 said edge
+work must start from. Plain statement: *on SPY/QQQ, in low-vol regimes (VIX below its trailing
+median), the 3-month laggard reverts up over the next ~10 days.* Tests:
+`tests/test_signal_lib.py` now covers the conditioned signal (gate logic, no-lookahead, gated-out
+in stress, calm-laggard orientation), 17 passing.
+
+**Next (execution layer — not yet done).** Express the graduated signal on the clean Dolt SPY
+window as a ~10–14 DTE long_call_spread entered only on calm-laggard days, and run the F-017 test:
+gating on the signal must IMPROVE risk-adjusted performance vs the unconditional long_call_spread
+(+$7,445 beta). Only if gating helps is the signal-PLUS-execution edge real; this requires wiring
+the signal as an entry filter into chain_replay.
+
+---
+
+## F-019 — Execution test: a validated directional IC does NOT transmit through debit spreads
+
+**Date:** 2026-05-31
+**Status:** Done — answer is NO (for defined-risk debit spreads on SPY 2020-2024); two-layer
+framework vindicated; cache-key bug found + fixed en route
+
+**What was done.** Wired the F-018 graduated signal into the option backtester. Added
+`signal_filter` / `signal_gate` to `BacktestRequest`; `chain_replay._build_conditioned_signal`
+precomputes `conditioned_reversal` (date→value) for the window from yfinance underlying + VIX/VIX3M;
+the entry loop gates directional debit spreads on its sign (long_call_spread enters only on a
+bullish/positive reading, long_put_spread only on bearish). `scripts/signal_execution_test.py`
+compares unconditional vs gated on the clean Dolt window. This is the F-017 test the old bias score
+failed — does conditioning on the signal beat the unconditional (pure-beta) spread?
+
+**Result (SPY/QQQ, 2020-2024, 10–14 DTE, exit=hold, bid/ask fills):**
+
+| Config | trades | pnl/trade | win | ret-on-risk | profit factor |
+|---|---|---|---|---|---|
+| long_call unconditional (beta) | 138 | $54 | 50.7% | 0.144 | 1.36 |
+| long_call gated, `vix_pct` | **4** | $241 | 75% | 0.671 | 3.58 |
+| long_call gated, `contango` | 26 | **−$22** | 46.2% | −0.058 | 0.89 |
+| long_put gated, `vix_pct` | 63 | **−$71** | 19.0% | −0.301 | 0.59 |
+| QQQ long_call (either) | 0 | — | — | — | — (Dolt QQQ too thin at 10–14 DTE) |
+
+**Verdict — NO, the IC does not transmit.** The single flattering cell (`vix_pct` long_call,
+$241/trade, PF 3.58) is **n=4 — statistically meaningless**. Every adequately-sampled
+configuration made performance WORSE than the unconditional spread (contango long_call 26 trades
+−$22/trade; long_put 63 trades −$71/trade). The long-call side fires rarely because it needs SPY to
+be *both* calm *and* a 3-month laggard — uncommon for an index in a secular bull, so the signal's
+positive tail is thin precisely where we want to trade it.
+
+**Why a real signal still fails here (the lesson).** The IC (+0.163) is measured on the
+UNDERLYING's *sign-of-move* at a fixed 10-day horizon. A defined-risk **debit spread** needs
+*magnitude and timing*, and crosses the bid/ask twice. A sign-only edge of IC ≈ 0.16 (the
+underlying drifts the right way slightly more than half the time) is swamped by the spread's cost
+structure and its dependence on a sufficiently large move within DTE. **Directional IC on the
+underlying is NECESSARY BUT NOT SUFFICIENT for an options edge** — the signal and execution layers
+are independent gates, exactly as the F-017/F-018 framing posited. The framework worked: the signal
+layer found real alpha, the execution layer correctly refused to monetize it through the wrong
+vehicle.
+
+**Bug found + fixed (F-005 class).** `cache._cache_key` did not include `signal_filter` /
+`signal_gate`, so the first gated run silently returned the cached UNCONDITIONAL result (identical
+to the penny — the tell). Added both to the key; added `test_cache_key_includes_signal_filter`
+regression test. (`vrp_filter`/`swing_bias_filter` are likewise absent from the key — flagged for a
+follow-up audit; they are unused in current runs so no result is presently wrong, but the key
+should enumerate every result-affecting field.)
+
+**Where this points (not a dead end).** The signal is real; the *vehicle* is wrong. A directional
+IC of 0.16 is naturally expressed in a delta-1 / underlying position (no magnitude hurdle, no
+double spread cost), or possibly a longer-dated / deeper-ITM structure with more delta and less
+cost drag — but the project's mandate is short-DTE defined-risk spreads, for which this signal is
+not the edge. The durable takeaways (golden params, the necessary-not-sufficient lesson, and the
+endorsed regime-specific-strategy direction) are saved to persistent memory.

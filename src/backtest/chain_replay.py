@@ -655,6 +655,16 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
 
     ohlcv_df = _fetch_ohlcv_for_bias(request.symbol, request.start_date, request.end_date)
 
+    # F-018/F-019: precompute the IC-validated conditioned_reversal signal once
+    # for the whole window (date -> signal value, or None on non-calm days). The
+    # entry loop gates directional debit spreads on its sign.
+    signal_map = None
+    if request.signal_filter:
+        signal_map = _build_conditioned_signal(
+            request.symbol, request.start_date, request.end_date, request.signal_gate)
+        if not signal_map:
+            issues.append("Signal filter ON but signal could not be built — filter skipped")
+
     # Path-stable design: entries fire on a FIXED snapshot cadence, independent
     # of any prior trade's outcome, and each position's exit is found by an
     # independent forward scan. This decouples the trade SET from P&L, so
@@ -692,6 +702,23 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
         if not _check_entry_filters(request, regime, bias_score, bias_label, dealer_regime):
             skipped_filter += 1
             continue
+
+        # Conditioned-reversal gate (directional debit spreads only): the signal
+        # predicts the UNDERLYING's direction, so enter long_call_spread only on
+        # a bullish reading (positive = calm-regime laggard expected to revert
+        # up) and long_put_spread only on a bearish one. None ⇒ not a calm day,
+        # so the signal abstains and we do not trade.
+        if signal_map is not None and request.strategy in ("long_call_spread", "long_put_spread"):
+            sv = signal_map.get(snap["date"])
+            if sv is None:
+                skipped_filter += 1
+                continue
+            if request.strategy == "long_call_spread" and sv <= 0:
+                skipped_filter += 1
+                continue
+            if request.strategy == "long_put_spread" and sv >= 0:
+                skipped_filter += 1
+                continue
 
         contracts = _load_contracts(
             conn, snap["id"], request.entry_dte_min, request.entry_dte_max, snap["date"],
@@ -992,6 +1019,36 @@ def _fetch_ohlcv_for_bias(symbol: str, start: date, end: date):
         if hist.empty:
             return None
         return hist
+    except Exception:
+        return None
+
+
+def _build_conditioned_signal(symbol: str, start: date, end: date,
+                              gate: str = "vix_pct") -> Optional[dict]:
+    """Precompute the conditioned_reversal signal (F-018) for the window.
+
+    Returns {date_iso: signal_value or None}. Needs a long warmup (63d momentum
+    + 252d trailing-median gate) so we fetch ~400 days before `start`. VIX and
+    VIX3M come from yfinance (confirmed reliable, F-018). Point-in-time by
+    construction. Returns None if any series is unavailable.
+    """
+    try:
+        import pandas as pd
+        import yfinance as yf
+        from .signal_lib import conditioned_reversal
+
+        lb = (start - timedelta(days=400)).isoformat()
+        hi = (end + timedelta(days=2)).isoformat()
+        px = yf.Ticker(symbol).history(start=lb, end=hi, auto_adjust=True)
+        vix = yf.Ticker("^VIX").history(start=lb, end=hi)
+        vix3m = yf.Ticker("^VIX3M").history(start=lb, end=hi)
+        if px is None or px.empty or vix.empty or vix3m.empty:
+            return None
+        px.index = [d.date() for d in px.index]
+        aux = {"vix": pd.Series(list(vix["Close"]), index=[d.date() for d in vix.index]),
+               "vix3m": pd.Series(list(vix3m["Close"]), index=[d.date() for d in vix3m.index])}
+        sig = conditioned_reversal(px, aux, gate=gate)
+        return {d.isoformat(): (float(v) if v == v else None) for d, v in sig.items()}
     except Exception:
         return None
 

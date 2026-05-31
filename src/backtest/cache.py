@@ -72,6 +72,8 @@ def _cache_key(request: BacktestRequest) -> str:
         "exit_rule": request.exit_rule,
         "regime_filter": request.regime_filter,
         "bias_filter": request.bias_filter,
+        "signal_filter": request.signal_filter,   # F-019: gated vs unconditional differ
+        "signal_gate": request.signal_gate,
         "dealer_filter": request.dealer_filter,
         "edge_threshold": request.edge_threshold,
         "slippage_pct": request.slippage_pct,

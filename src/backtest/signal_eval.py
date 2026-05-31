@@ -100,6 +100,159 @@ def compute_directional_ic(symbol: str, start: date, end: date,
     return out
 
 
+# ── Generic IC engine (F-018) ────────────────────────────────────────────────
+#
+# The functions above evaluate the legacy bias_detector against forward returns.
+# The engine below generalises that to ANY point-in-time signal series (see
+# signal_lib) and adds the rigour a desk would demand before allocating capital:
+# per-horizon rank IC + significance, sign-stability across contiguous time
+# folds, and sign-stability across volatility regimes. A signal only
+# "graduates" to the (scarce, expensive) option backtest if it clears all three
+# — which is the whole point of researching signals on cheap underlying data
+# first (F-018). These are pure functions over aligned pandas Series so they are
+# unit-testable without any network access.
+
+# Strict graduation thresholds (the "strict & honest" gate, F-018). Equity
+# return predictability is weak — a sustained rank IC of 0.03 is already real.
+_MIN_ABS_IC = 0.03
+_IC_ALPHA = 0.05
+
+
+def forward_returns(closes, h: int):
+    """h-day forward simple return aligned to each day (NaN in the last h)."""
+    import numpy as np
+    c = np.asarray(closes, dtype=float)
+    fwd = np.full(len(c), np.nan)
+    for i in range(len(c) - h):
+        if c[i] > 0:
+            fwd[i] = c[i + h] / c[i] - 1.0
+    return fwd
+
+
+def ic_at_horizon(signal, closes, h: int, min_n: int = 30) -> dict:
+    """Spearman (rank) + Pearson IC of `signal` vs the h-day forward return.
+
+    `signal` and `closes` must be aligned, same-length, same-index arrays. Days
+    where either the signal or the forward return is NaN are dropped. Returns
+    n, both correlations and their p-values; degenerate/under-sampled cases are
+    reported honestly rather than guessed.
+    """
+    import numpy as np
+    from scipy.stats import pearsonr, spearmanr
+
+    s = np.asarray(signal, dtype=float)
+    fwd = forward_returns(closes, h)
+    mask = ~np.isnan(s) & ~np.isnan(fwd)
+    xs, ys = s[mask], fwd[mask]
+    if len(xs) < min_n or len(set(xs.tolist())) < 3:
+        return {"n": int(len(xs)), "note": "insufficient/degenerate"}
+    pr, pp = pearsonr(xs, ys)
+    sr, sp = spearmanr(xs, ys)
+    return {
+        "n": int(len(xs)),
+        "pearson": round(float(pr), 4), "pearson_p": round(float(pp), 4),
+        "spearman": round(float(sr), 4), "spearman_p": round(float(sp), 4),
+    }
+
+
+def ic_table(signal, closes, horizons=(3, 5, 10)) -> dict:
+    """IC at each horizon → {h: ic_at_horizon(...)}."""
+    return {h: ic_at_horizon(signal, closes, h) for h in horizons}
+
+
+def _sign(x: float) -> int:
+    return 1 if x > 0 else (-1 if x < 0 else 0)
+
+
+def fold_ic_signs(signal, closes, h: int, n_folds: int = 3) -> list:
+    """Sign of the Spearman IC within each contiguous time fold.
+
+    A real edge keeps its sign across sub-periods; one that flips is regime-fit.
+    Folds with too few usable points contribute a 0 (neither sign).
+    """
+    import numpy as np
+    s = np.asarray(signal, dtype=float)
+    n = len(s)
+    step = max(n // n_folds, 1)
+    signs = []
+    for i in range(n_folds):
+        lo = i * step
+        hi = n if i == n_folds - 1 else (i + 1) * step
+        r = ic_at_horizon(s[lo:hi], np.asarray(closes, float)[lo:hi], h, min_n=15)
+        signs.append(_sign(r.get("spearman", 0.0)) if "spearman" in r else 0)
+    return signs
+
+
+def regime_ic_signs(signal, closes, regime_series, h: int) -> dict:
+    """Spearman IC sign in the low- vs high-`regime_series` halves (median split).
+
+    `regime_series` is typically VIX (or its level): we want to know whether the
+    signal works in both calm and stressed markets, because most of these
+    signals flip sign across regimes (F-018). Returns the IC of each half.
+    """
+    import numpy as np
+    s = np.asarray(signal, dtype=float)
+    c = np.asarray(closes, dtype=float)
+    reg = np.asarray(regime_series, dtype=float)
+    valid = ~np.isnan(reg)
+    if valid.sum() < 40:
+        return {"note": "insufficient regime data"}
+    med = np.nanmedian(reg[valid])
+    out = {}
+    for name, mask in (("low", reg <= med), ("high", reg > med)):
+        r = ic_at_horizon(s[mask], c[mask], h, min_n=15)
+        out[name] = {"spearman": r.get("spearman"), "spearman_p": r.get("spearman_p"),
+                     "n": r.get("n"), "sign": _sign(r.get("spearman", 0.0)) if "spearman" in r else 0}
+    return out
+
+
+def graduate(table: dict, fold_signs_by_h: dict, regime_by_h: dict,
+             min_abs_ic: float = _MIN_ABS_IC, alpha: float = _IC_ALPHA) -> dict:
+    """Strict-and-honest graduation gate (F-018).
+
+    A signal graduates only if, at its best (largest |IC|) horizon, it is:
+      (1) significant         — spearman_p < alpha,
+      (2) economically real   — |spearman| >= min_abs_ic,
+      (3) sign-stable in time — every evaluated time fold shares the IC sign,
+      (4) sign-stable across regimes — calm and stressed halves share the sign.
+    Anything else is 'no_edge' (with the reason), so we never dignify beta or
+    noise as alpha. A consistently NEGATIVE IC still graduates (use −signal) and
+    is reported with direction='inverted'.
+    """
+    # Pick the horizon with the largest |spearman| among scored horizons.
+    scored = {h: r for h, r in table.items() if "spearman" in r}
+    if not scored:
+        return {"graduates": False, "reason": "insufficient_sample"}
+    best_h = max(scored, key=lambda h: abs(scored[h]["spearman"]))
+    r = scored[best_h]
+    sr, sp = r["spearman"], r["spearman_p"]
+
+    reasons = []
+    if sp >= alpha:
+        reasons.append(f"not significant (p={sp})")
+    if abs(sr) < min_abs_ic:
+        reasons.append(f"|IC|={abs(sr):.3f} < {min_abs_ic}")
+
+    fsigns = [s for s in fold_signs_by_h.get(best_h, []) if s != 0]
+    sign = _sign(sr)
+    if fsigns and not all(s == sign for s in fsigns):
+        reasons.append(f"time-unstable (fold signs {fold_signs_by_h.get(best_h)})")
+
+    reg = regime_by_h.get(best_h, {})
+    reg_signs = [reg[k]["sign"] for k in ("low", "high")
+                 if isinstance(reg.get(k), dict) and reg[k].get("sign", 0) != 0]
+    if len(reg_signs) == 2 and reg_signs[0] != reg_signs[1]:
+        reasons.append("regime-unstable (calm/stress IC signs differ)")
+
+    return {
+        "graduates": not reasons,
+        "best_horizon": best_h,
+        "spearman": sr, "spearman_p": sp,
+        "direction": "bullish" if sign > 0 else ("inverted" if sign < 0 else "flat"),
+        "reason": "; ".join(reasons) if reasons else "passes all gates",
+    }
+
+
 def ic_verdict(ic_for_horizon: dict) -> str:
     """Classify a single-horizon IC result.
 

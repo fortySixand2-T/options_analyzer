@@ -727,3 +727,72 @@
 - [2026-05-10] Modified: src/market_state.py — Guard None IV comparisons in compute_vol_surface; handle missing OI in quality score for backfilled data
 - [2026-05-10] Created: tests/test_agents.py — 50 integration tests for agent config, filtering, guardrails, conflict resolution, risk ledger, shadow_store migration
 - [2026-05-10] Created: PLAN.md — Agent trading go-live plan (7 phases: tests, migration, backtest, dry-run, live cycle, kill switch, scheduled ops)
+
+## 2026-05-31 — F-018: IC-first signal research harness (direction A)
+
+Context: F-017 concluded the current strategy book + bias score show no demonstrable alpha on
+clean data and that the next edge work "must start from a signal with real IC." This session
+builds that capability — a desk-quant reframe that separates the SIGNAL layer (predict the
+underlying's forward return; needs only cheap free underlying data) from the EXECUTION layer
+(harvest it through options; needs scarce option BBO/OI). Signals are now researched on free
+data and IC-gated BEFORE touching the option backtest.
+
+- [2026-05-31] Created: src/backtest/signal_lib.py — Point-in-time directional/vol signals for IC
+  research: short_term_reversal (−5d return), ts_momentum (63d return / RV20), vix_term_structure
+  (VIX/VIX3M−1 z-scored). Trailing-window construction guarantees no lookahead; sign convention
+  documented; signal directional sign is measured by the IC test, not hardcoded.
+- [2026-05-31] Modified: src/backtest/signal_eval.py — Added a generic IC engine atop the existing
+  bias-detector evaluator: forward_returns, ic_at_horizon (Spearman+Pearson w/ p-values), ic_table,
+  fold_ic_signs (time-fold sign stability), regime_ic_signs (vol-regime split), and graduate() — the
+  strict-and-honest graduation gate (significant p<0.05, |IC|≥0.03, sign-stable across time folds AND
+  vol regimes; inverted-but-consistent signals graduate with direction="inverted").
+- [2026-05-31] Created: scripts/signal_ic_sweep.py — Orchestration CLI: fetches underlying + VIX/VIX3M
+  via yfinance, computes each signal point-in-time, pools (signal, forward-return) pairs across symbols
+  (forward returns computed per-symbol to avoid cross-symbol fake adjacency), reports pooled/per-symbol/
+  regime-split IC, flags single-regime conditional edges, and prints the graduation verdict.
+- [2026-05-31] Created: tests/test_signal_lib.py — 15 pure/synthetic tests for signal orientation,
+  point-in-time causality (truncating future bars does not change a past signal), the IC engine
+  (positive IC recovered from a constructed predictive relationship), and every branch of the strict
+  graduation gate (passes stable, rejects time-/regime-unstable/insignificant, handles inverted).
+- [2026-05-31] Modified: FINDINGS.md — Added F-018 (index row + full entry): harness shipped; first
+  sweep (SPY/QQQ/AAPL/NFLX 2020-2024) = no unconditional graduate, but two statistically-significant
+  CONDITIONAL edges: calm-market medium-horizon reversal (ts_momentum low-VIX 10d IC −0.107, p<0.001)
+  and regime-switching short-term reversal (calm momentum / stress reversal). First real IC lead.
+
+## 2026-05-31 (cont.) — F-018 iteration 2: conditioned signal graduates (index-only)
+
+- [2026-05-31] Modified: src/backtest/signal_lib.py — Added conditioned_reversal(): the F-018 lead made
+  tradeable. Emits −(vol-scaled 63d return) only on calm days (NaN otherwise), with a strictly
+  point-in-time calm gate — 'contango' (VIX<VIX3M) or 'vix_pct' (VIX below trailing median). Positive
+  value = recent medium-horizon loser in a calm tape, expected to revert up.
+- [2026-05-31] Created: scripts/conditioned_signal_test.py — Validates the conditioned signal: prints
+  VIX/VIX3M reliability diagnostics, then pools the signal across symbols and runs it through the strict
+  graduation gate under both gates. Result: VIX data reliable (1258 days, 0 NaN). On SPY/QQQ the signal
+  GRADUATES — vix_pct gate IC +0.163 @10d p<0.001 (contango +0.102); on all 4 symbols it fails only on
+  single-name-crash folds (NFLX 2022 / AAPL), the reversal momentum-crash failure mode. First
+  IC-validated directional signal in the project.
+- [2026-05-31] Modified: tests/test_signal_lib.py — Added 4 tests for conditioned_reversal (requires VIX,
+  gated out in stress/backwardation, calm-laggard positive orientation, point-in-time no-lookahead).
+  17 passing.
+- [2026-05-31] Modified: FINDINGS.md — F-018 iteration-2 addendum: graduation table (4-symbol vs index-only),
+  VIX reliability, and the plain-language signal statement; flagged the execution-layer test as the next step.
+
+## 2026-05-31 (cont.) — F-019: execution test (signal → debit spread) + cache-key fix
+
+- [2026-05-31] Modified: src/backtest/models.py — Added signal_filter (bool) and signal_gate (str,
+  default "vix_pct") to BacktestRequest: gate directional debit-spread entries on the F-018
+  conditioned_reversal signal (long_call_spread on bullish reading, long_put_spread on bearish).
+- [2026-05-31] Modified: src/backtest/chain_replay.py — Added _build_conditioned_signal() (precomputes
+  conditioned_reversal date→value from yfinance underlying + VIX/VIX3M, ~400d warmup, point-in-time)
+  and wired a per-entry signal gate into _simulate_chain_trades for long_call_spread/long_put_spread.
+- [2026-05-31] Modified: src/backtest/cache.py — BUG FIX (F-005 class): _cache_key omitted signal_filter/
+  signal_gate, so a signal-gated run silently returned the cached unconditional result. Added both fields
+  to the key.
+- [2026-05-31] Created: scripts/signal_execution_test.py — Compares unconditional vs signal-gated debit
+  spread on the clean Dolt window; reports per-trade & risk-adjusted metrics (the F-017 "does gating
+  help?" test). Result: NO — IC does not transmit (favorable vix_pct long_call cell is n=4 noise;
+  contango long_call 26 trades and long_put 63 trades both WORSE than unconditional).
+- [2026-05-31] Modified: tests/test_signal_lib.py — Added test_cache_key_includes_signal_filter regression
+  guard for the cache bug. 80 backtest-suite tests passing.
+- [2026-05-31] Modified: FINDINGS.md — Added F-019 (execution test = IC necessary-but-not-sufficient;
+  validated directional IC does not transmit through defined-risk debit spreads) and updated F-018 status.

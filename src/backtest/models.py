@@ -28,6 +28,13 @@ class BacktestRequest(BaseModel):
     # Signal layer filters
     regime_filter: bool = False             # only enter when regime matches strategy
     bias_filter: bool = False               # only enter when directional bias aligns
+    # F-018/F-019: gate entries on the IC-validated conditioned_reversal signal
+    # (calm-regime medium-horizon reversal). For directional debit spreads only:
+    # enter long_call_spread only when the signal is bullish (recent laggard in a
+    # calm tape), long_put_spread only when bearish. signal_gate selects the calm
+    # gate ("vix_pct" — VIX below trailing median — or "contango").
+    signal_filter: bool = False
+    signal_gate: str = "vix_pct"
     dealer_filter: bool = False             # only enter when dealer regime matches
     edge_threshold: float = 0.0             # min GARCH edge % to enter
     slippage_pct: float = 0.0               # % of premium lost to slippage (e.g., 3.0 = 3%)
