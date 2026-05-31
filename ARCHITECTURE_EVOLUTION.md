@@ -164,12 +164,14 @@ backtester logic version (F-005), so it can serve stale results across code chan
 
 ## 2. Where this is heading (direction, not yet built)
 
-1. **Perturbation / robustness harness.** Run one strategy across a grid of
-   perturbations (fill mode, slippage, entry/exit timing jitter, strike tolerance,
-   data provenance, time window) and report the *distribution* of (Sharpe, PF, P&L).
-   Robust = tight, positive; fragile/overfit = wide, sign-flipping. This generalizes
-   the planned **OOS / walk-forward gate** (Step 2 of the synthesis plan) into one
-   axis of a broader sensitivity framework.
+1. **Perturbation / robustness harness — BUILT (2026-05-30).** `src/backtest/robustness.py`
+   + `scripts/robustness.py`: runs a strategy across time folds, an in/out-of-sample split,
+   and a fill×slippage perturbation grid, reporting skew-aware metrics per slice and a
+   conservative verdict (robust / fragile_or_no_edge / insufficient_sample). It runs on the
+   now-trustworthy backtester and self-checks the F-004/F-006 guarantees (trade-count stable,
+   slippage monotonic). First survey: surveyed strategies flag **fragile_or_no_edge** — e.g.
+   short_put_spread SPY is negative over the full window with skew ≈ −3 (high win rate masking
+   a fat left tail), and its "edge" lives in a single time fold. See FINDINGS.md F-014.
 
 2. **Concurrency / return-series model (F-006 — DONE; F-007 follow-up).** Risk metrics
    now use a time-indexed mark-to-market portfolio curve. Remaining: make the curve a

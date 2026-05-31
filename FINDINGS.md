@@ -35,6 +35,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-011 | 2026-05-30 | Tests assert structure/execution, never economic invariants → silent bugs pass | Addressed — tests/test_invariants.py (15 tests) guards F-002/004/006/008/009 |
 | F-012 | 2026-05-30 | Audit of scanner/sizing/market_state/edge surfaces (step 4) | Clean — live edge path deep-audited; unwired modules categorized (no deferred debt) |
 | F-013 | 2026-05-30 | Butterfly tested under wrong CONDITIONS (ATM not max-pain) and wrong METRICS (Sharpe for a convex payoff) | Metrics added (Sortino/skew/return-on-risk) + max-pain centering; proper validation OI-blocked |
+| F-014 | 2026-05-30 | Robustness/OOS harness built; surveyed strategies flag fragile/no-edge on current data | Harness shipped; first survey = no robust edge yet (data-limited) |
 
 ---
 
@@ -589,3 +590,31 @@ properly validate "max-pain butterfly under the right conditions"** without hist
 unproven-not-disproven** — the negative result is on a still-data-limited, partially-correct
 test. Other strategies' metrics now also carry Sortino/skew/return-on-risk for fairer
 comparison.
+
+---
+
+## F-014 — Robustness / OOS harness built; no robust edge found yet (data-limited)
+**Date:** 2026-05-30 · **Status:** Harness shipped; first survey = fragile/no-edge
+
+**Shipped.** `src/backtest/robustness.py` + `scripts/robustness.py` — the planned OOS /
+perturbation gate, now runnable because the backtester is trustworthy (F-001…F-013) and
+guarded by invariants. Three slices per strategy: **time folds** (temporal sign-consistency),
+**in/out-of-sample** split (does a fixed rule's edge persist on a held-out recent tail), and a
+**fill × slippage perturbation grid** (must be trade-count-stable + slippage-monotonic —
+self-checks F-004/F-006). Reports skew-aware metrics + a conservative verdict
+(robust / fragile_or_no_edge / insufficient_sample). 3 tests; runs on real data.
+
+**First survey result (honest).** No strategy surveyed clears the robustness gate yet:
+- `short_put_spread` SPY 2022–2026: **fragile_or_no_edge**. Negative over the full window
+  (−$1,556) *despite* 83% win rate, with **skew ≈ −3.1** — the premium-seller's fat left tail
+  the high win rate (and Sharpe) hid. The positive result lives in a single 2023–24 fold;
+  2022 loses; `sign_consistent=False`.
+- `butterfly` QQQ 2025–2026: fragile_or_no_edge, negative in all folds.
+
+**Reading.** This is "**no robust edge found yet**," not "no edge exists." It's expected and
+*healthy* that a trustworthy harness rejects strategies a buggy backtester previously flattered
+(the old butterfly "+$23,535 best performer" and inflated credit-spread Sharpes were artifacts).
+The honest blockers to finding a real edge remain data-side: defined-risk spread validation is
+limited by chain data quality (F-008 sample shrinkage), butterfly by missing historical OI
+(F-013), and intra-hold risk by missing intraday/quote data (F-007). Next edge work should
+either (a) acquire better data, or (b) test edges that survive on the data we *can* trust.
