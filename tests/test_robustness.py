@@ -50,6 +50,17 @@ class TestRobustnessHarness:
         assert p["trade_count_stable"] is True      # F-004: trade set fixed under perturbation
         assert p["slippage_monotonic"] is True      # F-006: slippage is a strict cost
 
+    def test_primary_metric_routing(self):
+        # Each strategy routes to its correct metric family (no DB needed).
+        from backtest.models import BacktestStats
+        from backtest.robustness import primary_metrics
+        s = BacktestStats(calmar_ratio=1.0, cvar_95=-100.0, max_single_loss=-200.0,
+                          pnl_skew=-2.0, return_on_risk=0.1, profit_factor=1.5, win_rate=80.0)
+        assert primary_metrics(s, "short_put_spread")["family"] == "tail"
+        assert primary_metrics(s, "iron_condor")["family"] == "tail"
+        assert primary_metrics(s, "long_call_spread")["family"] == "directional"
+        assert primary_metrics(s, "butterfly")["family"] == "convex"
+
     def test_oos_split_returns_both_slices(self, req, isolated_cache):
         from backtest.robustness import oos_split_analysis
         o = oos_split_analysis(req, oos_fraction=0.3)

@@ -35,6 +35,45 @@ _MIN_TRADES = 10
 # In-sample Sharpe below this isn't a real edge — don't dignify OOS as "holding".
 _MIN_IS_SHARPE = 0.3
 
+# Per-strategy PRIMARY metric family — each strategy earns from a different
+# source, so each is judged by a different yardstick (STRATEGY_LITERATURE_REVIEW
+# / F-015). Ranking everything by Sharpe is a category error.
+PRIMARY_METRIC = {
+    "short_put_spread": "tail",      # VRP seller, negative skew → tail risk
+    "short_call_spread": "tail",
+    "iron_condor": "tail",
+    "long_call_spread": "directional",   # edge = signal IC, not vol
+    "long_put_spread": "directional",
+    "butterfly": "convex",           # pin bet, positive skew
+}
+
+
+def primary_metrics(stats, strategy: str) -> dict:
+    """Surface the metrics that actually matter for this strategy's edge source.
+
+    - tail (premium sellers): CVaR / max-loss / Calmar — a high win rate and
+      Sharpe hide the left tail.
+    - directional (debit spreads): return-on-risk + skew, but the REAL test is
+      directional IC (see signal_eval) — P&L alone can be beta.
+    - convex (butterfly): return-on-risk + skew (F-013).
+    """
+    fam = PRIMARY_METRIC.get(strategy, "tail")
+    if fam == "tail":
+        return {"family": "tail",
+                "headline": {"calmar": stats.calmar_ratio, "cvar_95": stats.cvar_95,
+                             "max_single_loss": stats.max_single_loss, "skew": stats.pnl_skew},
+                "pass": stats.calmar_ratio > 0.5 and stats.cvar_95 > stats.max_single_loss * 0.0}
+    if fam == "directional":
+        return {"family": "directional",
+                "headline": {"return_on_risk": stats.return_on_risk, "skew": stats.pnl_skew,
+                             "win_rate": stats.win_rate},
+                "requires": "positive directional IC (signal_eval) — P&L alone may be beta",
+                "pass": stats.return_on_risk > 0}
+    return {"family": "convex",
+            "headline": {"return_on_risk": stats.return_on_risk, "skew": stats.pnl_skew,
+                         "profit_factor": stats.profit_factor},
+            "pass": stats.return_on_risk > 0 and stats.pnl_skew > 0}
+
 
 def _metrics(result) -> dict:
     """Compact skew-aware metric snapshot from a BacktestResult."""
@@ -154,6 +193,8 @@ def run_robustness(req: BacktestRequest, n_folds: int = 4,
     `verdict` is intentionally conservative: 'robust' only when the OOS edge
     holds, folds are sign-consistent, and perturbations are stable/monotonic.
     """
+    full_stats = run_chain_replay(req).stats
+    primary = primary_metrics(full_stats, req.strategy)
     folds = time_fold_analysis(req, n_folds=n_folds)
     oos = oos_split_analysis(req, oos_fraction=oos_fraction)
     pert = perturbation_analysis(req)
@@ -177,6 +218,7 @@ def run_robustness(req: BacktestRequest, n_folds: int = 4,
         "symbol": req.symbol,
         "window": f"{req.start_date}..{req.end_date}",
         "verdict": verdict,
+        "primary_metric": primary,
         "time_folds": folds,
         "oos_split": oos,
         "perturbation": pert,

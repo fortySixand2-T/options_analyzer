@@ -38,6 +38,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-014 | 2026-05-30 | Robustness/OOS harness built; surveyed strategies flag fragile/no-edge on current data | Harness shipped; first survey = no robust edge yet (data-limited) |
 | F-015 | 2026-05-30 | Each strategy has a different edge source → needs a different metric; we ranked all by Sharpe | Tail metrics (CVaR/maxLoss/Calmar) added; per-strategy literature review written |
 | F-016 | 2026-05-30 | Alpaca docs: historical quotes need paid OPRA; our 2025+ bars are free "indicative" DERIVATIVES (delayed, approximate) | Confirmed data map; provenance caveat logged (external decision) |
+| F-017 | 2026-05-30 | Dolt-only (clean, real-quote) alpha check: NO demonstrable alpha — the one winner is beta; bias signal IC ≈ noise/inverted | Metric routing + directional IC shipped; verdict = no edge on clean data |
 
 ---
 
@@ -654,3 +655,50 @@ real recorded quotes; the yfinance forward `eod/midday` rows are real yfinance b
 
 Note OPRA fixes bid/ask but **not** OI — max-pain (F-013) and the IC dealer-gamma gate stay
 blocked without a separate OI source.
+
+---
+
+## F-017 — Dolt-only alpha check: no demonstrable edge; the one "winner" is beta
+**Date:** 2026-05-30 · **Status:** Tools shipped (metric routing + directional IC); verdict = no clean-data alpha
+
+**Why Dolt-only.** The 2025+ Alpaca data is indicative-feed *derivatives* (F-016); the
+Dolt 2020-2024 rows are **real recorded quotes** and SPY 2020-2024 is 100% Dolt — the
+cleanest test bed. So we evaluated alpha there.
+
+**Shipped (the tools that make this answerable):**
+- **Directional-signal IC** (`signal_eval.compute_directional_ic`): correlation of the bias
+  score with the forward underlying return — separates *alpha* (signal predicts) from *beta*
+  (just long delta). `ic_verdict` classifies predictive / noise / inverted.
+- **Per-strategy metric routing** (`robustness.PRIMARY_METRIC` / `primary_metrics`): each
+  strategy judged by its edge-appropriate metric (tail/CVaR/Calmar for sellers; directional
+  IC + return-on-risk for debit spreads; return-on-risk + skew for butterfly), not Sharpe.
+
+**Results — DOLT-only, SPY 2020-01→2024-12, real quotes:**
+
+| Strategy | family | n | WR | P&L | Calmar | skew |
+|---|---|---|---|---|---|---|
+| short_put_spread | tail | 138 | 84.1% | −$650 | −0.03 | −2.45 |
+| short_call_spread | tail | 135 | 75.6% | −$4,476 | −0.19 | −2.16 |
+| iron_condor | tail | 135 | 65.9% | −$5,454 | −0.17 | −1.22 |
+| **long_call_spread** | dir | 138 | 50.7% | **+$7,445** | 0.37 | +0.06 |
+| long_put_spread | dir | 138 | 24.6% | −$6,479 | −0.18 | +1.24 |
+| butterfly | convex | 138 | 30.4% | −$5,838 | −0.15 | +0.78 |
+
+**The one winner is beta, not alpha (proven two ways):**
+1. **Bias-signal IC ≈ 0 / inverted.** SPY/AAPL/NFLX 2020-2024, horizons 3/5/10d: Spearman IC
+   ranged ~−0.09…+0.03; only the *inverted* readings were significant (SPY/NFLX 10d, p<0.05).
+   The directional signal has **no predictive power** (and is mildly anti-predictive at 10d).
+2. **Gating on the signal HURTS.** `long_call_spread` unconditional **+$7,445** → with
+   `bias_filter` ON **+$2,670** (return-on-risk 0.144 → 0.093). If the signal carried alpha,
+   gating would help; it subtracts. So the +$7,445 is **long delta in a 2020-2024 bull market**
+   (beta), not signal edge.
+
+**Sellers lose on clean data**, and the VRP gate doesn't rescue them (short_put_spread
+−$650 → −$923 with edge>5%). The 2020 COVID crash + 2022 bear hit the negative-skew left tail
+the win rate hides — exactly the documented failure mode (F-015).
+
+**Verdict.** On the cleanest data we have, **the current strategy book + bias signal show no
+demonstrable alpha**: premium sellers are net losers (tail-bitten), the directional debits are
+pure beta (signal IC is noise), butterfly loses. This is the honest, valuable output of a now-
+trustworthy backtester — it refuses to manufacture an edge. **Next edge work must start from a
+signal with real IC** (or a genuinely conditioned VRP harvest), not from the current bias score.
