@@ -36,29 +36,35 @@ RISK_FREE_RATE = float(os.getenv("OPTIONS_RISK_FREE_RATE", "0.045"))
 
 
 def _estimate_bid_ask(bar: dict) -> tuple:
-    """Estimate bid/ask/mid from OHLC bar data.
+    """Derive a fill price from an Alpaca OHLC option *bar*.
 
-    Returns (bid, ask, mid).
+    Alpaca options history is OHLC bars (traded prices), not bid/ask quotes.
+    A bar's open-to-close range is intrabar price *movement*, NOT a quoted
+    spread — so the old behavior (bid=min(o,c), ask=max(o,c)) invented
+    spreads of 20-25% on low-volume strikes and made spread-sensitive
+    structures (butterflies, 4-leg spreads) look far worse than reality.
+
+    Instead we use the bar close as the single traded price
+    (bid == ask == mid == close), mirroring options-algo-trader's
+    "bar close as fill" approach. Real fill cost is modeled separately by the
+    backtester's slippage_pct, not by fabricating a spread. For true bid/ask,
+    fetch Alpaca option *quotes* (/v1beta1/options/quotes) — see backlog item #2.
+
+    Returns (bid, ask, mid), all equal to the chosen price.
     """
-    o, h, l, c = bar["open"], bar["high"], bar["low"], bar["close"]
-
-    if o > 0 and c > 0:
-        bid = min(o, c)
-        ask = max(o, c)
-        mid = (o + h + l + c) / 4
-    elif c > 0:
-        bid = c * 0.97
-        ask = c * 1.03
-        mid = c
-    else:
+    c = bar.get("close", 0.0) or 0.0
+    if c <= 0:
+        # Close missing/zero on a thin bar — fall back to any positive OHLC.
+        for k in ("open", "high", "low"):
+            v = bar.get(k, 0.0) or 0.0
+            if v > 0:
+                c = v
+                break
+    if c <= 0:
         return 0.0, 0.0, 0.0
 
-    if bid <= 0:
-        bid = mid * 0.97
-    if ask <= 0:
-        ask = mid * 1.03
-
-    return round(bid, 4), round(ask, 4), round(mid, 4)
+    price = round(c, 4)
+    return price, price, price
 
 
 def _solve_iv(mid: float, spot: float, strike: float, dte: int,

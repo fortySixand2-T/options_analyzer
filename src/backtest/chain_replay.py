@@ -441,7 +441,11 @@ def _leg_fill_price(quote: dict, side: str, action: str, fill_mode: str) -> floa
 
     Falls back to mid when the needed bid/ask is missing or non-positive — this
     happens on far-OTM/illiquid strikes (see DATA_ISSUES.md §4) — and to 0.0
-    when no usable quote exists at all (e.g. an expired/worthless leg).
+    when no usable quote exists at all (e.g. an expired/worthless leg). Note
+    that Alpaca-backfilled rows now carry bid == ask == close (a single traded
+    price; see backfill_pipeline._estimate_bid_ask), so bid_ask mode prices
+    them at the close and the spread cost is modeled by net slippage instead
+    (see _apply_slippage usage in _check_exit / the entry loop).
     """
     mid = quote.get("mid") or 0.0
     if fill_mode != "bid_ask":
@@ -495,6 +499,28 @@ def _compute_exit_price(position: dict, exit_contracts: Dict,
         else:
             net -= price
     return net
+
+
+def _apply_slippage(net_price: float, slippage_pct: float, is_exit: bool) -> float:
+    """Adverse slippage on a NET premium, for the unified P&L convention.
+
+    P&L here is `entry_net - current_value` for both credit and debit (the
+    legs are oriented sell:+, buy:-). To make slippage a strict cost under that
+    convention it must ALWAYS lower P&L: reduce entry_net on entry, and raise
+    current_value on exit. Then pnl' = (entry_net - s_e) - (current_value + s_x)
+    = pnl - s_e - s_x, so slippage can never improve a trade regardless of
+    credit/debit. (This is why the credit/debit-branched form used by
+    local_backtest — which has a *branched* P&L formula — is wrong here: under
+    the unified formula it flipped debit-exit slippage into a benefit and
+    produced spurious 98% win rates.)
+
+    Applied at the net-premium level — NOT per leg — so the cost is a fraction
+    of the small spread net, consistent with the BS backtester. Per-leg
+    slippage on the large individual legs is ~10x harsher and destabilizes the
+    sequential single-position exit loop.
+    """
+    slip = abs(net_price) * (slippage_pct / 100.0)
+    return net_price + slip if is_exit else net_price - slip
 
 
 def _compute_intrinsic_exit(position: dict, spot: float) -> float:
@@ -631,6 +657,10 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
             skipped_no_strikes += 1
             continue
 
+        # Net slippage on entry — always reduces entry_net (adverse cost).
+        if request.slippage_pct:
+            entry_net = _apply_slippage(entry_net, request.slippage_pct, is_exit=False)
+
         if request.edge_threshold > 0:
             avg_iv = np.mean([
                 leg["contract"].get("implied_volatility", 0.20)
@@ -683,6 +713,9 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
         issues.append("Fills priced at real bid/ask (buys pay ask, sells receive bid) — spread charged on entry and exit")
     else:
         issues.append("Fills priced at mid (optimistic — overstates edge; see docs/pricing_validation_report.md)")
+    if request.slippage_pct:
+        issues.append(f"Explicit net slippage of {request.slippage_pct}% applied (adverse) on entry and snapshot exits — models fill cost for close-priced Alpaca-backfilled data (bid==ask==close).")
+        issues.append("WARNING: per-trade slippage is a strict cost, but this sequential single-position loop is path-sensitive — perturbing P&L shifts exit timing and thus which trades are entered next, so AGGREGATE results under slippage are unstable. Decouple trade selection from P&L before trusting slippage sweeps.")
 
     return trades, issues
 
@@ -716,6 +749,12 @@ def _check_exit(conn, symbol: str, current_snap: dict, position_info: dict,
         used_intrinsic = True
     else:
         return None
+
+    # Net slippage on exit — always raises current_value (adverse cost under
+    # pnl = entry_net - current_value). Skip intrinsic settlement at expiry —
+    # there is no spread to cross at exercise.
+    if request.slippage_pct and not used_intrinsic:
+        current_value = _apply_slippage(current_value, request.slippage_pct, is_exit=True)
 
     # P&L is entry_net - current_value for BOTH credit and debit. entry_net and
     # current_value are computed in the same leg orientation (sell legs add,
