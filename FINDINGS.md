@@ -26,13 +26,14 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-002 | 2026-05-30 | Debit-spread P&L sign inversion in chain-replay | Fixed |
 | F-003 | 2026-05-30 | Alpaca backfill fabricated bid/ask from OHLC range (~27% fake spreads) | Fixed + data migrated |
 | F-004 | 2026-05-30 | Sequential single-position loop was path-dependent | Fixed (decoupled) |
-| F-005 | 2026-05-30 | Backtest result cache not invalidated on code change | Mitigated; follow-up open |
+| F-005 | 2026-05-30 | Backtest result cache not invalidated on code change | FIXED — engine-source hash folded into cache key |
 | F-006 | 2026-05-30 | Concurrency makes overlapping trades correlated → inflated Sharpe/PF | Resolved (time-indexed MTM) |
 | F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Reframed — data already daily; granularity is exit-logic-bound; finer risk needs INTRADAY data |
 | F-008 | 2026-05-30 | Impossible spread premiums → phantom profit. ROOT CAUSE (corrected): `_select_strikes` picked legs from DIFFERENT expiries | Fixed (same-expiry constraint) — free code fix, no data feed needed |
 | F-009 | 2026-05-30 | local_backtest prices `butterfly` as a single ATM call (no `butterfly` branch in `_price_strategy`) | FIXED — butterfly branch added; BS butterfly now −$2,599/Sharpe −2.42 (was bogus +$23,535); VALIDATION_RESULTS corrected |
 | F-010 | 2026-05-30 | local_backtest `dte_exit` overwrites profit_target/stop_loss label | FIXED (`exit_reason or "dte_exit"`) |
 | F-011 | 2026-05-30 | Tests assert structure/execution, never economic invariants → silent bugs pass | Addressed — tests/test_invariants.py (15 tests) guards F-002/004/006/008/009 |
+| F-012 | 2026-05-30 | Audit of scanner/sizing/market_state/edge surfaces (step 4) | Clean on audited bug-classes; caveats noted |
 
 ---
 
@@ -493,3 +494,44 @@ backtester whose results are trustworthy, or it will optimize against artifacts.
 lookahead paths. Lookahead was checked and is clean (rolling vol, regime, bias all use
 past-only windows in both engines). Strike selection, P&L sign, pricing, and exit logic are
 covered by F-001…F-010. Surfaces in step 4 are NOT yet audited.
+
+---
+
+## F-012 — Audit of scanner / sizing / market_state / edge (plan step 4)
+**Date:** 2026-05-30 · **Status:** Clean on audited bug-classes (caveats below)
+
+**Scope.** Extended the audit beyond the backtest engines to the live-scan / signal / sizing
+surfaces, hunting the same bug classes (sign/unit errors, cross-sectional/temporal mismatch,
+lookahead, no-op logic, NaN/inf propagation).
+
+**Reviewed and clean:**
+- `market_state.py` core IV-RV edge: `iv_rv_spread = chain_iv − garch_vol`, `edge_pct =
+  spread/chain_iv·100`; `has_edge` requires spread>0 & edge>5% for credit, spread<0 &
+  edge<−5% for debit. Signs and units correct (sell premium when IV rich, buy when cheap).
+- `scanner/strategy_pricer.py`: net premium accumulated with proper per-leg sign
+  (`+sell/−buy`); `entry = abs(net_premium)` is intentional (magnitude; direction carried by
+  the separate `is_credit` branch driving max-profit/loss/exit/stop). Not a sign bug.
+- `sizing.py`: `adjusted_entry` applies slippage in the correct credit/debit direction;
+  `spread_cost`'s `float('inf')` on non-positive mid is used to *reject* a degenerate spread
+  (correct), not propagated.
+
+**Caveats (not yet covered — candidate follow-ups):**
+- Not a line-by-line review of all ~3,600 lines; `edge/*` (vrp, skew, flow, cross_asset,
+  term_structure, realized_vol) were grep-scanned, not deep-read.
+- **Point-in-time correctness of `edge/*` signals not verified.** They're computed live and
+  persisted; the chain-replay backtester currently computes regime/bias itself (audited,
+  lookahead-free) and does NOT replay `edge/*`, so this isn't a backtest risk today — but it
+  would be if those signals are ever fed into replay. Track before that integration.
+- `scanner/scorer.py` and `scanner/edge.py` are FROZEN (audit-only); grep-clean, not deep-read.
+
+---
+
+## F-005 resolution (plan step 5)
+**Date:** 2026-05-30 · **Status:** FIXED
+
+`cache._cache_key` now folds in `_LOGIC_VERSION` — a sha256 of the backtester source
+(`chain_replay.py`, `local_backtest.py`, `analyzer.py`), computed once at import. Any edit to
+those engines changes the key, so cached results self-invalidate on code change (no manual
+bump, no need to clear `backtest_cache.db` after logic changes). Verified: cache still hits
+within a run (2.49s → 0.001s), and the cache-key tests pass. This removes the footgun that
+masked the F-004 fix for a turn.

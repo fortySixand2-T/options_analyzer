@@ -32,6 +32,30 @@ def _get_db_path() -> str:
     return path
 
 
+def _compute_logic_version() -> str:
+    """Hash the backtester source so any logic change invalidates cached results.
+
+    F-005: the cache previously keyed only on request params, so after a
+    backtester code change identical params returned STALE pre-change results
+    (this masked the F-004 path-stability fix for a turn). Folding a hash of the
+    engine source into the key makes the cache self-invalidate on any edit to
+    these modules — no manual version bumping.
+    """
+    h = hashlib.sha256()
+    here = os.path.dirname(os.path.abspath(__file__))
+    for fname in ("chain_replay.py", "local_backtest.py", "analyzer.py"):
+        try:
+            with open(os.path.join(here, fname), "rb") as fh:
+                h.update(fh.read())
+        except OSError:
+            pass
+    return h.hexdigest()[:12]
+
+
+# Computed once at import; the Docker image bakes source at build time.
+_LOGIC_VERSION = _compute_logic_version()
+
+
 def _cache_key(request: BacktestRequest) -> str:
     """Deterministic cache key from request parameters."""
     key_data = {
@@ -52,6 +76,7 @@ def _cache_key(request: BacktestRequest) -> str:
         "edge_threshold": request.edge_threshold,
         "slippage_pct": request.slippage_pct,
         "fill_mode": request.fill_mode,  # bid/ask vs mid fills produce different P&L
+        "logic_version": _LOGIC_VERSION,  # invalidate cache when engine source changes (F-005)
     }
     raw = json.dumps(key_data, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
