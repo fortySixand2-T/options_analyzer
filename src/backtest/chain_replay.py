@@ -595,6 +595,7 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
     skipped_no_strikes = 0
     skipped_no_exit = 0
     skipped_filter = 0
+    skipped_bad_premium = 0
     exit_used_intrinsic = 0
     entry_interval = 5
 
@@ -666,6 +667,19 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
         entry_net = _compute_entry_price(position, request.fill_mode)
         if abs(entry_net) < 0.01:
             skipped_no_strikes += 1
+            continue
+
+        # Sanity gate (F-008): a defined-risk position cannot be worth more than
+        # its strike span. Close-based marks are non-synchronous last trades —
+        # an illiquid leg's stale print (from a different intraday spot) yields
+        # a phantom credit/debit that violates this bound and, if booked,
+        # "decays to zero" into fake profit (it inflated QQQ long_put to 100% WR;
+        # 40-96% of entries were impossible). Reject those entries. The real fix
+        # is synchronized NBBO quotes (gated, OPRA) — see FINDINGS.md F-008.
+        strikes_all = [leg["contract"]["strike"] for leg in position["legs"]]
+        strike_span = max(strikes_all) - min(strikes_all)
+        if strike_span > 0 and abs(entry_net) > strike_span * 1.10:
+            skipped_bad_premium += 1
             continue
 
         # Net slippage on entry — always reduces entry_net (adverse cost).
@@ -754,6 +768,8 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
         issues.append(f"{skipped_no_exit} trades dropped — no exit snapshot found")
     if skipped_filter > 0:
         issues.append(f"{skipped_filter} entries skipped by signal filters")
+    if skipped_bad_premium > 0:
+        issues.append(f"{skipped_bad_premium} entries skipped — premium exceeded strike span (non-synchronous close marks, F-008). Real fix needs synchronized NBBO quotes.")
     if exit_used_intrinsic > 0:
         issues.append(f"{exit_used_intrinsic} exits used intrinsic value (no matching contracts in exit snapshot)")
     if request.fill_mode == "bid_ask":

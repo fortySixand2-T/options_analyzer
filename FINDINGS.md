@@ -29,7 +29,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-005 | 2026-05-30 | Backtest result cache not invalidated on code change | Mitigated; follow-up open |
 | F-006 | 2026-05-30 | Concurrency makes overlapping trades correlated → inflated Sharpe/PF | Resolved (time-indexed MTM) |
 | F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Reframed — data already daily; granularity is exit-logic-bound; finer risk needs INTRADAY data |
-| F-008 | 2026-05-30 | QQQ long_put_spread: 100% of trades exit profit_target with 1-day median hold | Open (exit/mark fidelity + thin regime) |
+| F-008 | 2026-05-30 | Non-synchronous close marks → impossible spread premiums → phantom profit (40-96% of entries) | Mitigated (sanity gate); real fix needs synchronized NBBO quotes |
 
 ---
 
@@ -315,33 +315,57 @@ density and the real cause — and remedy (1) is a **no-op**:
   daily mark). Daily bars cannot show that; only minute bars or continuous quotes can.
 
 **Net correction.** Retract "daily bar backfill fixes most of F-007" — the data is already
-daily and the gap isn't cadence. The real levers are (a) intraday marks (minute bars are
-*entitled* on Alpaca, unlike quotes — a candidate worth measuring next) and (b) the exit/mark
-fidelity question in F-008. Lesson logged: measure existing density/cause before proposing
-(or running) a remedy.
+daily and the gap isn't cadence. Update: also measured **minute bars** (the next candidate
+lever) — they do **not** help either, because the actual short-DTE $1-wide legs barely trade
+(SPY 640 put: one print/day; adjacent strikes: zero). No *trade-based* source resolves this.
+The only real lever is **continuous NBBO quotes** (gated, OPRA), which would fix both F-007
+(intra-hold resolution) and F-008 (synchronized cross-section). Lesson logged: measure
+existing density/cause before proposing (or running) a remedy.
 
 ---
 
-## F-008 — QQQ long_put_spread exits 100% profit_target with a 1-day median hold
-**Date:** 2026-05-30 · **Status:** Open (exit/mark fidelity + thin regime)
+## F-008 — Non-synchronous close marks create impossible spread premiums → phantom profit
+**Date:** 2026-05-30 · **Status:** Mitigated by a sanity gate; true fix needs synchronized NBBO quotes
 
-**Observed.** On the only QQQ window we have (2025-05 → 2026-05), `long_put_spread` shows
-55/55 trades exiting via `profit_target`, **median hold 1 day** (avg 1.5), 100% win rate,
-Sharpe ~7.5, max-DD 0. SPY over a longer window is far more mixed (median hold 12 days;
-78 profit / 43 stop / 11 dte).
+**Observed.** QQQ `long_put_spread` (2025-05→2026-05): 55/55 trades exit `profit_target`,
+**median hold 1 day**, 100% win rate, Sharpe ~7.5, DD 0. Suspicious enough to inspect.
 
-**Why it matters.** A debit put spread reaching its **+75% profit target on the very first
-post-entry snapshot, every single time**, is suspicious. Two non-exclusive explanations:
-1. **Thin one-directional regime** — QQQ fell steadily over this single ~12-month window, so
-   well-placed bearish spreads genuinely won fast. Small n (55), one direction, one year.
-2. **Exit/mark fidelity** — the first post-entry mark may overshoot. Marks are close-based
-   (F-003) and snapped to the nearest available date (±3 days); a coarse or stale next-day
-   close can read as a +75% jump and trigger an immediate, possibly unrealistic, exit.
+**Root cause (settled by tracing real trades).** It is **not** a regime effect — it is a
+**mark-consistency bug**. The legs are priced at the **close** (F-003), but a close is the
+contract's *last trade of the day*, and adjacent illiquid strikes' last trades happen at
+*different intraday moments / different spot levels*. Example entry (2025-05-09, spot
+487.97): buy 488 put @ 3.64, **sell 487 put @ 8.15** → "credit" **+4.51 on a $1-wide
+spread**. A defined-risk $1 spread can be worth at most $1, so a $4.51 credit is impossible
+— the 487-put print was stale (from when QQQ was far lower). Every traced trade showed the
+lower-strike put worth *more* than the higher-strike put (a put-monotonicity violation).
+The phantom credit then "decays to zero," booking a guaranteed fake profit.
 
-**Why it matters for the program.** This is the kind of "too good" result the OOS / cross-
-asset / regime axis of the perturbation harness must catch. It also questions whether the
-profit-target exit fires too eagerly on the first coarse mark.
+**Scale (measured).** Entries with `|entry_net| > strike_span` (provably impossible for
+defined-risk): **QQQ 96%, SPY-2024 58%, SPY-2022 40%**, worst 7.4× the span. This corrupted
+many spread results, not just QQQ.
 
-**Follow-up (open).** (a) Inspect a few QQQ trades' entry→exit marks to see if the day-1
-+75% is a real underlying move or a mark artifact. (b) Re-test once intraday marks exist
-(F-007). (c) Treat QQQ long_put Sharpe as non-credible until validated across regimes.
+**Minute bars don't help (measured).** Hoped intraday minute bars could give synchronized
+marks. But the actual legs barely trade: SPY 640 put traded **once** all day (15:03);
+adjacent 639/641 puts had **zero** bars. No trade-based source (daily *or* minute) can
+price or synchronize contracts that don't trade. (The earlier "ATM-7% = 100% coverage"
+used liquid round strikes on a monthly expiry; the backtester's $1-wide short-DTE legs are
+far thinner.) **Only continuous NBBO quotes** (posted without trades) can fix this — gated
+behind OPRA (F-007).
+
+**Mitigation shipped.** Added a sanity gate in `chain_replay`: reject entries where
+`|entry_net| > strike_span × 1.10` (a defined-risk position cannot exceed its strike span).
+Impact — the phantom results collapse toward reality:
+
+| | before gate | after gate |
+|---|---|---|
+| QQQ long_put | 55 trades, 100% WR, Sharpe 7.47 | 2 trades (53 rejected), Sharpe 1.10 |
+| SPY long_put | 132 trades, +$5,164, Sharpe 1.76 | 79 trades, **−$19, Sharpe ~0** |
+| SPY butterfly | 132 trades, −$57,396 | 83 trades, −$5,924 |
+
+So SPY long_put's "edge" and the butterfly "catastrophe" were both **largely phantom**.
+
+**Caveat / status.** The gate *rejects* corrupt entries; it does not *repair* marks. It also
+shrinks the valid sample (QQQ long_put → 2 trades), revealing we have **too few clean
+spread trades on current data** to judge these strategies. The proper fix is synchronized
+NBBO quote marks (OPRA, gated). Until then, treat chain-replay spread results as
+**provisional**, and prefer strategies/underlyings where the valid sample survives the gate.

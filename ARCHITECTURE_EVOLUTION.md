@@ -128,6 +128,25 @@ exit-clustering correlation but not intra-hold unrealized vol. Architectural con
 **performance is measured on a portfolio timeline, not a trade ledger** — the natural
 basis for the concurrency/return model and for the perturbation harness.
 
+### 1e. Mark fidelity becomes a correctness gate (F-008)
+
+Tracing a "too good" result (QQQ `long_put_spread` 100% WR) exposed that close-based marks
+are **non-synchronous last trades**: adjacent illiquid strikes' last prints occur at
+different intraday moments, producing cross-sectionally **impossible** spread premiums
+(`|entry_net| > strike_span` in 40–96% of entries). Booked, they "decay to zero" into
+phantom profit — which had silently inflated spread results (SPY `long_put` +$5,164→−$19
+once gated; butterfly −$57k→−$5.9k).
+
+Two consequences for the architecture:
+- **A defined-risk invariant is now enforced at entry**: reject `|entry_net| > strike_span`.
+  Mark plausibility is a correctness gate, not just a stat.
+- **Trade-based pricing is structurally inadequate for these instruments.** Measured: the
+  $1-wide short-DTE legs trade about once a day or not at all, so neither daily nor minute
+  bars can give synchronized or even present marks. Only **continuous NBBO quotes** can —
+  which re-prioritizes the (gated) quotes feed from "nice-to-have realism" to "the thing
+  that makes spread backtesting trustworthy." Until then, chain-replay spread results are
+  provisional and the valid (post-gate) sample is small.
+
 ### 1c. Emerging principle — perturbation stability as a design constraint
 
 A backtester intended for robustness testing must satisfy: *small, economically-
