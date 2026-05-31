@@ -37,6 +37,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-013 | 2026-05-30 | Butterfly tested under wrong CONDITIONS (ATM not max-pain) and wrong METRICS (Sharpe for a convex payoff) | Metrics added (Sortino/skew/return-on-risk) + max-pain centering; proper validation OI-blocked |
 | F-014 | 2026-05-30 | Robustness/OOS harness built; surveyed strategies flag fragile/no-edge on current data | Harness shipped; first survey = no robust edge yet (data-limited) |
 | F-015 | 2026-05-30 | Each strategy has a different edge source → needs a different metric; we ranked all by Sharpe | Tail metrics (CVaR/maxLoss/Calmar) added; per-strategy literature review written |
+| F-016 | 2026-05-30 | Alpaca docs: historical quotes need paid OPRA; our 2025+ bars are free "indicative" DERIVATIVES (delayed, approximate) | Confirmed data map; provenance caveat logged (external decision) |
 
 ---
 
@@ -619,3 +620,37 @@ The honest blockers to finding a real edge remain data-side: defined-risk spread
 limited by chain data quality (F-008 sample shrinkage), butterfly by missing historical OI
 (F-013), and intra-hold risk by missing intraday/quote data (F-007). Next edge work should
 either (a) acquire better data, or (b) test edges that survive on the data we *can* trust.
+
+---
+
+## F-016 — Alpaca historical option data: feeds, entitlements, and a provenance caveat
+**Date:** 2026-05-30 · **Status:** Confirmed (external data decision; new provenance caveat logged)
+
+**Source.** Reviewed Alpaca's *Historical Option Data* doc (per user request). Key facts:
+- **Two feeds.** *Indicative* (free): "quotes are not actual OPRA quotes, they're just
+  indicative derivatives. The trades are also derivatives and they're **delayed by 15
+  minutes**." *OPRA* (paid, subscription-only): the consolidated BBO.
+- **Depth:** historical option data only since **February 2024**.
+- No mention of open interest.
+
+**Reconciles our probes (F-003/F-007/F-013).** Our client defaults to `feed="indicative"`,
+which is why `/v1beta1/options/quotes` (historical bid/ask time series) returned **404** —
+historical quotes are an **OPRA (paid) entitlement**, not available on indicative. So the
+"quotes are gated" conclusion is correct and now explained.
+
+**NEW caveat (provenance).** Our 2025+ backfill bars/trades come from the **indicative feed**,
+so they are **derivative, 15-min-delayed approximations — not consolidated OPRA prints**. We
+already price fills at the bar *close* (F-003); that close is itself an indicative derivative.
+This is a quality caveat on all 2025+ Alpaca-sourced backtests (the Dolt 2020-2024 rows are
+real recorded quotes; the yfinance forward `eod/midday` rows are real yfinance bid/ask).
+
+**Data map for unblocking the remaining items (a spend decision, not code debt):**
+| Need | Blocked finding | Source that unblocks |
+|---|---|---|
+| True historical bid/ask (2024+) | F-003, F-007 | **Alpaca OPRA** (paid) — or Polygon/ThetaData |
+| Open interest (max-pain, IC dealer-gamma) | F-013, iron_condor gate | yfinance (fwd only) / **ThetaData / CBOE** (history) — NOT OPRA |
+| Intraday marks | F-007 | OPRA quotes or minute bars (but illiquid legs barely trade — F-008/F-013) |
+| Earnings calendar | F-015 (#5) | yfinance / a calendar API |
+
+Note OPRA fixes bid/ask but **not** OI — max-pain (F-013) and the IC dealer-gamma gate stay
+blocked without a separate OI source.
