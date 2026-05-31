@@ -152,15 +152,17 @@ backtester logic version (F-005), so it can serve stale results across code chan
    *continuous* MTM (intra-hold marks are sparse, F-007) via denser data / the quotes
    endpoint, so drawdown reflects interim risk, not just exit-to-exit.
 
-3. **Continuous intra-hold marks (F-007) — two gaps, two fixes.** Measurement (FINDINGS
-   F-007 update b) split this: (a) the *dominant* gap is collection **cadence** — we only
-   stored every-other-day snapshots, but Alpaca has daily **bars** for ATM-to-~7%-OTM
-   strikes (the legs our spreads use). A **daily bar re-backfill** (already-entitled, free)
-   fixes most of it. (b) The residual is **far-OTM wings** (~12%+, condor/fly protective
-   legs) which don't trade daily and so need continuous **quotes** — gated behind an OPRA
-   subscription (the `get_option_quotes()` client is implemented and ready; Alpaca returns
-   404 on this plan). Net: most of F-007 is a free data-collection task; the paywall is now
-   a narrower need (deep wings + true bid/ask realism). Decision pending — see FINDINGS.md.
+3. **Finer risk visibility (F-007) — reframed after measurement.** Update (c) corrected the
+   earlier "daily bar re-backfill" plan: the 2025+ data is **already daily** (re-backfill is
+   a no-op), and the ~1-mark-per-trade curve granularity is **exit-logic-bound** — trades
+   exit at the first snapshot that triggers a rule (QQQ `long_put` median hold 1 day; SPY 12
+   days), so each contributes ≈ one mark regardless of data density. SPY's longer holds
+   already give a real curve ($6,337 drawdown, Sharpe 1.76); QQQ's flat-up curve is the F-008
+   fast-flip regime artifact. The genuine residual is **intraday / between-snapshot** dips,
+   which need **minute bars** (entitled on Alpaca — the next thing to measure) or continuous
+   **quotes** (gated, OPRA). The `get_option_quotes()` client is ready for the latter; true
+   bid/ask realism still wants it. Net: not a free daily-cadence task as previously claimed —
+   it's an intraday-data question. See FINDINGS.md F-007 (c) / F-008.
 
 4. **Cache invalidation (F-005).** Add a logic-version/source-hash component to the
    backtest cache key.

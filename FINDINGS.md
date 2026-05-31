@@ -28,7 +28,8 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-004 | 2026-05-30 | Sequential single-position loop was path-dependent | Fixed (decoupled) |
 | F-005 | 2026-05-30 | Backtest result cache not invalidated on code change | Mitigated; follow-up open |
 | F-006 | 2026-05-30 | Concurrency makes overlapping trades correlated → inflated Sharpe/PF | Resolved (time-indexed MTM) |
-| F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Open — mostly fixable via daily bar backfill (free); far-OTM wings need OPRA quotes |
+| F-007 | 2026-05-30 | Intra-hold marks are sparse → MTM curve degrades to time-indexed realized P&L | Reframed — data already daily; granularity is exit-logic-bound; finer risk needs INTRADAY data |
+| F-008 | 2026-05-30 | QQQ long_put_spread: 100% of trades exit profit_target with 1-day median hold | Open (exit/mark fidelity + thin regime) |
 
 ---
 
@@ -294,3 +295,53 @@ F-007 for spreads. (2) The gated quotes endpoint (`get_option_quotes`, ready) is
 narrower need — far-OTM wings + true bid/ask realism — which lowers the urgency of the
 subscription decision above. Single-stock / less-liquid underlyings degrade earlier than
 SPY (measurement is best-case).
+
+### Update 2026-05-30 (c) — checked before backfilling: data is ALREADY daily; remedy (1) RETRACTED
+Before running the daily bar re-backfill (remedy 1 above), I measured the existing
+density and the real cause — and remedy (1) is a **no-op**:
+
+- **2025+ backfill is already daily.** SPY/QQQ/IWM snapshot gap histogram: gap=1 day ×194,
+  gap=3 (weekends) ×46. So there is nothing to densify for the windows that matter
+  (QQQ/IWM are 2025+ only; SPY 2025+ is daily). A re-backfill adds no snapshots.
+- **The ~1-mark-per-trade granularity is exit-logic-bound, not data-bound.** Measured exit
+  reasons + hold lengths: QQQ `long_put_spread` = **55/55 profit_target, median hold 1 day**
+  (hits +75% target on the first post-entry snapshot in a falling market); SPY = 78 profit /
+  43 stop / 11 dte, **median hold 12 days**. Trades exit at the first snapshot that triggers
+  a rule, so each contributes ≈ one mark *regardless of data density*. SPY's longer holds
+  already yield a real curve (down-steps, $6,337 drawdown, Sharpe 1.76) — the F-006 MTM fix
+  works there. QQQ's flat-up curve is the F-008 fast-flip regime artifact, not missing data.
+- **What finer risk visibility actually needs: INTRADAY data.** The residual gap is *between-
+  snapshot* / intraday dips (a position that goes underwater and recovers before the next
+  daily mark). Daily bars cannot show that; only minute bars or continuous quotes can.
+
+**Net correction.** Retract "daily bar backfill fixes most of F-007" — the data is already
+daily and the gap isn't cadence. The real levers are (a) intraday marks (minute bars are
+*entitled* on Alpaca, unlike quotes — a candidate worth measuring next) and (b) the exit/mark
+fidelity question in F-008. Lesson logged: measure existing density/cause before proposing
+(or running) a remedy.
+
+---
+
+## F-008 — QQQ long_put_spread exits 100% profit_target with a 1-day median hold
+**Date:** 2026-05-30 · **Status:** Open (exit/mark fidelity + thin regime)
+
+**Observed.** On the only QQQ window we have (2025-05 → 2026-05), `long_put_spread` shows
+55/55 trades exiting via `profit_target`, **median hold 1 day** (avg 1.5), 100% win rate,
+Sharpe ~7.5, max-DD 0. SPY over a longer window is far more mixed (median hold 12 days;
+78 profit / 43 stop / 11 dte).
+
+**Why it matters.** A debit put spread reaching its **+75% profit target on the very first
+post-entry snapshot, every single time**, is suspicious. Two non-exclusive explanations:
+1. **Thin one-directional regime** — QQQ fell steadily over this single ~12-month window, so
+   well-placed bearish spreads genuinely won fast. Small n (55), one direction, one year.
+2. **Exit/mark fidelity** — the first post-entry mark may overshoot. Marks are close-based
+   (F-003) and snapped to the nearest available date (±3 days); a coarse or stale next-day
+   close can read as a +75% jump and trigger an immediate, possibly unrealistic, exit.
+
+**Why it matters for the program.** This is the kind of "too good" result the OOS / cross-
+asset / regime axis of the perturbation harness must catch. It also questions whether the
+profit-target exit fires too eagerly on the first coarse mark.
+
+**Follow-up (open).** (a) Inspect a few QQQ trades' entry→exit marks to see if the day-1
++75% is a real underlying move or a mark artifact. (b) Re-test once intraday marks exist
+(F-007). (c) Treat QQQ long_put Sharpe as non-credible until validated across regimes.
