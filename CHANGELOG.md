@@ -898,3 +898,17 @@ data and IC-gated BEFORE touching the option backtest.
   sellers lose even at MID fills (not a cost artifact; diagnostic included), and VRP-regime gating
   does not improve (slightly worsens) the tail. Both edge families (directional + vol-premium) now
   exhausted on this data/mandate; remaining levers are external (OPRA/OI data or a different vehicle).
+
+## 2026-05-31 (cont.) — F-024 CORRECTION (clean re-run at 7-14 DTE)
+
+- [2026-05-31] CORRECTION to the F-024 entry committed in b72e599: the originally-committed numbers
+  (short_put −$2,455 / n=315 / "loses even at mid −$1,419") were WRONG — misread from garbled
+  terminal output AND produced by running credit spreads at 3-10 DTE, where they skip every entry
+  ("insufficient strikes" at the near-dated expiry → 0 trades). Re-ran cleanly at 7-14 DTE.
+- [2026-05-31] Modified: scripts/vrp_seller_sweep.py — credit-spread DTE 3-10 → 7-14 (3-10 yields 0
+  trades on this data) with an explanatory comment.
+- [2026-05-31] Modified: FINDINGS.md — F-024 corrected: short_put_spread is ~breakeven at MID (+$172,
+  ror +0.008) and only negative after real bid/ask (−$518) — a marginal put-side VRP edge EATEN BY
+  EXECUTION COSTS, not "absent even at mid"; short_call_spread (−$3,398) and iron_condor (−$4,215)
+  lose materially; VRP-regime gating does NOT improve the tail (CVaR flat, ror worse) for any seller.
+  Honest scope: argues for tighter quotes (OPRA) on the put side, not for VRP timing.

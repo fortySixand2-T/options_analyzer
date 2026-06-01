@@ -32,8 +32,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from backtest.models import BacktestRequest  # noqa: E402
 from backtest.chain_replay import run_chain_replay  # noqa: E402
 
-# Per-strategy DTE (CLAUDE.md: credit spreads 3-10, iron condor 7-14).
-DTE = {"short_put_spread": (3, 10), "short_call_spread": (3, 10), "iron_condor": (7, 14)}
+# Per-strategy DTE. NB: at 3-10 DTE the credit spreads skip EVERY entry
+# ("insufficient strikes" — the near-dated expiry lacks the OTM strike + wing),
+# so they produce 0 trades. 7-14 DTE is where they actually trade on this data
+# (F-024). Iron condor is 7-14 by design (CLAUDE.md).
+DTE = {"short_put_spread": (7, 14), "short_call_spread": (7, 14), "iron_condor": (7, 14)}
 
 
 def _tail(stats):

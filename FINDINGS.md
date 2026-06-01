@@ -45,7 +45,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-021 | 2026-05-31 | Phase 4 sentiment IC test: FinBERT composite score on 115k SPY headlines does NOT predict SPY forward returns (all horizons, all lookbacks) | NO EDGE — best IC −0.079 @10d (p=0.065); consistent bearish bias but not significant; does not graduate; signal not recommended for further execution testing |
 | F-022 | 2026-05-31 | Phase 1 sweep RUN across 7 index ETFs (SPY/QQQ/IWM/DIA/XLK/XLF/XLE) — the network-blocked deliverable. Fixed sweep warmup bug (120d too short for 252d high52w signal) | Two signals GRADUATE on all 7: ts_momentum (IC −0.091 @10d) and high52w_proximity (IC −0.102 @10d), both INVERTED — broad-index 10-day mean-reversion. Confirms+broadens F-018; vrp_proxy/vix_term_structure fail |
 | F-023 | 2026-05-31 | Phase 2 vehicle sweep: does the validated directional signal transmit through a better debit-spread vehicle? Added DTE/ITM-depth/cadence knobs | NO at any vehicle — unconditional wins everywhere (beta), gating HURTS. Directional thread closed for the defined-risk-spread mandate. Next edge = vol-regime conditioner for premium SELLERS (tail metrics) |
-| F-024 | 2026-05-31 | Phase 2(b): VRP-conditioned premium selling, judged on tails. Wired vrp_filter into chain_replay (point-in-time high-VRP regime gate) | NO — all 3 sellers lose, even at MID (not a fills artifact); VRP gating doesn't improve (slightly worsens) the tail. Both edge families now exhausted on this data/mandate; remaining levers are external (OPRA/OI data or different vehicle) |
+| F-024 | 2026-05-31 | Phase 2(b): VRP-conditioned premium selling, judged on tails. Wired vrp_filter into chain_replay (point-in-time high-VRP regime gate) | NO tradeable edge: short_put ~breakeven at MID (+$172) but −$518 after real bid/ask; short_call/iron_condor lose materially; VRP gating does NOT improve the tail (CVaR flat, ror worse) for any. Put-side VRP is marginal + eaten by execution costs. (Corrected — see body; first-committed numbers were a misread) |
 
 ---
 
@@ -1101,4 +1101,64 @@ edge for PREMIUM SELLERS: use a vol-regime signal (VRP / term structure) to COND
 short_put_spread / iron_condor and judge on TAIL metrics (CVaR/Calmar/max-loss), not directional IC.
 `vrp_proxy` failed as a *directional* signal (F-022) but was never tested as a *seller's vol
 conditioner* — that is the open Phase-2(b)/Phase-5 question, and it is a different test entirely.
+
+---
+
+## F-024 — Phase 2(b): VRP-conditioned premium selling — marginal put-side edge, eaten by costs; VRP gate doesn't help
+
+**Date:** 2026-05-31
+**Status:** Done — no tradeable edge. (CORRECTION: this entry's first commit, b72e599, carried wrong
+numbers — I misread garbled terminal output AND ran credit spreads at 3-10 DTE where they produce
+ZERO trades. Re-run cleanly at 7-14 DTE; corrected figures below.)
+
+**What was done.** Wired `vrp_filter` into `chain_replay` (previously only in synthetic
+`local_backtest`): `_build_vrp_regime` precomputes a point-in-time "premium-rich" regime
+(`vrp_proxy` = VIX − trailing realised vol, above its trailing-252d median), and the entry loop
+gates credit strategies to high-VRP days. `scripts/vrp_seller_sweep.py` compares unconditional vs
+VRP-gated on TAIL metrics (CVaR-95, max-loss, Calmar, return-on-risk, skew — NOT win rate).
+
+**Data quirk found.** At **3-10 DTE the credit spreads skip every entry** ("insufficient strikes" —
+the nearest near-dated expiry lacks the OTM short strike + protective wing). They trade only at
+**7-14 DTE**. Also ALL exits fall back to intrinsic value (the exit-date snapshot rarely contains
+the exact strike/expiry — a data-completeness caveat; for held-to-expiry credit spreads intrinsic
+is approximately right).
+
+**Result (SPY, real Dolt quotes, 7-14 DTE, bid/ask fills, entry_interval=3):**
+
+| Strategy | gate | n | P&L | win | CVaR95 | calmar | ror | skew |
+|---|---|---|---|---|---|---|---|---|
+| short_put_spread | none | 218 | −$518 | 85.8% | −802 | −0.02 | −0.026 | −2.48 |
+| short_put_spread | VRP | 106 | −$506 | 84.0% | −779 | −0.06 | −0.054 | −2.49 |
+| short_call_spread | none | 217 | −$3,398 | 78.8% | −668 | −0.15 | −0.197 | −2.12 |
+| short_call_spread | VRP | 106 | −$1,756 | 76.4% | −669 | −0.12 | −0.204 | −2.17 |
+| iron_condor | none | 215 | −$4,215 | 68.4% | −731 | −0.13 | −0.115 | −1.20 |
+| iron_condor | VRP | 104 | −$2,485 | 66.3% | −737 | −0.12 | −0.141 | −1.17 |
+
+**Fill-cost diagnostic (short_put_spread 7-14):** mid uncond **+$172 (ror +0.008)**, mid VRP −$116,
+bid_ask uncond −$518, bid_ask VRP −$506.
+
+**Verdict — no tradeable edge, but a nuanced read (not "edge absent everywhere"):**
+1. **The put-seller is ~breakeven at MID (+$172) and goes negative only after realistic bid/ask
+   (−$518).** So a *whisper* of variance risk premium IS there on the put side — it just doesn't
+   survive crossing the spread twice on these (wide, historical/indicative) quotes. That's an
+   EXECUTION-COST verdict, not "no premium." (Earlier wrongly stated "loses even at mid" — false.)
+2. **short_call_spread and iron_condor lose materially even unconditionally** (−$3.4k / −$4.2k) —
+   the bull tape runs over short calls; deep negative skew. Genuinely no edge.
+3. **VRP-regime gating does NOT improve the tail for any seller.** CVaR-95 is flat
+   (−802→−779, −668→−669, −731→−737), Calmar flat/slightly worse, and return-on-risk is WORSE in
+   every case. Gating halves the trade count (so total $ loss shrinks) but per-trade and tail
+   metrics don't improve — high-VRP days cluster around vol spikes, not safer entries.
+
+**Conclusion + honest scope.** Within the project's vehicles on this data, VRP-conditioned premium
+selling has no tradeable edge, and the VRP regime gate is not the lever. The one glimmer (put-side
+breakeven pre-cost) is an *execution-cost* problem — it argues for tighter quotes (OPRA), not for
+VRP timing. This does NOT claim the variance risk premium is universally unharvestable (it lives in
+forms outside this mandate: index variance swaps, longer-dated puts, delta-hedged straddles).
+
+**Meta — both edge families exhausted on this data/mandate.** Directional: real IC, doesn't transmit
+to spreads (F-019/F-023). Sentiment: no IC (F-021). Vol-premium: marginal put-side edge eaten by
+costs, VRP gate no help (F-024). The remaining levers are EXTERNAL, not more parameter search:
+(1) better data — OPRA tight quotes (the put side is right at the cost boundary) + OI/greeks for
+proper strike selection (ours: greeks NULL, IV-approx delta); (2) a different vehicle the edges live
+in. See [[signal-ic-necessary-not-sufficient]].
 
