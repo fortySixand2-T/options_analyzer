@@ -925,3 +925,19 @@ data and IC-gated BEFORE touching the option backtest.
   edge-engine output should no longer assume the short-DTE defined-risk vehicle; recommended the
   change-vehicle avenue (delta-1 / longer-dated expression of conditioned_reversal) as the next
   research direction.
+
+## 2026-05-31 (cont.) — F-026: vehicle-B (delta-1) capstone
+
+- [2026-05-31] Created: scripts/vehicle_b_delta1.py — Tests whether the validated mean-reversion
+  signal monetizes in a delta-1 vehicle (where short-DTE spreads failed): cross-sectional balanced
+  L/S (market-neutral), single-name long-only-vs-beta, and a calm-day forward-return bucket
+  decomposition. Non-overlapping H-day periods, net of delta-1 cost.
+- [2026-05-31] Created: docs/PAPER_PLAN.md — persistent paper plan (thesis, contributions, outline,
+  figures, threats, venue); capstone updated with the F-026 result.
+- [2026-05-31] Modified: FINDINGS.md — F-026: the signal GENERALIZES out-of-period (2012-2019 IC
+  +0.165 @10d, p<0.001 — not a 2020-24 artifact, upgrades F-018/F-022), but ranks MAGNITUDE within
+  all-positive outcomes (laggard +0.72% vs extended +0.18%, both positive) → no shortable side → NO
+  market-neutral alpha (cross-sectional L/S Sharpe −0.38); monetizes ONLY as a modest long-only
+  timing tilt in delta-1 (SPY +0.89% vs +0.53%/trade). Transparent note: two bad constructions
+  (net-short sign-L/S; premature "era-specific" read from noisy non-overlap means) were caught and
+  discarded; conclusions rest on the full-sample IC + balanced L/S + bucket decomposition.

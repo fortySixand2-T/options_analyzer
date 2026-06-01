@@ -47,6 +47,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-023 | 2026-05-31 | Phase 2 vehicle sweep: does the validated directional signal transmit through a better debit-spread vehicle? Added DTE/ITM-depth/cadence knobs | NO at any vehicle — unconditional wins everywhere (beta), gating HURTS. Directional thread closed for the defined-risk-spread mandate. Next edge = vol-regime conditioner for premium SELLERS (tail metrics) |
 | F-024 | 2026-05-31 | Phase 2(b): VRP-conditioned premium selling, judged on tails. Wired vrp_filter into chain_replay (point-in-time high-VRP regime gate) | NO tradeable edge: short_put ~breakeven at MID (+$172) but −$518 after real bid/ask; short_call/iron_condor lose materially; VRP gating does NOT improve the tail (CVaR flat, ror worse) for any. Put-side VRP is marginal + eaten by execution costs. (Corrected — see body; first-committed numbers were a misread) |
 | F-025 | 2026-05-31 | ARCHITECTURE VERDICT: the 0–14 DTE defined-risk spread scanner has no demonstrable edge on this data — and it is STRUCTURAL (vehicle mismatch), not a bug | Machinery sound; every edge family fails inside the vehicle. Two real options: (1) buy OPRA-tight execution for the marginal put-side VRP; (2) CHANGE VEHICLE — express the real index mean-reversion signal (IC ~0.16) in delta-1/longer-dated. Stop iterating strategies inside the short-DTE box |
+| F-026 | 2026-05-31 | Vehicle-B (delta-1) capstone: does the validated signal monetize where spreads failed? Signal GENERALIZES out-of-period (2012-19 IC +0.165) — not a 2020-24 artifact | Partial: it monetizes ONLY as a modest LONG-ONLY timing tilt (laggard fwd +0.72% vs beta +0.28%), NOT as market-neutral alpha — it ranks magnitude within all-positive outcomes (no shortable side; cross-sectional L/S Sharpe −0.38). Positive IC ≠ extractable alpha |
 
 ---
 
@@ -1219,4 +1220,52 @@ there is no edge in there that clears realistic costs. The two real avenues:
 backtester that refuses to manufacture edges (F-001–F-013 + invariant tests), and the IC-first
 two-layer method that cleanly separates *"is there a signal?"* (sometimes yes) from *"can this
 vehicle harvest it?"* (here, no). See [[signal-ic-necessary-not-sufficient]].
+
+---
+
+## F-026 — Vehicle-B (delta-1) capstone: the signal generalizes, but is a long tilt, not extractable alpha
+
+**Date:** 2026-05-31
+**Status:** Done. The "change the vehicle" avenue (F-025) is PARTIALLY vindicated — and the result
+is subtler and more honest than a clean win.
+
+**Question.** F-023/F-025 showed the validated index mean-reversion signal does not transmit through
+short-DTE defined-risk spreads. Vehicle-B asks: does it monetize in a **delta-1** vehicle (underlying;
+no theta, no double bid/ask, position IS the view)? `scripts/vehicle_b_delta1.py`, 7 ETFs, H=10d,
+2bps/leg, non-overlapping periods, 2020-24 and 2010-24.
+
+**Process honesty (two constructions discarded en route).** (1) A time-series *sign* long/short
+(long laggards, short extended) looked significantly NEGATIVE (Sharpe −0.94) — but that was an
+ARTIFACT: in a bull market the calm-regime signal is ~90% "extended", so a sign-L/S is ~net-short a
+rising market (it measures beta, not the signal). (2) From noisy non-overlapping bucket means I
+briefly inferred the edge was "era-specific" — REFUTED by the reliable full-sample IC (below).
+Conclusions here rest on the full-sample rank IC + the balanced cross-sectional L/S + bucket
+decomposition, not the discarded cuts.
+
+**Reliable findings:**
+1. **The signal GENERALIZES across eras (not a 2020-24 artifact).** Out-of-period IC
+   (`conditioned_signal_test`, SPY/QQQ, **2012-2019**, pre-discovery): contango gate **IC +0.165
+   @10d, p<0.001 (graduates)**; vix_pct +0.080 (p<0.001, one fold flips). In-period (2020-24) vix_pct
+   IC +0.16. Positive and significant in both eras — stronger in 2020-24, but real pre-COVID. This
+   *upgrades* confidence in F-018/F-022: the IC is not regime-overfit.
+2. **It sorts MAGNITUDE within all-positive outcomes, not sign.** Calm-day forward returns by
+   bucket: laggard (cv>0) **+0.72%** vs extended (cv<0) **+0.18%** vs all-calm beta +0.28% (2020-24).
+   Laggards return MORE — but **both buckets are positive** (it is an up-drifting market). There is
+   no negative bucket to short.
+3. **⇒ No market-neutral alpha; a long-only timing TILT only.** The balanced cross-sectional L/S
+   (long laggards / short extended, equal legs) is **Sharpe −0.38 (t=−1.47, 2010-24)** — among
+   correlated index ETFs there is no cross-sectional reversal to harvest. But the long-only
+   signal-gated entry beats buy-and-hold per-trade (SPY: +0.89% vs +0.53%/trade, Sharpe 0.96 vs
+   0.86) — a real, modest tilt that delta-1 CAN express where the spread could not.
+
+**Verdict.** "Change the vehicle" is partially right: **delta-1 captures the signal as a modest
+LONG-ONLY tilt — the spread vehicle captured nothing.** But it is NOT standalone, market-neutral,
+sellable alpha: a positive IC that ranks *magnitude of a one-signed outcome* yields beta
+concentration, not extractable alpha. The deepest lesson of the project: **a real, generalizing,
+statistically-significant IC can still be economically a long tilt rather than alpha** — necessary,
+not sufficient (the strongest framing for the paper; see [[signal-ic-necessary-not-sufficient]]).
+
+**Implication for F-025 avenue (2).** Express the signal as a delta-1 LONG OVERLAY (tilt long
+exposure toward calm-laggard days), not as a market-neutral strategy and not as a short-DTE spread.
+Expected value: a modest Sharpe enhancement over buy-and-hold, not a standalone alpha sleeve.
 
