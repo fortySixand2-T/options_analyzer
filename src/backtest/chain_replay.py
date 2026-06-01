@@ -687,6 +687,17 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
         if not signal_map:
             issues.append("Signal filter ON but signal could not be built — filter skipped")
 
+    # Phase 2(b)/F-024: precompute the point-in-time VRP "premium-rich" regime
+    # (date -> True when VIX − trailing realised vol is above its trailing median).
+    # Premium sellers harvest the variance risk premium; the hypothesis is that
+    # selling ONLY when the premium is rich improves the left tail. Applies to
+    # credit strategies only.
+    vrp_map = None
+    if request.vrp_filter:
+        vrp_map = _build_vrp_regime(request.symbol, request.start_date, request.end_date)
+        if not vrp_map:
+            issues.append("VRP filter ON but VRP regime could not be built — filter skipped")
+
     # Path-stable design: entries fire on a FIXED snapshot cadence, independent
     # of any prior trade's outcome, and each position's exit is found by an
     # independent forward scan. This decouples the trade SET from P&L, so
@@ -739,6 +750,15 @@ def _simulate_chain_trades(conn, snapshots: List[dict], rolling_vol: np.ndarray,
                 skipped_filter += 1
                 continue
             if request.strategy == "long_put_spread" and sv >= 0:
+                skipped_filter += 1
+                continue
+
+        # VRP "premium-rich" gate (credit/seller strategies only): sell only when
+        # the variance risk premium is in its high regime (F-024). None/False ⇒
+        # premium not rich today ⇒ abstain.
+        if vrp_map is not None and request.strategy in (
+                "short_put_spread", "short_call_spread", "iron_condor"):
+            if not vrp_map.get(snap["date"], False):
                 skipped_filter += 1
                 continue
 
@@ -1072,6 +1092,47 @@ def _build_conditioned_signal(symbol: str, start: date, end: date,
                "vix3m": pd.Series(list(vix3m["Close"]), index=[d.date() for d in vix3m.index])}
         sig = conditioned_reversal(px, aux, gate=gate)
         return {d.isoformat(): (float(v) if v == v else None) for d, v in sig.items()}
+    except Exception:
+        return None
+
+
+def _vrp_high_regime(vrp_series, lookback: int = 252):
+    """Boolean series: is VRP above its trailing-`lookback` median (premium rich)?
+
+    Point-in-time — the trailing median is known as-of each day (min_periods=60
+    so early days where the regime is undefined yield False = abstain). Pure
+    function over a pandas Series so it is unit-testable without network.
+    """
+    med = vrp_series.rolling(lookback, min_periods=60).median()
+    return vrp_series > med
+
+
+def _build_vrp_regime(symbol: str, start: date, end: date,
+                      lookback: int = 252) -> Optional[dict]:
+    """Precompute the VRP premium-rich regime (F-024) → {date_iso: bool}.
+
+    VRP = VIX − trailing annualised realised vol (signal_lib.vrp_proxy). "Rich"
+    = above its trailing-`lookback` median (regime-relative, point-in-time — the
+    same discipline as the directional vix_pct gate, NOT a magic fixed
+    threshold). Needs ~400d warmup for the 252d median + 21d RV. Returns None if
+    data unavailable.
+    """
+    try:
+        import pandas as pd
+        import yfinance as yf
+        from .signal_lib import vrp_proxy
+
+        lb = (start - timedelta(days=400)).isoformat()
+        hi = (end + timedelta(days=2)).isoformat()
+        px = yf.Ticker(symbol).history(start=lb, end=hi, auto_adjust=True)
+        vix = yf.Ticker("^VIX").history(start=lb, end=hi)
+        if px is None or px.empty or vix.empty:
+            return None
+        px.index = [d.date() for d in px.index]
+        aux = {"vix": pd.Series(list(vix["Close"]), index=[d.date() for d in vix.index])}
+        vrp = vrp_proxy(px, aux)
+        high = _vrp_high_regime(vrp, lookback)
+        return {d.isoformat(): bool(v) for d, v in high.items() if v == v}
     except Exception:
         return None
 

@@ -74,3 +74,26 @@ def test_long_put_itm_and_width():
                           itm_pct=0.05, width_pct=0.05)
     buy, sell = _legs(pos)
     assert buy == 105.0 and sell == 100.0     # 105 long, -5 = 100 short
+
+
+# ── Phase 2(b) / F-024: VRP premium-rich regime gate ─────────────────────────
+
+def test_vrp_high_regime_is_pointintime_and_warmup_false():
+    import pandas as pd
+    from backtest.chain_replay import _vrp_high_regime
+    # Flat-low VRP for a long stretch, then a spike above the trailing median.
+    vals = [5.0] * 80 + [20.0] * 5
+    s = pd.Series(vals, dtype=float)
+    high = _vrp_high_regime(s, lookback=60)
+    assert bool(high.iloc[-1]) is True          # spike is above trailing median
+    assert bool(high.iloc[0]) is False          # warmup (min_periods) → False
+    assert bool(high.iloc[70]) is False         # flat region not above its own median
+
+
+def test_vrp_high_regime_low_vrp_is_false():
+    import pandas as pd
+    from backtest.chain_replay import _vrp_high_regime
+    vals = [10.0] * 80 + [2.0] * 5              # VRP collapses below median at the end
+    s = pd.Series(vals, dtype=float)
+    high = _vrp_high_regime(s, lookback=60)
+    assert bool(high.iloc[-1]) is False

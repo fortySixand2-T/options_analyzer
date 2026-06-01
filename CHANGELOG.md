@@ -883,3 +883,18 @@ data and IC-gated BEFORE touching the option backtest.
   both gates, the validated directional signal does NOT beat the unconditional spread anywhere; gating
   HURTS. Unconditional is positive (beta) everywhere. Directional-signal thread CLOSED for the
   defined-risk-spread mandate. Next edge = vol-regime conditioner for premium SELLERS (tail metrics).
+
+## 2026-05-31 (cont.) — F-024: Phase 2(b) VRP-conditioned premium selling (no edge)
+
+- [2026-05-31] Modified: src/backtest/chain_replay.py — Wired vrp_filter into the real-chain engine
+  (was only in synthetic local_backtest). Added _vrp_high_regime (pure: VRP > trailing-252d median,
+  point-in-time) and _build_vrp_regime (yfinance VIX + vrp_proxy); entry loop now gates credit
+  strategies (short_put_spread/short_call_spread/iron_condor) to high-VRP days.
+- [2026-05-31] Created: scripts/vrp_seller_sweep.py — Unconditional vs VRP-gated sellers on SPY,
+  judged on TAIL metrics (CVaR-95/max-loss/Calmar/return-on-risk/skew, not win rate).
+- [2026-05-31] Modified: tests/test_vehicle_knobs.py — 2 tests for _vrp_high_regime (point-in-time,
+  warmup→False, low-VRP→False).
+- [2026-05-31] Modified: FINDINGS.md — F-024: VRP-conditioned selling shows NO edge — all three
+  sellers lose even at MID fills (not a cost artifact; diagnostic included), and VRP-regime gating
+  does not improve (slightly worsens) the tail. Both edge families (directional + vol-premium) now
+  exhausted on this data/mandate; remaining levers are external (OPRA/OI data or a different vehicle).
