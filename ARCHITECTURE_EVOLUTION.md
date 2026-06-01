@@ -199,3 +199,30 @@ backtester logic version (F-005), so it can serve stale results across code chan
    clears an OOS gate, hands validated candidates to a separate **execution engine**
    (the parked agent / a sibling repo). The work above is what makes "the edge clears
    an OOS gate" a statement we can actually trust.
+
+---
+
+## Architecture verdict — short-DTE defined-risk is a vehicle/edge mismatch (2026-05-31, FINDINGS F-025)
+
+The integrity work (F-001–F-013) was meant to make "does the edge clear an OOS gate?" a trustworthy
+statement. It now is — and the answer for the **0–14 DTE defined-risk spread architecture is NO**, on
+the clean data, for every edge family tested (directional F-019/F-023, sentiment F-021, vol-premium
+F-024, bias F-017, butterfly F-013).
+
+This is **structural, not a bug**: short-DTE multi-leg defined-risk spreads (a) pay the bid/ask twice
+on proportionally wide legs, (b) cap the edge (buy the wing) while keeping the tail, (c) are governed
+by path/gamma/theta so a sign-only IC can't pay, and (d) collect premium below the transaction-cost
+floor. The signal-research layer found a real phenomenon (index mean-reversion, IC ~0.16); the
+execution layer cannot monetize it here.
+
+**Course change.** The "two engines, not a merge" plan above still holds, but the EDGE-ENGINE's
+output should no longer assume the short-DTE defined-risk vehicle. Two avenues, in priority order:
+1. **Change the vehicle (recommended):** express the validated index mean-reversion signal in a
+   **delta-1 / underlying or longer-dated higher-delta** structure where cost/path don't swamp the
+   edge. Open experiment: re-express `conditioned_reversal` and test that the IC monetizes.
+2. **Buy execution:** OPRA-tight quotes + OI/greeks could tip the marginal put-side VRP positive — a
+   spend decision with modest upside.
+
+The reusable assets that survive the verdict: the trustworthy backtester + invariant tests, the
+IC-first two-layer research method (signal IC on cheap data → execution test on scarce data), and the
+tail-aware evaluation (CVaR/Calmar/skew, robustness/perturbation harness).

@@ -46,6 +46,7 @@ backtester and the edge research. Companion to `CHANGELOG.md` (file edits) and
 | F-022 | 2026-05-31 | Phase 1 sweep RUN across 7 index ETFs (SPY/QQQ/IWM/DIA/XLK/XLF/XLE) — the network-blocked deliverable. Fixed sweep warmup bug (120d too short for 252d high52w signal) | Two signals GRADUATE on all 7: ts_momentum (IC −0.091 @10d) and high52w_proximity (IC −0.102 @10d), both INVERTED — broad-index 10-day mean-reversion. Confirms+broadens F-018; vrp_proxy/vix_term_structure fail |
 | F-023 | 2026-05-31 | Phase 2 vehicle sweep: does the validated directional signal transmit through a better debit-spread vehicle? Added DTE/ITM-depth/cadence knobs | NO at any vehicle — unconditional wins everywhere (beta), gating HURTS. Directional thread closed for the defined-risk-spread mandate. Next edge = vol-regime conditioner for premium SELLERS (tail metrics) |
 | F-024 | 2026-05-31 | Phase 2(b): VRP-conditioned premium selling, judged on tails. Wired vrp_filter into chain_replay (point-in-time high-VRP regime gate) | NO tradeable edge: short_put ~breakeven at MID (+$172) but −$518 after real bid/ask; short_call/iron_condor lose materially; VRP gating does NOT improve the tail (CVaR flat, ror worse) for any. Put-side VRP is marginal + eaten by execution costs. (Corrected — see body; first-committed numbers were a misread) |
+| F-025 | 2026-05-31 | ARCHITECTURE VERDICT: the 0–14 DTE defined-risk spread scanner has no demonstrable edge on this data — and it is STRUCTURAL (vehicle mismatch), not a bug | Machinery sound; every edge family fails inside the vehicle. Two real options: (1) buy OPRA-tight execution for the marginal put-side VRP; (2) CHANGE VEHICLE — express the real index mean-reversion signal (IC ~0.16) in delta-1/longer-dated. Stop iterating strategies inside the short-DTE box |
 
 ---
 
@@ -1161,4 +1162,61 @@ costs, VRP gate no help (F-024). The remaining levers are EXTERNAL, not more par
 (1) better data — OPRA tight quotes (the put side is right at the cost boundary) + OI/greeks for
 proper strike selection (ours: greeks NULL, IV-approx delta); (2) a different vehicle the edges live
 in. See [[signal-ic-necessary-not-sufficient]].
+
+---
+
+## F-025 — Architecture verdict: short-DTE defined-risk spreads are a structurally poor vehicle for the edges that exist
+
+**Date:** 2026-05-31
+**Status:** Synthesis verdict over F-001…F-024. Not a bug — a vehicle/edge mismatch.
+
+**The architecture under judgment.** The 0–14 DTE defined-risk options scanner: a three-layer signal
+stack (vol regime → directional bias → dealer positioning) selecting among five defined-risk
+structures (iron condor, short put/call spread, long call/put spread, butterfly), entered short-dated
+and exited on rules.
+
+**Verdict: the machinery is sound, but the architecture shows no demonstrable edge on this data, and
+the reason is structural.** After the integrity work (F-001–F-013) made the backtester
+trustworthy, every edge source we could test failed *inside this vehicle class*:
+- Layer-2 bias signal: anti-predictive / noise (F-017).
+- A genuinely IC-validated directional signal (index mean-reversion, rank IC 0.10–0.16, F-018/F-022):
+  does NOT transmit through short-DTE debit spreads at any DTE/ITM/cadence, and gating HURTS
+  (F-019/F-023).
+- Sentiment (119k headlines): no IC (F-021).
+- Premium selling + VRP timing: loses; the lone glimmer (put-side breakeven *pre-cost*) is eaten by
+  execution costs; VRP gating doesn't help the tail (F-024).
+- Butterfly/pin: loses, OI-blocked (F-013).
+
+**Why it's structural (four reinforcing facts):**
+1. **Spread paid twice on wide legs.** Multi-leg short-DTE structures cross proportionally large
+   bid/ask; execution cost dominates a thin edge (put-seller: +$172 mid → −$518 real fills, F-024).
+2. **Defined-risk blunts the edge, keeps the tail.** Buying the wing caps premium/credit while full-
+   width losses still occur (skew −2 to −3) — paying to cap the wrong side.
+3. **Short DTE ⇒ path/gamma/theta dominate the signal.** A sign-only IC of ~0.10 needs magnitude +
+   timing to pay through a spread; at 7–14 DTE the position is governed by path, not the modest edge
+   — exactly why the validated signal didn't transmit (F-023).
+4. **Premium per trade is below the transaction-cost floor.** Index VRP is thin; the short-DTE credit
+   collected is small vs the spread paid, so it nets to ≈0 (F-024).
+
+So the architecture is not broken — it is **mismatched**: the signal-research layer found a real
+phenomenon (index mean-reversion), but the short-DTE defined-risk *execution* layer cannot monetize
+it, and the premium it is built to sell is below the cost floor on this data.
+
+**Implication — stop iterating inside the box.** Running further strategy/filter permutations within
+0–14 DTE defined-risk expecting a winner is the curve-fitting trap; four independent angles say
+there is no edge in there that clears realistic costs. The two real avenues:
+1. **Keep short-DTE defined-risk → buy execution.** Only the put-side VRP has a pulse and it sits on
+   the cost boundary; OPRA-tight quotes + an OI/greeks feed might tip it marginally positive. A spend
+   decision; modest upside.
+2. **Keep the edge → CHANGE THE VEHICLE (the promising avenue).** The validated index mean-reversion
+   signal (IC ~0.16, 10-day) wants a **delta-1 / underlying or longer-dated higher-delta** expression
+   where cost and path don't swamp a sign-edge. This is a different mandate from the scanner and is
+   the recommended next research direction — see ARCHITECTURE_EVOLUTION and the open experiment:
+   express `conditioned_reversal` as a delta-1 / LEAPS-like position and test whether the IC that
+   failed in spreads now monetizes.
+
+**Lasting contribution (independent of the verdict):** the framework, not the strategy book — a
+backtester that refuses to manufacture edges (F-001–F-013 + invariant tests), and the IC-first
+two-layer method that cleanly separates *"is there a signal?"* (sometimes yes) from *"can this
+vehicle harvest it?"* (here, no). See [[signal-ic-necessary-not-sufficient]].
 

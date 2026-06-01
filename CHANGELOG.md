@@ -912,3 +912,16 @@ data and IC-gated BEFORE touching the option backtest.
   EXECUTION COSTS, not "absent even at mid"; short_call_spread (−$3,398) and iron_condor (−$4,215)
   lose materially; VRP-regime gating does NOT improve the tail (CVaR flat, ror worse) for any seller.
   Honest scope: argues for tighter quotes (OPRA) on the put side, not for VRP timing.
+
+## 2026-05-31 (cont.) — F-025: architecture verdict (vehicle/edge mismatch)
+
+- [2026-05-31] Modified: FINDINGS.md — Added F-025, the synthesis verdict over F-001–F-024: the 0–14
+  DTE defined-risk spread architecture has no demonstrable edge on this data, and the cause is
+  STRUCTURAL (vehicle mismatch: spread paid twice / defined-risk caps edge keeps tail / path dominates
+  sign-edge / premium below cost floor), not a bug. Two avenues: buy OPRA-tight execution (marginal
+  put-side VRP), or CHANGE VEHICLE (express the real index mean-reversion signal in delta-1/longer-
+  dated). Lasting contribution = the framework (trustworthy backtester + IC-first two-layer method).
+- [2026-05-31] Modified: ARCHITECTURE_EVOLUTION.md — Recorded the verdict + course change: the
+  edge-engine output should no longer assume the short-DTE defined-risk vehicle; recommended the
+  change-vehicle avenue (delta-1 / longer-dated expression of conditioned_reversal) as the next
+  research direction.
